@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "db:generate": "bunx drizzle-kit generate --dialect sqlite --schema ./src/db/schema.ts",
-    "db:migrate": "bun run src/db/migrate.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
     "test": "bun test",
     "lint": "eslint src/"
   },
