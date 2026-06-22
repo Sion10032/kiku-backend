@@ -3,6 +3,7 @@ import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { metadataRoutes } from './routes/metadata.js';
 import { mediaRoutes } from './routes/media.js';
+import { credentialsRoutes } from './routes/credentials.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -14,6 +15,7 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(metadataRoutes, { prefix: '/api' });
   await app.register(mediaRoutes, { prefix: '/api/media' });
+  await app.register(credentialsRoutes, { prefix: '/api/credentials' });
 
   return app;
 }
