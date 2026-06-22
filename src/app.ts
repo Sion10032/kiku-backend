@@ -4,6 +4,7 @@ import { authRoutes } from './routes/auth.js';
 import { metadataRoutes } from './routes/metadata.js';
 import { mediaRoutes } from './routes/media.js';
 import { credentialsRoutes } from './routes/credentials.js';
+import { reviewRoutes } from './routes/review.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -16,6 +17,7 @@ export async function buildApp() {
   await app.register(metadataRoutes, { prefix: '/api' });
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
+  await app.register(reviewRoutes, { prefix: '/api' });
 
   return app;
 }
