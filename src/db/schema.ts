@@ -57,3 +57,25 @@ export const reviews = sqliteTable('t_review', {
   updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
   progress: text('progress'),
 }, t => [ primaryKey({ columns: [ t.userName, t.workId ] }) ]);
+
+// Export types for all tables
+export type Circle = typeof circles.$inferSelect;
+export type NewCircle = typeof circles.$inferInsert;
+
+export type Work = typeof works.$inferSelect;
+export type NewWork = typeof works.$inferInsert;
+
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;
+
+export type Va = typeof vas.$inferSelect;
+export type NewVa = typeof vas.$inferInsert;
+
+export type TagWork = typeof tagWork.$inferSelect;
+export type VaWork = typeof vaWork.$inferSelect;
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+
+export type Review = typeof reviews.$inferSelect;
+export type NewReview = typeof reviews.$inferInsert;

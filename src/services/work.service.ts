@@ -1,12 +1,44 @@
 import { db } from '../db/index.js';
 import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/schema.js';
+import type { Work, Circle, Tag, Va } from '../db/schema.js';
 import { eq, like, inArray, or, sql, desc, asc } from 'drizzle-orm';
 
-function formatWork(row: Record<string, unknown>) {
+// 带关联的查询结果类型
+type WorkWithRelations = Work & {
+  circle: Circle;
+  tags?: Array<{ tag: Tag; }>;
+  vas?: Array<{ va: Va; }>;
+  reviews?: Array<{ rating: number | null; }>;
+};
+
+// 格式化后的输出类型
+export interface FormattedWork {
+  id: number;
+  rootFolder: string;
+  dir: string;
+  title: string;
+  circle: { id: number; name: string; };
+  nsfw: boolean;
+  release: string | null;
+  dl_count: number | null;
+  price: number | null;
+  review_count: number | null;
+  rate_count: number | null;
+  rate_average_2dp: number | null;
+  rate_count_detail: Record<string, number>;
+  rank: Record<string, number> | null;
+  tags: Array<{ id: number; name: string; }>;
+  vas: Array<{ id: string; name: string; }>;
+  userRating: number | null;
+}
+
+function formatWork(row: WorkWithRelations): FormattedWork {
   return {
     id: row.id,
+    rootFolder: row.rootFolder,
+    dir: row.dir,
     title: row.title,
-    circle: { id: (row.circle as Record<string, unknown>).id, name: (row.circle as Record<string, unknown>).name },
+    circle: { id: row.circle.id, name: row.circle.name },
     nsfw: Boolean(row.nsfw),
     release: row.release,
     dl_count: row.dlCount,
@@ -14,11 +46,11 @@ function formatWork(row: Record<string, unknown>) {
     review_count: row.reviewCount,
     rate_count: row.rateCount,
     rate_average_2dp: row.rateAverage2dp,
-    rate_count_detail: JSON.parse((row.rateCountDetail as string) ?? '{}'),
-    rank: row.rank ? JSON.parse(row.rank as string) : null,
-    tags: (row.tags as Array<{ tag: Record<string, unknown>; }>)?.map(tw => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
-    vas: (row.vas as Array<{ va: Record<string, unknown>; }>)?.map(vw => ({ id: vw.va.id, name: vw.va.name })) ?? [],
-    userRating: (row.reviews as Array<{ rating: number; }>)?.[0]?.rating ?? null,
+    rate_count_detail: JSON.parse(row.rateCountDetail ?? '{}'),
+    rank: row.rank ? JSON.parse(row.rank) : null,
+    tags: row.tags?.map(tw => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
+    vas: row.vas?.map(vw => ({ id: vw.va.id, name: vw.va.name })) ?? [],
+    userRating: row.reviews?.[0]?.rating ?? null,
   };
 }
 
@@ -33,7 +65,7 @@ export async function getWorkById(id: number, username?: string) {
     },
   });
   if (!row) throw new Error(`Work ${id} not found`);
-  return formatWork(row as Record<string, unknown>);
+  return formatWork(row);
 }
 
 export async function getWorksPaginated(opts: {
@@ -71,7 +103,7 @@ export async function getWorksPaginated(opts: {
   const totalCount = countResult[0]?.count ?? 0;
 
   return {
-    works: items.map(item => formatWork(item as Record<string, unknown>)),
+    works: items.map(item => formatWork(item)),
     pagination: { currentPage: page, pageSize, totalCount },
   };
 }
@@ -84,7 +116,7 @@ export async function searchWorks(keyword: string) {
       where: eq(works.id, rjId),
       with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
     });
-    return { works: items.map(item => formatWork(item as Record<string, unknown>)) };
+    return { works: items.map(item => formatWork(item)) };
   }
 
   const circleIds = db.select({ id: circles.id }).from(circles)
@@ -105,7 +137,7 @@ export async function searchWorks(keyword: string) {
     ),
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
-  return { works: items.map(item => formatWork(item as Record<string, unknown>)) };
+  return { works: items.map(item => formatWork(item)) };
 }
 
 export async function getCircleById(id: number) {
@@ -121,7 +153,7 @@ export async function getCircleWorks(circleId: number) {
     where: eq(works.circleId, circleId),
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
-  return items.map(item => formatWork(item as Record<string, unknown>));
+  return items.map(item => formatWork(item));
 }
 
 export async function getCircles() {
@@ -137,11 +169,19 @@ export async function getTagById(id: number) {
 }
 
 export async function getTagWorks(tagId: number) {
-  const items = await db.select()
-    .from(works)
-    .innerJoin(tagWork, eq(works.id, tagWork.workId))
-    .where(eq(tagWork.tagId, tagId));
-  return items.map(item => formatWork(item.t_work as Record<string, unknown>));
+  const tagWorkItems = await db.query.tagWork.findMany({
+    where: eq(tagWork.tagId, tagId),
+    with: {
+      work: {
+        with: {
+          circle: true,
+          tags: { with: { tag: true } },
+          vas: { with: { va: true } },
+        },
+      },
+    },
+  });
+  return tagWorkItems.map(item => formatWork(item.work));
 }
 
 export async function getTags() {
@@ -157,11 +197,19 @@ export async function getVaById(id: string) {
 }
 
 export async function getVaWorks(vaId: string) {
-  const items = await db.select()
-    .from(works)
-    .innerJoin(vaWork, eq(works.id, vaWork.workId))
-    .where(eq(vaWork.vaId, vaId));
-  return items.map(item => formatWork(item.t_work as Record<string, unknown>));
+  const vaWorkItems = await db.query.vaWork.findMany({
+    where: eq(vaWork.vaId, vaId),
+    with: {
+      work: {
+        with: {
+          circle: true,
+          tags: { with: { tag: true } },
+          vas: { with: { va: true } },
+        },
+      },
+    },
+  });
+  return vaWorkItems.map(item => formatWork(item.work));
 }
 
 export async function getVas() {
