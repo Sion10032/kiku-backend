@@ -1,9 +1,20 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { z } from 'zod';
 
 const CURRENT_VERSION = '1.0.0';
 
-export async function versionRoutes(fastify: FastifyInstance) {
-  fastify.get('/version', async () => {
+export const versionRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get('/version', {
+    schema: {
+      response: {
+        200: z.object({
+          current: z.string(),
+          latest: z.string().nullable(),
+          updateAvailable: z.boolean(),
+        }),
+      },
+    },
+  }, async () => {
     const latestVersion: string | null = null;
 
     return {
@@ -12,4 +23,4 @@ export async function versionRoutes(fastify: FastifyInstance) {
       updateAvailable: latestVersion !== null && latestVersion !== CURRENT_VERSION,
     };
   });
-}
+};

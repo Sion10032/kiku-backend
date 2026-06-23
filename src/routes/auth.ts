@@ -1,16 +1,28 @@
-import type { FastifyInstance } from 'fastify';
-import { loginSchema } from '../config/schema.js';
+import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { z } from 'zod';
 import { getUserByName } from '../services/user.service.js';
 import { verifyPassword, signToken } from '../auth/utils.js';
 
-export async function authRoutes(fastify: FastifyInstance) {
-  fastify.post('/me', async (request, reply) => {
-    const parsed = loginSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({ error: parsed.error.message });
-    }
+const loginSchema = z.object({
+  name: z.string().min(4),
+  password: z.string().min(5),
+});
 
-    const { name, password } = parsed.data;
+export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post('/me', {
+    schema: {
+      body: loginSchema,
+      response: {
+        200: z.object({
+          token: z.string(),
+          name: z.string(),
+          group: z.string(),
+        }),
+        401: z.object({ error: z.string() }),
+      },
+    },
+  }, async (request, reply) => {
+    const { name, password } = request.body;
     const user = await getUserByName(name);
 
     if (!user || !verifyPassword(password, user.password)) {
@@ -23,8 +35,16 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   fastify.get('/me', {
     preHandler: [ fastify.authenticate ],
+    schema: {
+      response: {
+        200: z.object({
+          name: z.string(),
+          group: z.string(),
+        }),
+      },
+    },
   }, async (request) => {
     const user = request.user as { name: string; group: string; };
     return { name: user.name, group: user.group };
   });
-}
+};

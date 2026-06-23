@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { metadataRoutes } from './routes/metadata.js';
@@ -12,6 +13,10 @@ export async function buildApp() {
   const app = Fastify({
     logger: true,
   });
+
+  // Configure Zod Type Provider
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
 
   // Register routes
   await app.register(healthRoutes, { prefix: '/api' });

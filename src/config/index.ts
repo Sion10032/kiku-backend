@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
-import { configSchema, type Config } from './schema';
+import { configSchema, sharedConfigSchema, type Config } from './schema.js';
 
 const CONFIG_PATH = process.env.CONFIG_PATH || './config.json';
 
@@ -50,15 +50,5 @@ export function updateConfig(updates: Partial<Config>): Config {
 
 export function getSharedConfig() {
   const cfg = getConfig();
-  return {
-    auth: cfg.auth,
-    pageSize: cfg.pageSize,
-    tagLanguage: cfg.tagLanguage,
-    enableGzip: cfg.enableGzip,
-    rewindSeekTime: cfg.rewindSeekTime,
-    forwardSeekTime: cfg.forwardSeekTime,
-    offloadMedia: cfg.offloadMedia,
-    offloadStreamPath: cfg.offloadStreamPath,
-    offloadDownloadPath: cfg.offloadDownloadPath,
-  };
+  return sharedConfigSchema.parse(cfg);
 }
