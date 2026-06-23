@@ -8,6 +8,7 @@ import { credentialsRoutes } from './routes/credentials.js';
 import { reviewRoutes } from './routes/review.js';
 import { configRoutes } from './routes/config.js';
 import { versionRoutes } from './routes/version.js';
+import { setupWebSocket } from './websocket/scanner.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -17,6 +18,9 @@ export async function buildApp() {
   // Configure Zod Type Provider
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  // Setup WebSocket
+  setupWebSocket(app);
 
   // Register routes
   await app.register(healthRoutes, { prefix: '/api' });
