@@ -1,0 +1,35 @@
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { setupTestEnvironment } from './helpers/setup';
+import { buildApp } from '../src/app';
+import type { FastifyInstance } from 'fastify';
+
+setupTestEnvironment();
+
+describe('Version Routes', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await buildApp();
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe('GET /api/version', () => {
+    it('should return version info', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/version',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty('current');
+      expect(body).toHaveProperty('latest');
+      expect(body).toHaveProperty('updateAvailable');
+      expect(typeof body.current).toBe('string');
+    });
+  });
+});
