@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
-import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
+import sensible from '@fastify/sensible';
+import { authPlugin } from './auth/plugin.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { metadataRoutes } from './routes/metadata.js';
@@ -11,13 +13,14 @@ import { versionRoutes } from './routes/version.js';
 import { setupWebSocket } from './websocket/scanner.js';
 
 export async function buildApp() {
-  const app = Fastify({
-    logger: true,
-  });
+  const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
 
   // Configure Zod Type Provider
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  app.register(sensible);
+  app.register(authPlugin);
 
   // Setup WebSocket
   setupWebSocket(app);

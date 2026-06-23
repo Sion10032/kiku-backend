@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
 import { getConfig } from '../config/index.js';
 
@@ -20,7 +21,7 @@ export interface JwtPayload {
   group: string;
 }
 
-export async function authPlugin(fastify: FastifyInstance) {
+async function plugin(fastify: FastifyInstance) {
   const config = getConfig();
 
   await fastify.register(fastifyJwt, {
@@ -30,24 +31,26 @@ export async function authPlugin(fastify: FastifyInstance) {
     },
   });
 
-  fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.decorate('authenticate', async (request: FastifyRequest, _reply: FastifyReply) => {
     try {
       await request.jwtVerify();
     }
     catch {
-      reply.status(401).send({ error: 'Unauthorized' });
+      throw fastify.httpErrors.unauthorized();
     }
   });
 
-  fastify.decorate('authenticateAdmin', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.decorate('authenticateAdmin', async (request: FastifyRequest, _reply: FastifyReply) => {
     try {
       const decoded = await request.jwtVerify<JwtPayload>();
       if (decoded.group !== 'administrator') {
-        reply.status(403).send({ error: 'Forbidden' });
+        throw fastify.httpErrors.forbidden();
       }
     }
     catch {
-      reply.status(401).send({ error: 'Unauthorized' });
+      throw fastify.httpErrors.unauthorized();
     }
   });
 }
+
+export const authPlugin = fp(plugin, { name: 'auth' });
