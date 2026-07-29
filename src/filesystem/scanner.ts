@@ -1,53 +1,191 @@
+import { EventEmitter } from 'events';
 import type { Config } from '../config/schema.js';
+import { getFolderList, getTrackList } from './utils.js';
 
-export type ScanMessage =
+interface ScanTask {
+  id: number;
+  title: string;
+  folderPath: string;
+  rootFolder: string;
+  status: 'pending' | 'scanning' | 'completed' | 'failed';
+  error?: string;
+}
+
+interface MainLog {
+  level: string;
+  message: string;
+  timestamp: string;
+}
+
+export type ScanEvent =
   | { type: 'SCAN_TASKS'; tasks: Array<{ id: number; title: string; status: string; }>; }
   | { type: 'SCAN_FAILED_TASKS'; failedTasks: Array<{ id: number; title: string; error: string; }>; }
-  | { type: 'SCAN_MAIN_LOGS'; mainLogs: Array<{ level: string; message: string; timestamp: string; }>; }
+  | { type: 'SCAN_MAIN_LOGS'; mainLogs: MainLog[]; }
   | { type: 'SCAN_RESULTS'; results: { total: number; added: number; updated: number; failed: number; }; }
   | { type: 'SCAN_FINISHED'; message: string; }
   | { type: 'SCAN_ERROR'; error: string; };
 
-let currentWorker: Worker | null = null;
+/**
+ * Async generator that performs a scan, yielding events as it progresses.
+ * Checks the abort signal between operations so the scan can be terminated.
+ */
+async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator<ScanEvent> {
+  const tasks: ScanTask[] = [];
+  const failedTasks: ScanTask[] = [];
+  const mainLogs: MainLog[] = [];
 
-export function startScan(config: Config): Worker {
-  if (currentWorker) {
-    throw new Error('Scan is already in progress');
-  }
-
-  const worker = new Worker(new URL('./scanner.worker.ts', import.meta.url).href);
-
-  worker.onmessage = (event: MessageEvent<ScanMessage>) => {
-    const msg = event.data;
-    broadcastToAdmin(msg.type, msg);
+  const log = (level: string, message: string): void => {
+    mainLogs.push({ level, message, timestamp: new Date().toISOString() });
   };
 
-  worker.onerror = (event) => {
-    broadcastToAdmin('SCAN_ERROR', { type: 'SCAN_ERROR', error: event.message });
-    currentWorker = null;
+  log('info', 'Starting scan...');
+  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+
+  // Scan each root folder to build the task list
+  for (const rootFolder of config.rootFolders) {
+    if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+    log('info', `Scanning root folder: ${rootFolder.name} (${rootFolder.path})`);
+    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+
+    const folders = await getFolderList(rootFolder.path, config.scannerMaxRecursionDepth);
+
+    for (const folderPath of folders) {
+      if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+      const tracks = await getTrackList(folderPath);
+
+      if (tracks.length > 0) {
+        const task: ScanTask = {
+          id: tasks.length + 1,
+          title: folderPath.replace(rootFolder.path, '').replace(/^\//, ''),
+          folderPath,
+          rootFolder: rootFolder.name,
+          status: 'pending',
+        };
+
+        tasks.push(task);
+
+        yield {
+          type: 'SCAN_TASKS',
+          tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+        };
+      }
+    }
+  }
+
+  log('info', `Found ${tasks.length} works to scan`);
+  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+
+  // Process each task
+  let added = 0;
+  const updated = 0;
+  let failed = 0;
+
+  for (const task of tasks) {
+    if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+    try {
+      task.status = 'scanning';
+      yield {
+        type: 'SCAN_TASKS',
+        tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+      };
+
+      // TODO: Implement actual work creation/update logic
+      // For now, just simulate processing
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      task.status = 'completed';
+      added++;
+
+      log('info', `Processed: ${task.title}`);
+    }
+    catch (err) {
+      task.status = 'failed';
+      task.error = String(err);
+      failedTasks.push(task);
+      failed++;
+
+      log('error', `Failed: ${task.title} - ${String(err)}`);
+    }
+
+    yield {
+      type: 'SCAN_TASKS',
+      tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+    };
+    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+  }
+
+  // Send final results
+  yield {
+    type: 'SCAN_RESULTS',
+    results: { total: tasks.length, added, updated, failed },
   };
 
-  worker.addEventListener('close', () => {
-    currentWorker = null;
-  });
-
-  worker.postMessage({ type: 'START_SCAN', config });
-  currentWorker = worker;
-  return worker;
-}
-
-export function killScan(): void {
-  if (currentWorker) {
-    currentWorker.terminate();
-    currentWorker = null;
+  if (failedTasks.length > 0) {
+    yield {
+      type: 'SCAN_FAILED_TASKS',
+      failedTasks: failedTasks.map(t => ({ id: t.id, title: t.title, error: t.error || 'Unknown error' })),
+    };
   }
 }
 
-export function isScanRunning(): boolean {
-  return currentWorker !== null;
+/**
+ * Manages the scan lifecycle and broadcasts scan events via an EventEmitter.
+ * SSE endpoints subscribe to the 'scan' event to push updates to clients.
+ */
+class ScannerManager extends EventEmitter {
+  private currentController: AbortController | null = null;
+  private scanning = false;
+
+  get isScanning(): boolean {
+    return this.scanning;
+  }
+
+  /** Start a scan in the background. Throws if a scan is already running. */
+  startScan(config: Config): void {
+    if (this.scanning) {
+      throw new Error('Scan is already in progress');
+    }
+
+    // Run async — fire and forget. Errors are handled inside runScan.
+    this.runScan(config).catch((err) => {
+      console.error('[Scanner] Unhandled error:', err);
+    });
+  }
+
+  /** Terminate the current scan. No-op if no scan is running. */
+  killScan(): void {
+    if (this.currentController) {
+      this.currentController.abort();
+    }
+  }
+
+  private async runScan(config: Config): Promise<void> {
+    this.scanning = true;
+    this.currentController = new AbortController();
+    const signal = this.currentController.signal;
+
+    try {
+      for await (const event of performScan(config, signal)) {
+        this.emit('scan', event);
+      }
+      this.emit('scan', { type: 'SCAN_FINISHED', message: 'Scan completed successfully' });
+    }
+    catch (err) {
+      if (signal.aborted) {
+        this.emit('scan', { type: 'SCAN_FINISHED', message: 'Scan was terminated' });
+      }
+      else {
+        this.emit('scan', { type: 'SCAN_ERROR', error: String(err) });
+      }
+    }
+    finally {
+      this.scanning = false;
+      this.currentController = null;
+    }
+  }
 }
 
-function broadcastToAdmin(event: string, data: unknown): void {
-  // This will be implemented in websocket.ts
-  console.log(`[Scanner] ${event}:`, data);
-}
+export const scanner = new ScannerManager();

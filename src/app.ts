@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import sensible from '@fastify/sensible';
+import fastifySSE from '@fastify/sse';
 import { authPlugin } from './auth/plugin.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
@@ -10,7 +11,7 @@ import { credentialsRoutes } from './routes/credentials.js';
 import { reviewRoutes } from './routes/review.js';
 import { configRoutes } from './routes/config.js';
 import { versionRoutes } from './routes/version.js';
-import { setupWebSocket } from './websocket/scanner.js';
+import { scannerRoutes } from './routes/scanner.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
@@ -21,9 +22,7 @@ export async function buildApp() {
 
   app.register(sensible);
   app.register(authPlugin);
-
-  // Setup WebSocket
-  setupWebSocket(app);
+  await app.register(fastifySSE);
 
   // Register routes
   await app.register(healthRoutes, { prefix: '/api' });
@@ -34,6 +33,7 @@ export async function buildApp() {
   await app.register(reviewRoutes, { prefix: '/api' });
   await app.register(configRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
+  await app.register(scannerRoutes, { prefix: '/api/scanner' });
 
   return app;
 }

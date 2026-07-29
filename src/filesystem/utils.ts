@@ -1,7 +1,7 @@
-import { readdirSync } from 'fs';
+import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 
-export function getFolderList(dirPath: string, maxDepth: number, currentDepth: number = 0): string[] {
+export async function getFolderList(dirPath: string, maxDepth: number, currentDepth: number = 0): Promise<string[]> {
   if (currentDepth >= maxDepth) {
     return [];
   }
@@ -9,13 +9,13 @@ export function getFolderList(dirPath: string, maxDepth: number, currentDepth: n
   const folders: string[] = [];
 
   try {
-    const entries = readdirSync(dirPath, { withFileTypes: true });
+    const entries = await readdir(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const fullPath = join(dirPath, entry.name);
         folders.push(fullPath);
-        folders.push(...getFolderList(fullPath, maxDepth, currentDepth + 1));
+        folders.push(...await getFolderList(fullPath, maxDepth, currentDepth + 1));
       }
     }
   }
@@ -26,12 +26,12 @@ export function getFolderList(dirPath: string, maxDepth: number, currentDepth: n
   return folders;
 }
 
-export function getTrackList(dirPath: string): Array<{ name: string; path: string; index: number; }> {
+export async function getTrackList(dirPath: string): Promise<Array<{ name: string; path: string; index: number; }>> {
   const audioExtensions = [ '.mp3', '.ogg', '.wav', '.flac', '.m4a' ];
   const tracks: Array<{ name: string; path: string; index: number; }> = [];
 
   try {
-    const entries = readdirSync(dirPath, { withFileTypes: true });
+    const entries = await readdir(dirPath, { withFileTypes: true });
     let index = 1;
 
     for (const entry of entries) {
