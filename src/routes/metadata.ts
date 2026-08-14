@@ -19,6 +19,11 @@ const idParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+// VA 的 id 是 string（如 v1），与 number 类型的 circle/tag 区分（见 vaSchema）
+const vaIdParamsSchema = z.object({
+  id: z.string().min(1),
+});
+
 const keywordParamsSchema = z.object({
   keyword: z.string().min(1),
 });
@@ -255,7 +260,7 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   fastify.get('/vas/:id', {
     schema: {
-      params: idParamsSchema,
+      params: vaIdParamsSchema,
       response: {
         200: vaSchema,
         404: z.object({ error: z.string() }),
@@ -273,7 +278,7 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   fastify.get('/vas/:id/works', {
     schema: {
-      params: idParamsSchema,
+      params: vaIdParamsSchema,
       response: {
         200: z.array(formattedWorkSchema),
         404: z.object({ error: z.string() }),
