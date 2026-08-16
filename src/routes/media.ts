@@ -5,9 +5,10 @@ import { getConfig } from '../config/index.js';
 import { existsSync, statSync, createReadStream } from 'fs';
 import { join, extname } from 'path';
 
+// 通配参数（路由形如 /stream/:id/*）：媒体相对路径可含子文件夹（"早期特典/mp3/x.mp3"）
 const mediaParamsSchema = z.object({
-  id: z.string(),
-  index: z.string().min(1),
+  'id': z.string(),
+  '*': z.string().min(1),
 });
 
 const mimeTypes: Record<string, string> = {
@@ -18,13 +19,37 @@ const mimeTypes: Record<string, string> = {
   '.m4a': 'audio/mp4',
 };
 
+/**
+ * 解析单段 Range 头（"bytes=start-end" / "bytes=start-" / "bytes=-suffix"）。
+ *
+ * html5 audio 拖动到未缓冲位置时浏览器发送 Range 请求并期待 206 分片，
+ * 返回 undefined 表示无 Range 头（整文件 200），返回 null 表示范围非法（416）。
+ */
+function parseRange(
+  rangeHeader: string | undefined,
+  size: number,
+): { start: number; end: number; } | null | undefined {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader ?? '');
+  if (!match) return undefined;
+
+  const end = Math.min(
+    match[2] === '' ? size - 1 : Number(match[2]),
+    size - 1,
+  );
+  // 后缀分片（bytes=-N）：最后 N 字节
+  const start = match[1] === '' ? Math.max(0, size - Number(match[2])) : Number(match[1]);
+
+  if (start > end || start >= size) return null;
+  return { start, end };
+}
+
 export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  fastify.get('/stream/:id/:index', {
+  fastify.get('/stream/:id/*', {
     schema: {
       params: mediaParamsSchema,
     },
   }, async (request, reply) => {
-    const { id, index } = request.params;
+    const { id, '*': index } = request.params;
     const config = getConfig();
 
     try {
@@ -44,8 +69,26 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const ext = extname(filePath).toLowerCase();
       const contentType = mimeTypes[ext] || 'application/octet-stream';
 
+      const range = parseRange(request.headers.range, stat.size);
+      if (range === null) {
+        return reply
+          .status(416)
+          .header('Content-Range', `bytes */${stat.size}`)
+          .send();
+      }
+      if (range) {
+        return reply
+          .status(206)
+          .header('Content-Type', contentType)
+          .header('Accept-Ranges', 'bytes')
+          .header('Content-Range', `bytes ${range.start}-${range.end}/${stat.size}`)
+          .header('Content-Length', range.end - range.start + 1)
+          .send(createReadStream(filePath, range));
+      }
+
       return reply
         .header('Content-Type', contentType)
+        .header('Accept-Ranges', 'bytes')
         .header('Content-Length', stat.size)
         .send(createReadStream(filePath));
     }
@@ -54,12 +97,12 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
   });
 
-  fastify.get('/download/:id/:index', {
+  fastify.get('/download/:id/*', {
     schema: {
       params: mediaParamsSchema,
     },
   }, async (request, reply) => {
-    const { id, index } = request.params;
+    const { id, '*': index } = request.params;
     const config = getConfig();
 
     try {
@@ -90,7 +133,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
   });
 
-  fastify.get('/check-lrc/:id/:index', {
+  fastify.get('/check-lrc/:id/*', {
     schema: {
       params: mediaParamsSchema,
       response: {
@@ -103,7 +146,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
   }, async (request, reply) => {
-    const { id, index } = request.params;
+    const { id, '*': index } = request.params;
     const config = getConfig();
 
     try {
