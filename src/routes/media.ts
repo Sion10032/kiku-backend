@@ -2,8 +2,8 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getWorkById } from '../services/work.service.js';
 import { getConfig } from '../config/index.js';
-import { existsSync, statSync, createReadStream } from 'fs';
-import { join, extname } from 'path';
+import { existsSync, statSync, createReadStream, readFileSync } from 'fs';
+import { join, extname, dirname, basename } from 'path';
 
 // 通配参数（路由形如 /stream/:id/*）：媒体相对路径可含子文件夹（"早期特典/mp3/x.mp3"）
 const mediaParamsSchema = z.object({
@@ -141,6 +141,8 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: z.string(),
           index: z.string(),
           hasLrc: z.boolean(),
+          type: z.enum(['lrc', 'vtt']).optional(),
+          text: z.string().optional(),
         }),
         404: z.object({ error: z.string() }),
       },
@@ -157,11 +159,33 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.status(404).send({ error: 'Root folder not found' });
       }
 
-      const lrcFile = `${index}.lrc`;
-      const filePath = join(rootFolder.path, work.dir, lrcFile);
-      const hasLrc = existsSync(filePath);
+      // 音轨文件名去扩展名（目录前缀保留）："sub/x.wav" → "sub/x"
+      const stem = join(dirname(index), basename(index, extname(index)));
 
-      return { id, index, hasLrc };
+      // 歌词候选（按优先级）：stem.lrc（库内实际规则）→ index.lrc（旧规则）
+      // → index.vtt（VTT 实际规则）→ stem.vtt（兼容）
+      const candidates: Array<{ type: 'lrc' | 'vtt'; file: string; }> = [
+        { type: 'lrc', file: `${stem}.lrc` },
+        { type: 'lrc', file: `${index}.lrc` },
+        { type: 'vtt', file: `${index}.vtt` },
+        { type: 'vtt', file: `${stem}.vtt` },
+      ];
+
+      for (const candidate of candidates) {
+        const filePath = join(rootFolder.path, work.dir, candidate.file);
+        // 命中即返回歌词全文与格式，前端无需二次请求
+        if (existsSync(filePath)) {
+          return {
+            id,
+            index,
+            hasLrc: true,
+            type: candidate.type,
+            text: readFileSync(filePath, 'utf-8'),
+          };
+        }
+      }
+
+      return { id, index, hasLrc: false };
     }
     catch {
       return reply.status(404).send({ error: 'Work not found' });
