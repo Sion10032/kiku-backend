@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 import type { Config } from '../config/schema.js';
 import { getFolderList, getTrackList } from './utils.js';
+import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
+import { upsertWork } from '../services/work.service.js';
 
 interface ScanTask {
   id: number;
@@ -86,7 +88,7 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
 
   // Process each task
   let added = 0;
-  const updated = 0;
+  let updated = 0;
   let failed = 0;
 
   for (const task of tasks) {
@@ -99,14 +101,51 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
         tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
       };
 
-      // TODO: Implement actual work creation/update logic
-      // For now, just simulate processing
-      await new Promise(resolve => setTimeout(resolve, 10));
+      const rjCode = task.rjCode;
+
+      log('info', `Fetching metadata for ${rjCode}...`);
+      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+
+      // Fetch metadata from DLsite
+      const metadata = await fetchDLsiteWorkInfo(rjCode, signal);
+
+      log('info', `Got metadata: ${metadata.title}`);
+      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+
+      // Write to database
+      const result = await upsertWork({
+        id: rjCode,
+        rootFolder: task.rootFolder,
+        dir: task.dirName,
+        title: metadata.title,
+        circleName: metadata.circle || 'Unknown',
+        nsfw: metadata.nsfw,
+        release: metadata.releaseDate || undefined,
+        dlCount: metadata.dlCount || undefined,
+        price: metadata.price || undefined,
+        reviewCount: metadata.reviewCount || undefined,
+        rateCount: metadata.rateCount || undefined,
+        rateAverage2dp: metadata.rateAverage || undefined,
+        rateCountDetail: Object.keys(metadata.rateCountDetail).length > 0 ? metadata.rateCountDetail : undefined,
+        rank: Object.keys(metadata.rank).length > 0 ? metadata.rank : undefined,
+        tags: metadata.tags,
+        vas: metadata.vas,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save work');
+      }
+
+      if (result.created) {
+        added++;
+        log('info', `Added: ${rjCode} - ${metadata.title}`);
+      }
+      else {
+        updated++;
+        log('info', `Updated: ${rjCode} - ${metadata.title}`);
+      }
 
       task.status = 'completed';
-      added++;
-
-      log('info', `Processed: ${task.title}`);
     }
     catch (err) {
       task.status = 'failed';

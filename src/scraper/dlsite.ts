@@ -1,5 +1,8 @@
 import * as cheerio from 'cheerio';
-import { fetchHtml } from './client.js';
+import { fetchHtml, fetchJson } from './client.js';
+import { fetchHVDBWorkInfo } from './hvdb.js';
+import { getConfig } from '../config/index.js';
+import { hasLetter, nameToUUID } from '../filesystem/utils.js';
 
 export interface DLsiteWorkInfo {
   id: string;
@@ -13,86 +16,212 @@ export interface DLsiteWorkInfo {
   reviewCount: number;
   rateCount: number;
   rateAverage: number;
+  rateCountDetail: Record<string, number>;
+  rank: Record<string, number>;
   tags: string[];
   vas: Array<{ id: string; name: string; }>;
   description: string;
   coverUrl: string;
 }
 
-export function extractRJId(input: string): string | null {
-  const match = input.match(/([Rr][Jj])(\d+)/);
-  if (match) {
-    return `RJ${match[2]!.padStart(8, '0')}`;
-  }
-  return null;
+/** 工作信息表 (#work_outline) 中各字段的 <th> 文本，随页面语言变化。 */
+const OUTLINE_LABELS = {
+  'ja-jp': {
+    age: [ '年齢指定' ],
+    release: [ '販売日' ],
+    genre: [ 'ジャンル' ],
+    va: [ '声優' ],
+  },
+  'zh-cn': {
+    age: [ '年龄指定' ],
+    // DLsite 曾用「贩卖日」，现页面为「发售日」，两者都兼容
+    release: [ '发售日', '贩卖日' ],
+    genre: [ '分类' ],
+    va: [ '声优' ],
+  },
+  'zh-tw': {
+    age: [ '年齡指定' ],
+    release: [ '販賣日' ],
+    genre: [ '分類' ],
+    va: [ '聲優' ],
+  },
+} as const;
+
+type OutlineLabels = {
+  age: readonly string[];
+  release: readonly string[];
+  genre: readonly string[];
+  va: readonly string[];
+};
+
+/** `$()` 的返回类型，即任意节点的 Cheerio 选择器。 */
+type NodeCheerio = ReturnType<cheerio.CheerioAPI>;
+
+/** 在 #work_outline 表格中按 <th> 文本查找对应行的第一个 <td>。 */
+function findOutlineTd(
+  $: cheerio.CheerioAPI,
+  labels: readonly string[],
+): NodeCheerio | null {
+  let td: NodeCheerio | null = null;
+  $('#work_outline tr').each((_, tr) => {
+    if (td) return;
+    const th = $(tr).children('th').first();
+    if (labels.includes(th.text().trim())) {
+      td = $(tr).children('td').first();
+    }
+  });
+  return td;
 }
 
-export function getRJNumber(rjId: string): number {
-  return parseInt(rjId.replace('RJ', ''), 10);
+interface StaticWorkInfo {
+  title: string;
+  circle: string;
+  circleId: string;
+  nsfw: boolean;
+  releaseDate: string;
+  tags: string[];
+  vas: Array<{ id: string; name: string; }>;
+  description: string;
+  coverUrl: string;
 }
 
-export async function fetchDLsiteWorkInfo(rjId: string): Promise<DLsiteWorkInfo> {
+/** 从 DLsite 工作页 HTML 抓取静态元数据（标题、社团、标签、声优等）。 */
+async function scrapeStaticWorkInfo(rjId: string, signal?: AbortSignal): Promise<StaticWorkInfo> {
   const url = `https://www.dlsite.com/maniax/work/=/product_id/${rjId}.html`;
+  const language = getConfig().tagLanguage;
+  const labels: OutlineLabels = OUTLINE_LABELS[language];
 
-  const html = await fetchHtml(url);
+  const html = await fetchHtml(url, {
+    externalSignal: signal,
+    headers: { Cookie: `locale=${language}; adultchecked=1` },
+  });
   const $ = cheerio.load(html);
 
-  const title = $('#work_name').text().trim();
-  const circle = $('.maker_name a').text().trim();
-  const circleId = $('.maker_name a').attr('href')?.match(/maker_id=(\w+)/)?.[1] || '';
-  const description = $('#work_outline').text().trim();
+  // 标题: og:title 形如 'xxx [社团名] | DLsite'，去掉后缀
+  const title = ($('meta[property="og:title"]').attr('content') || $('#work_name').text())
+    .trim()
+    .replace(/ \[.+\] \| DLsite$/, '');
 
-  // Extract tags
+  // 社团
+  const circleLink = $('span.maker_name a').first();
+  const circle = circleLink.text().trim();
+  const circleId = circleLink.attr('href')?.match(/maker_id\/(RG\d+)/)?.[1] || '';
+
+  // NSFW: 年龄指定行，'R18'/'18禁' 即成人内容（不同语言/时期页面文案不同）
+  const ageText = findOutlineTd($, labels.age)?.text().trim() || '';
+  const nsfw = /R18|18禁/.test(ageText);
+
+  // 发售日 (YYYY-MM-DD)
+  const releaseDigits = (findOutlineTd($, labels.release)?.text() || '').replace(/[^0-9]/g, '');
+  const releaseDate = releaseDigits.length >= 8
+    ? `${releaseDigits.slice(0, 4)}-${releaseDigits.slice(4, 6)}-${releaseDigits.slice(6, 8)}`
+    : '';
+
+  // 标签: 分类行的 genre 链接（声优/剧情/插画行的链接是 keyword_creater，不能要）
   const tags: string[] = [];
-  $('a[href*="keyword"]').each((_, el) => {
-    const tag = $(el).text().trim();
-    if (tag) tags.push(tag);
-  });
-
-  // Extract VAs
-  const vas: Array<{ id: string; name: string; }> = [];
-  $('a[href*="voice_by"]').each((_, el) => {
-    const name = $(el).text().trim();
+  findOutlineTd($, labels.genre)?.find('a').each((_, el) => {
     const href = $(el).attr('href') || '';
-    const idMatch = href.match(/voice_by\/(\w+)/);
-    if (name && idMatch?.[1]) {
-      vas.push({ id: idMatch[1], name });
+    if (/genre\/\d+/.test(href)) {
+      const tag = $(el).text().trim();
+      if (tag) tags.push(tag);
     }
   });
 
-  // Extract other metadata
-  const dlCount = parseInt($('#detail_download .count').text().replace(/,/g, '') || '0', 10);
-  const priceText = $('.work_buy_content .price').text().replace(/[^\d]/g, '');
-  const price = parseInt(priceText || '0', 10);
-  const reviewCount = parseInt($('#review_count').text().replace(/,/g, '') || '0', 10);
+  // 声优: 声优行的链接，id 由名字生成
+  const vas: Array<{ id: string; name: string; }> = [];
+  findOutlineTd($, labels.va)?.find('a').each((_, el) => {
+    const name = $(el).text().trim();
+    if (name) vas.push({ id: nameToUUID(name), name });
+  });
 
-  // Extract rating
-  const rateAverage = parseFloat($('.star_rating').attr('data-rate') || '0');
-  const rateCount = parseInt($('#review_count').text().replace(/,/g, '') || '0', 10);
+  if (tags.length === 0 && vas.length === 0) {
+    throw new Error(`Couldn't parse data from DLsite work page (${url}).`);
+  }
 
-  // Extract release date
-  const releaseDateText = $('th:contains("販売日")').next('td').text().trim();
-  const releaseDate = releaseDateText || '';
+  // 作品简介: 正文在各 .work_parts_area 中，heading 是章节标题不要
+  const description = $('[itemprop="description"] .work_parts_area').text().trim();
 
-  // Extract cover URL
-  const coverUrl = $('.slider_items img').first().attr('src') || '';
+  // 封面
+  const coverUrl = $('meta[property="og:image"]').attr('content') || '';
+
+  return { title, circle, circleId, nsfw, releaseDate, tags, vas, description, coverUrl };
+}
+
+interface DLsiteAjaxItem {
+  dl_count?: string | number;
+  price?: string | number;
+  rate_count?: string | number;
+  rate_average_2dp?: string | number;
+  review_count?: string | number;
+  rate_count_detail?: Array<{ review_point: number; count: number; }>;
+  rank?: Array<{ term: string; category: string; rank: number; }>;
+}
+
+interface DynamicWorkInfo {
+  dlCount: number;
+  price: number;
+  reviewCount: number;
+  rateCount: number;
+  rateAverage: number;
+  rateCountDetail: Record<string, number>;
+  rank: Record<string, number>;
+}
+
+/** 从 DLsite AJAX API 抓取动态元数据（销量、价格、评分等）。 */
+async function scrapeDynamicWorkInfo(rjId: string, signal?: AbortSignal): Promise<DynamicWorkInfo> {
+  const url = `https://www.dlsite.com/maniax-touch/product/info/ajax?product_id=${rjId}`;
+  const data = await fetchJson<Record<string, DLsiteAjaxItem>>(url, { externalSignal: signal });
+  const item = data[rjId];
+  if (!item) {
+    throw new Error(`Couldn't parse data from DLsite ajax API (${url}).`);
+  }
+
+  // 评分分布: [{ review_point, count }] -> { '1': n, ... }
+  const rateCountDetail: Record<string, number> = {};
+  for (const detail of item.rate_count_detail || []) {
+    rateCountDetail[String(detail.review_point)] = detail.count;
+  }
+
+  // 榜单成绩: [{ term, category, rank }] -> { 'day_all': n, ... }
+  const rank: Record<string, number> = {};
+  for (const entry of item.rank || []) {
+    rank[`${entry.term}_${entry.category}`] = entry.rank;
+  }
+
+  return {
+    dlCount: Number(item.dl_count) || 0,
+    price: Number(item.price) || 0,
+    reviewCount: Number(item.review_count) || 0,
+    rateCount: Number(item.rate_count) || 0,
+    rateAverage: Number(item.rate_average_2dp) || 0,
+    rateCountDetail,
+    rank,
+  };
+}
+
+export async function fetchDLsiteWorkInfo(rjId: string, signal?: AbortSignal): Promise<DLsiteWorkInfo> {
+  const [ staticInfo, dynamicInfo ] = await Promise.all([
+    scrapeStaticWorkInfo(rjId, signal),
+    scrapeDynamicWorkInfo(rjId, signal),
+  ]);
+
+  // 从 DLsite 抓不到声优信息时，从 HVDB 抓取声优信息
+  let { vas } = staticInfo;
+  if (vas.length === 0) {
+    const hvdbInfo = await fetchHVDBWorkInfo(rjId).catch(() => null);
+    if (hvdbInfo) {
+      const candidates = hvdbInfo.vas.length <= 1
+        ? hvdbInfo.vas
+        : hvdbInfo.vas.filter(va => !hasLetter(va.name)); // 过滤掉英文的声优名
+      vas = candidates.map(va => ({ id: nameToUUID(va.name), name: va.name }));
+    }
+  }
 
   return {
     id: rjId,
-    title,
-    circle,
-    circleId,
-    nsfw: true, // DLsite adult content
-    releaseDate,
-    dlCount,
-    price,
-    reviewCount,
-    rateCount,
-    rateAverage,
-    tags,
+    ...staticInfo,
     vas,
-    description,
-    coverUrl,
+    ...dynamicInfo,
   };
 }
 
@@ -125,6 +254,8 @@ export async function searchDLsite(keyword: string): Promise<DLsiteWorkInfo[]> {
         reviewCount: 0,
         rateCount: 0,
         rateAverage: 0,
+        rateCountDetail: {},
+        rank: {},
         tags: [],
         vas: [],
         description: '',

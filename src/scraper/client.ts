@@ -2,6 +2,8 @@ import { getConfig } from '../config/index.js';
 
 export interface FetchOptions extends BunFetchRequestInit {
   timeout?: number;
+  /** External abort signal (e.g., from scanner). Combined with timeout. */
+  externalSignal?: AbortSignal;
 }
 
 export async function retryFetch(
@@ -15,8 +17,24 @@ export async function retryFetch(
 
   for (let i = 0; i <= retries; i++) {
     try {
+      // Check external signal before each attempt
+      if (options.externalSignal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeout);
+
+      // Combine external signal with timeout signal
+      const onExternalAbort = (): void => controller.abort();
+      if (options.externalSignal) {
+        if (options.externalSignal.aborted) {
+          controller.abort();
+        }
+        else {
+          options.externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+        }
+      }
 
       const fetchOptions: BunFetchRequestInit = {
         ...options,
@@ -30,6 +48,9 @@ export async function retryFetch(
 
       const response = await fetch(url, fetchOptions);
       clearTimeout(timer);
+      if (options.externalSignal) {
+        options.externalSignal.removeEventListener('abort', onExternalAbort);
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -39,6 +60,11 @@ export async function retryFetch(
     }
     catch (err) {
       lastError = err as Error;
+
+      // Don't retry if aborted
+      if (lastError.name === 'AbortError') {
+        throw lastError;
+      }
 
       if (i < retries) {
         const delay = config.retryDelay * (i + 1);

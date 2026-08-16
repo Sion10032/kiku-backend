@@ -3,6 +3,166 @@ import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/schem
 import type { Work, Circle, Tag, Va } from '../db/schema.js';
 import { eq, like, inArray, or, sql, desc, asc } from 'drizzle-orm';
 
+// ---------- Upsert (used by scanner) ----------
+
+export interface UpsertWorkInput {
+  id: string; // Full RJ code like "RJ01578781"
+  rootFolder: string; // config rootFolder name
+  dir: string; // relative directory path
+  title: string;
+  circleName: string;
+  circleId?: string; // DLsite maker_id (optional)
+  nsfw?: boolean;
+  release?: string;
+  dlCount?: number;
+  price?: number;
+  reviewCount?: number;
+  rateCount?: number;
+  rateAverage2dp?: number;
+  rateCountDetail?: Record<string, number>;
+  rank?: Record<string, number>;
+  tags?: string[];
+  vas?: Array<{ id: string; name: string; }>;
+}
+
+export interface UpsertResult {
+  workId: string;
+  title: string;
+  created: boolean;
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Create or update a work with all its relations (circle, tags, VAs).
+ * Used by the scanner to persist DLsite metadata into the database.
+ */
+export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> {
+  try {
+    // 1. Find or create circle
+    let circle = await db.query.circles.findFirst({
+      where: eq(circles.name, input.circleName),
+    });
+    if (!circle) {
+      const result = await db.insert(circles).values({ name: input.circleName }).returning();
+      circle = result[0];
+    }
+    if (!circle) throw new Error('Failed to create circle');
+
+    // 2. Check if work already exists
+    const existing = await db.query.works.findFirst({
+      where: eq(works.id, input.id),
+    });
+
+    if (existing) {
+      // Update existing work
+      await db.update(works)
+        .set({
+          title: input.title,
+          circleId: circle.id,
+          rootFolder: input.rootFolder,
+          dir: input.dir,
+          nsfw: input.nsfw ?? existing.nsfw,
+          release: input.release ?? existing.release,
+          dlCount: input.dlCount ?? existing.dlCount,
+          price: input.price ?? existing.price,
+          reviewCount: input.reviewCount ?? existing.reviewCount,
+          rateCount: input.rateCount ?? existing.rateCount,
+          rateAverage2dp: input.rateAverage2dp ?? existing.rateAverage2dp,
+          rateCountDetail: input.rateCountDetail
+            ? JSON.stringify(input.rateCountDetail)
+            : existing.rateCountDetail,
+          rank: input.rank ? JSON.stringify(input.rank) : existing.rank,
+        })
+        .where(eq(works.id, input.id));
+
+      // Update tags: delete old, then insert new
+      if (input.tags) {
+        await db.delete(tagWork).where(eq(tagWork.workId, input.id));
+        for (const tagName of input.tags) {
+          let tag = await db.query.tags.findFirst({ where: eq(tags.name, tagName) });
+          if (!tag) {
+            const result = await db.insert(tags).values({ name: tagName }).returning();
+            tag = result[0];
+          }
+          if (tag) {
+            await db.insert(tagWork).values({ tagId: tag.id, workId: input.id }).onConflictDoNothing();
+          }
+        }
+      }
+
+      // Update VAs: delete old, then insert new
+      if (input.vas) {
+        await db.delete(vaWork).where(eq(vaWork.workId, input.id));
+        for (const va of input.vas) {
+          let existingVa = await db.query.vas.findFirst({ where: eq(vas.id, va.id) });
+          if (!existingVa) {
+            const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
+            existingVa = result[0];
+          }
+          if (existingVa) {
+            await db.insert(vaWork).values({ vaId: existingVa.id, workId: input.id }).onConflictDoNothing();
+          }
+        }
+      }
+
+      return { workId: input.id, title: input.title, created: false, success: true };
+    }
+    else {
+      // Create new work
+      await db.insert(works).values({
+        id: input.id as string,
+        rootFolder: input.rootFolder,
+        dir: input.dir,
+        title: input.title,
+        circleId: circle.id,
+        nsfw: input.nsfw ?? false,
+        release: input.release ?? null,
+        dlCount: input.dlCount ?? null,
+        price: input.price ?? null,
+        reviewCount: input.reviewCount ?? null,
+        rateCount: input.rateCount ?? null,
+        rateAverage2dp: input.rateAverage2dp ?? null,
+        rateCountDetail: input.rateCountDetail ? JSON.stringify(input.rateCountDetail) : '{}',
+        rank: input.rank ? JSON.stringify(input.rank) : null,
+      });
+
+      // Create tags
+      if (input.tags) {
+        for (const tagName of input.tags) {
+          let tag = await db.query.tags.findFirst({ where: eq(tags.name, tagName) });
+          if (!tag) {
+            const result = await db.insert(tags).values({ name: tagName }).returning();
+            tag = result[0];
+          }
+          if (tag) {
+            await db.insert(tagWork).values({ tagId: tag.id, workId: input.id }).onConflictDoNothing();
+          }
+        }
+      }
+
+      // Create VAs
+      if (input.vas) {
+        for (const va of input.vas) {
+          let existingVa = await db.query.vas.findFirst({ where: eq(vas.id, va.id) });
+          if (!existingVa) {
+            const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
+            existingVa = result[0];
+          }
+          if (existingVa) {
+            await db.insert(vaWork).values({ vaId: existingVa.id, workId: input.id }).onConflictDoNothing();
+          }
+        }
+      }
+
+      return { workId: input.id, title: input.title, created: true, success: true };
+    }
+  }
+  catch (err) {
+    return { workId: input.id, title: input.title, created: false, success: false, error: String(err) };
+  }
+}
+
 // 带关联的查询结果类型
 type WorkWithRelations = Work & {
   circle: Circle;
