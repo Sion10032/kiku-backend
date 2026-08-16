@@ -141,7 +141,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: z.string(),
           index: z.string(),
           hasLrc: z.boolean(),
-          type: z.enum(['lrc', 'vtt']).optional(),
+          type: z.enum([ 'lrc', 'vtt' ]).optional(),
           text: z.string().optional(),
         }),
         404: z.object({ error: z.string() }),
