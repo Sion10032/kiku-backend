@@ -2,6 +2,8 @@ import { db } from '../db/index.js';
 import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/schema.js';
 import type { Work, Circle, Tag, Va } from '../db/schema.js';
 import { eq, like, inArray, or, sql, desc, asc } from 'drizzle-orm';
+import { getConfig } from '../config/index.js';
+import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
 
 // ---------- Upsert (used by scanner) ----------
 
@@ -379,4 +381,37 @@ export async function getVaWorks(vaId: string) {
 
 export async function getVas() {
   return db.query.vas.findMany();
+}
+
+/**
+ * 获取作品的文件树
+ * @param id 作品 ID（完整 RJ code）
+ * @returns 文件树结构
+ */
+export async function getWorkTracks(id: string): Promise<TrackNode[]> {
+  const row = await db.query.works.findFirst({
+    where: eq(works.id, id),
+    columns: {
+      id: true,
+      rootFolder: true,
+      dir: true,
+      title: true,
+    },
+  });
+
+  if (!row) {
+    throw new Error(`Work ${id} not found`);
+  }
+
+  const config = getConfig();
+  const rootFolder = config.rootFolders.find(f => f.name === row.rootFolder);
+
+  if (!rootFolder) {
+    throw new Error(`Root folder "${row.rootFolder}" not found`);
+  }
+
+  const { join } = await import('path');
+  const dirPath = join(rootFolder.path, row.dir);
+
+  return buildTrackTree(dirPath);
 }

@@ -13,6 +13,7 @@ import {
   getVaById,
   getVaWorks,
   getVas,
+  getWorkTracks,
 } from '../services/work.service.js';
 
 const idParamsSchema = z.object({
@@ -123,11 +124,39 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       params: idParamsSchema,
       response: {
-        501: z.object({ error: z.string() }),
+        200: z.array(z.union([
+          z.object({
+            type: z.literal('folder'),
+            title: z.string(),
+            hash: z.string(),
+            children: z.lazy(() => z.array(z.any())),
+          }),
+          z.object({
+            type: z.enum([ 'audio', 'text', 'image', 'other' ]),
+            title: z.string(),
+            hash: z.string(),
+          }),
+        ])),
+        404: z.object({ error: z.string() }),
+        500: z.object({ error: z.string() }),
       },
     },
-  }, async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not implemented yet' });
+  }, async (request, reply) => {
+    const { id } = request.params;
+
+    try {
+      const tracks = await getWorkTracks(id);
+      return tracks;
+    }
+    catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+
+      if (errorMessage.includes('not found')) {
+        return reply.status(404).send({ error: errorMessage });
+      }
+
+      return reply.status(500).send({ error: 'Failed to get track list' });
+    }
   });
 
   fastify.get('/search/:keyword', {
