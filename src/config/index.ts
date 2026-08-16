@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { configSchema, sharedConfigSchema, type Config } from './schema.js';
 
-const CONFIG_PATH = process.env.CONFIG_PATH || './config.json';
+const CONFIG_PATH = process.env.CONFIG_PATH || './data/config.json';
 
 let config: Config;
 

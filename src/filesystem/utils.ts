@@ -125,76 +125,85 @@ export function toTree(dirPath: string, tracks: Array<{ name: string; path: stri
   return tree;
 }
 
-export interface TrackNode {
-  type: 'folder' | 'audio' | 'text' | 'image' | 'other';
-  title: string;
-  hash: string; // 相对于 work dir 的路径，如 'subfolder/track01.mp3'
-  children?: TrackNode[];
+export type TrackNode =
+  & {
+    title: string;
+  }
+  & (
+    | {
+      type: 'folder';
+      children: TrackNode[];
+    }
+    | {
+      type: 'audio' | 'text' | 'image' | 'other';
+      title: string;
+      hash: string; // 相对于 work dir 的路径，如 'subfolder/track01.mp3'
+    }
+  );
+
+const SUPPORTED_EXTENSIONS = new Set([
+  '.mp3', '.ogg', '.opus', '.wav', '.aac', '.flac', '.webm', '.mp4', '.m4a',
+  '.txt', '.lrc', '.srt', '.ass',
+  '.pdf',
+  '.jpg', '.jpeg', '.png', '.webp',
+]);
+
+const AUDIO_EXTENSIONS = new Set([ '.mp3', '.ogg', '.opus', '.wav', '.aac', '.flac', '.webm', '.mp4', '.m4a' ]);
+const TEXT_EXTENSIONS = new Set([ '.txt', '.lrc', '.srt', '.ass' ]);
+const IMAGE_EXTENSIONS = new Set([ '.jpg', '.jpeg', '.png', '.webp' ]);
+
+function getTrackType(ext: string): 'audio' | 'text' | 'image' | 'other' {
+  if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
+  if (TEXT_EXTENSIONS.has(ext)) return 'text';
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
+  return 'other';
 }
 
 /**
- * 递归读取目录，返回所有支持的文件
+ * 递归构建文件树结构
+ * @param dirPath 目录的绝对路径
+ * @param basePath 相对于作品根目录的路径（用于生成 hash）
  */
-async function readDirectoryRecursive(
-  dirPath: string,
-  basePath: string,
-): Promise<Array<{ relativePath: string; ext: string; }>> {
-  const files: Array<{ relativePath: string; ext: string; }> = [];
+async function buildTree(dirPath: string, basePath: string): Promise<TrackNode[]> {
+  const nodes: TrackNode[] = [];
+  const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => []);
 
-  try {
-    const entries = await readdir(dirPath, { withFileTypes: true });
+  // 先处理文件夹，再处理文件，保持排序
+  const dirs: string[] = [];
+  const files: string[] = [];
 
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name;
-
-      if (entry.isDirectory()) {
-        // 递归读取子目录
-        const subFiles = await readDirectoryRecursive(fullPath, relativePath);
-        files.push(...subFiles);
-      }
-      else if (entry.isFile()) {
-        const ext = extname(entry.name).toLowerCase();
-        // 过滤支持的文件类型
-        const supportedExts = [
-          '.mp3', '.ogg', '.opus', '.wav', '.aac', '.flac', '.webm', '.mp4', '.m4a',
-          '.txt', '.lrc', '.srt', '.ass',
-          '.pdf',
-          '.jpg', '.jpeg', '.png', '.webp',
-        ];
-        if (supportedExts.includes(ext)) {
-          files.push({ relativePath, ext });
-        }
-      }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      dirs.push(entry.name);
+    }
+    else if (entry.isFile() && SUPPORTED_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+      files.push(entry.name);
     }
   }
-  catch {
-    // 忽略权限错误等
+
+  dirs.sort();
+  files.sort();
+
+  // 递归处理子目录
+  for (const dirName of dirs) {
+    const childPath = join(dirPath, dirName);
+    const childBase = basePath ? `${basePath}/${dirName}` : dirName;
+    const children = await buildTree(childPath, childBase);
+
+    // 跳过空目录
+    if (children.length > 0) {
+      nodes.push({ type: 'folder', title: dirName, children });
+    }
   }
 
-  // 按目录和文件名排序
-  return files.sort((a, b) => {
-    const aDir = a.relativePath.substring(0, a.relativePath.lastIndexOf('/'));
-    const bDir = b.relativePath.substring(0, b.relativePath.lastIndexOf('/'));
-    if (aDir !== bDir) return aDir.localeCompare(bDir);
-    return a.relativePath.localeCompare(b.relativePath);
-  });
-}
+  // 处理文件
+  for (const fileName of files) {
+    const ext = extname(fileName).toLowerCase();
+    const hash = basePath ? `${basePath}/${fileName}` : fileName;
+    nodes.push({ type: getTrackType(ext), title: fileName, hash });
+  }
 
-/**
- * 根据文件扩展名确定节点类型
- */
-function getTrackType(ext: string): TrackNode['type'] {
-  if ([ '.mp3', '.ogg', '.opus', '.wav', '.aac', '.flac', '.webm', '.mp4', '.m4a' ].includes(ext)) {
-    return 'audio';
-  }
-  if ([ '.txt', '.lrc', '.srt', '.ass' ].includes(ext)) {
-    return 'text';
-  }
-  if ([ '.jpg', '.jpeg', '.png', '.webp' ].includes(ext)) {
-    return 'image';
-  }
-  return 'other';
+  return nodes;
 }
 
 /**
@@ -202,58 +211,7 @@ function getTrackType(ext: string): TrackNode['type'] {
  * @param dirPath 作品目录的绝对路径
  */
 export async function buildTrackTree(dirPath: string): Promise<TrackNode[]> {
-  const files = await readDirectoryRecursive(dirPath, '');
-  const tree: TrackNode[] = [];
-  const folderMap = new Map<string, TrackNode>();
-
-  for (const file of files) {
-    const parts = file.relativePath.split('/');
-    const fileName = parts[parts.length - 1];
-    const type = getTrackType(file.ext);
-
-    if (parts.length === 1) {
-      // 根目录下的文件
-      tree.push({
-        type,
-        title: fileName,
-        hash: file.relativePath,
-      });
-    }
-    else {
-      // 子目录下的文件
-      const folderParts = parts.slice(0, -1);
-      let currentLevel = tree;
-      let currentPath = '';
-
-      // 遍历路径部分，构建或找到文件夹节点
-      for (const folderName of folderParts) {
-        currentPath = currentPath ? `${currentPath}/${folderName}` : folderName;
-
-        let folderNode = folderMap.get(currentPath);
-        if (!folderNode) {
-          folderNode = {
-            type: 'folder',
-            title: folderName,
-            hash: '', // 文件夹没有 hash
-            children: [],
-          };
-          folderMap.set(currentPath, folderNode);
-          currentLevel.push(folderNode);
-        }
-
-        currentLevel = folderNode.children!;
-      }
-
-      // 添加文件节点
-      currentLevel.push({
-        type,
-        title: fileName,
-        hash: file.relativePath,
-      });
-    }
-  }
-
-  return tree;
+  return buildTree(dirPath, '');
 }
 
 export function hasLetter(str: string): boolean {

@@ -22,6 +22,8 @@ export interface DLsiteWorkInfo {
   vas: Array<{ id: string; name: string; }>;
   description: string;
   coverUrl: string;
+  language: string;
+  sourceId: string;
 }
 
 /** 工作信息表 (#work_outline) 中各字段的 <th> 文本，随页面语言变化。 */
@@ -83,17 +85,19 @@ interface StaticWorkInfo {
   vas: Array<{ id: string; name: string; }>;
   description: string;
   coverUrl: string;
+  language: string;
+  sourceId: string;
 }
 
 /** 从 DLsite 工作页 HTML 抓取静态元数据（标题、社团、标签、声优等）。 */
 async function scrapeStaticWorkInfo(rjId: string, signal?: AbortSignal): Promise<StaticWorkInfo> {
   const url = `https://www.dlsite.com/maniax/work/=/product_id/${rjId}.html`;
-  const language = getConfig().tagLanguage;
-  const labels: OutlineLabels = OUTLINE_LABELS[language];
+  const pageLanguage = getConfig().tagLanguage;
+  const labels: OutlineLabels = OUTLINE_LABELS[pageLanguage];
 
   const html = await fetchHtml(url, {
     externalSignal: signal,
-    headers: { Cookie: `locale=${language}; adultchecked=1` },
+    headers: { Cookie: `locale=${pageLanguage}; adultchecked=1` },
   });
   const $ = cheerio.load(html);
 
@@ -134,17 +138,55 @@ async function scrapeStaticWorkInfo(rjId: string, signal?: AbortSignal): Promise
     if (name) vas.push({ id: nameToUUID(name), name });
   });
 
-  if (tags.length === 0 && vas.length === 0) {
+  // 封面
+  const coverUrl = $('meta[property="og:image"]').attr('content') || '';
+
+  // 只有当所有关键数据都为空时才认为解析失败
+  if (tags.length === 0 && vas.length === 0 && !coverUrl) {
     throw new Error(`Couldn't parse data from DLsite work page (${url}).`);
   }
 
   // 作品简介: 正文在各 .work_parts_area 中，heading 是章节标题不要
   const description = $('[itemprop="description"] .work_parts_area').text().trim();
 
-  // 封面
-  const coverUrl = $('meta[property="og:image"]').attr('content') || '';
+  // 语言: 从支持的语言部分解析，并转换为 locale 代码
+  const langMap: Record<string, string> = {
+    '日語': 'ja-jp',
+    '日语': 'ja-jp',
+    '中文(繁體字)': 'zh-tw',
+    '中文(繁体字)': 'zh-tw',
+    '中文(簡體字)': 'zh-cn',
+    '中文(简体字)': 'zh-cn',
+    '英語': 'en',
+    '英语': 'en',
+    '韓語': 'ko',
+    '韩语': 'ko',
+  };
+  const languageSet = new Set<string>();
+  $('#work_outline tr').each((_, tr) => {
+    const th = $(tr).children('th').first().text().trim();
+    if (/支持的语言|対応言語/.test(th)) {
+      $(tr).children('td').first().find('span').each((_, span) => {
+        const langName = $(span).attr('title') || $(span).text().trim();
+        if (langName) {
+          const locale = langMap[langName];
+          if (locale) languageSet.add(locale);
+        }
+      });
+    }
+  });
+  const language = Array.from(languageSet).join(',');
 
-  return { title, circle, circleId, nsfw, releaseDate, tags, vas, description, coverUrl };
+  // sourceId: 从封面 URL 中提取未翻译版本的 RJ 号
+  // 封面 URL 格式: https://img.dlsite.jp/modpub/images2/work/doujin/RJ01560000/RJ01559247_img_main.jpg
+  // 其中 RJ01559247 是 sourceId
+  let sourceId = '';
+  const coverMatch = coverUrl.match(/RJ(\d+)_img_main\.jpg/);
+  if (coverMatch) {
+    sourceId = `RJ${coverMatch[1]}`;
+  }
+
+  return { title, circle, circleId, nsfw, releaseDate, tags, vas, description, coverUrl, language, sourceId };
 }
 
 interface DLsiteAjaxItem {
@@ -222,6 +264,8 @@ export async function fetchDLsiteWorkInfo(rjId: string, signal?: AbortSignal): P
     ...staticInfo,
     vas,
     ...dynamicInfo,
+    language: staticInfo.language,
+    sourceId: staticInfo.sourceId,
   };
 }
 
@@ -260,6 +304,8 @@ export async function searchDLsite(keyword: string): Promise<DLsiteWorkInfo[]> {
         vas: [],
         description: '',
         coverUrl: '',
+        language: '',
+        sourceId: '',
       });
     }
   });

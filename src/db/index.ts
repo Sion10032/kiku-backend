@@ -3,8 +3,27 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { Database } from 'bun:sqlite';
 import * as schema from './schema.js';
 import * as relations from './relations.js';
+import { getConfig } from '../config/index.js';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
-const sqlite = new Database(process.env.DATABASE_URL || './sqlite/kiku.db', {
+// 获取数据库路径
+function getDatabasePath(): string {
+  const config = getConfig();
+  const workDir = process.env.WORK_DIR || process.cwd();
+  const dbDir = config.databaseFolderDir.startsWith('/')
+    ? config.databaseFolderDir
+    : join(workDir, config.databaseFolderDir);
+
+  // 确保数据库目录存在
+  if (!existsSync(dbDir)) {
+    mkdirSync(dbDir, { recursive: true });
+  }
+
+  return join(dbDir, 'kiku.db');
+}
+
+const sqlite = new Database(getDatabasePath(), {
   strict: true,
 });
 

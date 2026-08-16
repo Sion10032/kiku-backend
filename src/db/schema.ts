@@ -20,6 +20,8 @@ export const works = sqliteTable('t_work', {
   rateAverage2dp: real('rate_average_2dp'),
   rateCountDetail: text('rate_count_detail'),
   rank: text('rank'),
+  language: text('language'),
+  sourceId: text('source_id'),
 });
 
 export const tags = sqliteTable('t_tag', {

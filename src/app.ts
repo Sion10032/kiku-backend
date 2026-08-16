@@ -12,6 +12,9 @@ import { reviewRoutes } from './routes/review.js';
 import { configRoutes } from './routes/config.js';
 import { versionRoutes } from './routes/version.js';
 import { scannerRoutes } from './routes/scanner.js';
+import { getConfig } from './config/index.js';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
 export async function buildApp() {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
@@ -19,6 +22,9 @@ export async function buildApp() {
   // Configure Zod Type Provider
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  // 初始化必要的目录
+  initializeDirectories();
 
   app.register(sensible);
   app.register(authPlugin);
@@ -36,4 +42,35 @@ export async function buildApp() {
   await app.register(scannerRoutes, { prefix: '/api/scanner' });
 
   return app;
+}
+
+function initializeDirectories() {
+  try {
+    const config = getConfig();
+    const workDir = process.env.WORK_DIR || process.cwd();
+
+    // 确保封面目录存在
+    const coverDir = resolveDir(config.coverFolderDir, workDir);
+    if (!existsSync(coverDir)) {
+      mkdirSync(coverDir, { recursive: true });
+      console.log(`Created cover directory: ${coverDir}`);
+    }
+
+    // 确保数据库目录存在
+    const dbDir = resolveDir(config.databaseFolderDir, workDir);
+    if (!existsSync(dbDir)) {
+      mkdirSync(dbDir, { recursive: true });
+      console.log(`Created database directory: ${dbDir}`);
+    }
+  }
+  catch (error) {
+    console.error('Failed to initialize directories:', error);
+  }
+}
+
+function resolveDir(dirPath: string, baseDir: string): string {
+  if (dirPath.startsWith('/')) {
+    return dirPath;
+  }
+  return join(baseDir, dirPath);
 }

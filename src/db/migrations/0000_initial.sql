@@ -5,7 +5,7 @@ CREATE TABLE `t_circle` (
 --> statement-breakpoint
 CREATE TABLE `t_review` (
 	`user_name` text NOT NULL,
-	`work_id` integer NOT NULL,
+	`work_id` text NOT NULL,
 	`rating` integer,
 	`review_text` text,
 	`created_at` text DEFAULT 'CURRENT_TIMESTAMP',
@@ -18,7 +18,7 @@ CREATE TABLE `t_review` (
 --> statement-breakpoint
 CREATE TABLE `r_tag_work` (
 	`tag_id` integer NOT NULL,
-	`work_id` integer NOT NULL,
+	`work_id` text NOT NULL,
 	PRIMARY KEY(`tag_id`, `work_id`),
 	FOREIGN KEY (`tag_id`) REFERENCES `t_tag`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`work_id`) REFERENCES `t_work`(`id`) ON UPDATE no action ON DELETE cascade
@@ -37,7 +37,7 @@ CREATE TABLE `t_user` (
 --> statement-breakpoint
 CREATE TABLE `r_va_work` (
 	`va_id` text NOT NULL,
-	`work_id` integer NOT NULL,
+	`work_id` text NOT NULL,
 	PRIMARY KEY(`va_id`, `work_id`),
 	FOREIGN KEY (`va_id`) REFERENCES `t_va`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`work_id`) REFERENCES `t_work`(`id`) ON UPDATE no action ON DELETE cascade
@@ -49,7 +49,7 @@ CREATE TABLE `t_va` (
 );
 --> statement-breakpoint
 CREATE TABLE `t_work` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`id` text PRIMARY KEY NOT NULL,
 	`root_folder` text NOT NULL,
 	`dir` text NOT NULL,
 	`title` text NOT NULL,
@@ -63,5 +63,7 @@ CREATE TABLE `t_work` (
 	`rate_average_2dp` real,
 	`rate_count_detail` text,
 	`rank` text,
+	`language` text,
+	`source_id` text,
 	FOREIGN KEY (`circle_id`) REFERENCES `t_circle`(`id`) ON UPDATE no action ON DELETE no action
 );

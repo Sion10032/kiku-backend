@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1782057882487,
+      "when": 1786870548919,
       "tag": "0000_initial",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1786852035104,
-      "tag": "0001_public_golden_guardian",
       "breakpoints": true
     }
   ]

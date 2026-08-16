@@ -25,6 +25,8 @@ export interface UpsertWorkInput {
   rank?: Record<string, number>;
   tags?: string[];
   vas?: Array<{ id: string; name: string; }>;
+  language?: string;
+  sourceId?: string;
 }
 
 export interface UpsertResult {
@@ -75,6 +77,8 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
             ? JSON.stringify(input.rateCountDetail)
             : existing.rateCountDetail,
           rank: input.rank ? JSON.stringify(input.rank) : existing.rank,
+          language: input.language ?? existing.language,
+          sourceId: input.sourceId ?? existing.sourceId,
         })
         .where(eq(works.id, input.id));
 
@@ -127,6 +131,8 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
         rateAverage2dp: input.rateAverage2dp ?? null,
         rateCountDetail: input.rateCountDetail ? JSON.stringify(input.rateCountDetail) : '{}',
         rank: input.rank ? JSON.stringify(input.rank) : null,
+        language: input.language ?? null,
+        sourceId: input.sourceId ?? null,
       });
 
       // Create tags
@@ -192,6 +198,8 @@ export interface FormattedWork {
   tags: Array<{ id: number; name: string; }>;
   vas: Array<{ id: string; name: string; }>;
   userRating: number | null;
+  language: string | null;
+  sourceId: string | null;
 }
 
 function formatWork(row: WorkWithRelations): FormattedWork {
@@ -213,6 +221,8 @@ function formatWork(row: WorkWithRelations): FormattedWork {
     tags: row.tags?.map(tw => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
     vas: row.vas?.map(vw => ({ id: vw.va.id, name: vw.va.name })) ?? [],
     userRating: row.reviews?.[0]?.rating ?? null,
+    language: row.language,
+    sourceId: row.sourceId,
   };
 }
 

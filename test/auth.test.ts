@@ -23,7 +23,7 @@ describe('Auth Routes', () => {
         method: 'POST',
         url: '/api/auth/me',
         payload: {
-          name: 'ab',  // Too short
+          name: 'ab', // Too short
           password: '1234',
         },
       });

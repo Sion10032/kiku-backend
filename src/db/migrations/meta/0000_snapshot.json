@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5eca19a5-4a30-416f-9b3c-1818a1cbcf73",
+  "id": "0a43f61a-9c06-4166-abd3-823e104efcdb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "t_circle": {
@@ -40,7 +40,7 @@
         },
         "work_id": {
           "name": "work_id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -136,7 +136,7 @@
         },
         "work_id": {
           "name": "work_id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -250,7 +250,7 @@
         },
         "work_id": {
           "name": "work_id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -326,10 +326,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": true
+          "autoincrement": false
         },
         "root_folder": {
           "name": "root_folder",
@@ -417,6 +417,20 @@
         },
         "rank": {
           "name": "rank",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "language": {
+          "name": "language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_id": {
+          "name": "source_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

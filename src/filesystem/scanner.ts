@@ -3,6 +3,7 @@ import type { Config } from '../config/schema.js';
 import { getFolderList, getTrackList } from './utils.js';
 import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
 import { upsertWork } from '../services/work.service.js';
+import { downloadCover, coverExists, type CoverType } from '../services/cover.service.js';
 
 interface ScanTask {
   id: number;
@@ -130,10 +131,38 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
         rank: Object.keys(metadata.rank).length > 0 ? metadata.rank : undefined,
         tags: metadata.tags,
         vas: metadata.vas,
+        language: metadata.language || undefined,
+        sourceId: metadata.sourceId || undefined,
       });
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to save work');
+      }
+
+      // 下载封面（如果不存在）
+      // 使用 sourceId（未翻译版本）下载封面，如果不存在则使用当前 ID
+      const coverSourceId = metadata.sourceId || rjCode;
+      const coverTypes: CoverType[] = [ 'main', 'sam', '240x240' ];
+      for (const type of coverTypes) {
+        if (!coverExists(rjCode, type)) {
+          log('info', `Downloading cover ${type} for ${rjCode} (source: ${coverSourceId})...`);
+          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+
+          try {
+            const success = await downloadCover(rjCode, type, signal, coverSourceId);
+            if (success) {
+              log('info', `Cover ${type} downloaded for ${rjCode}`);
+            }
+            else {
+              log('warning', `Failed to download cover ${type} for ${rjCode}`);
+            }
+          }
+          catch (coverErr) {
+            log('warning', `Error downloading cover ${type} for ${rjCode}: ${String(coverErr)}`);
+          }
+
+          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+        }
       }
 
       if (result.created) {

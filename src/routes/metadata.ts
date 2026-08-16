@@ -15,6 +15,7 @@ import {
   getVas,
   getWorkTracks,
 } from '../services/work.service.js';
+import { downloadCover, coverExists, getCoverFilePath, type CoverType } from '../services/cover.service.js';
 
 const idParamsSchema = z.object({
   id: z.string(),
@@ -69,6 +70,8 @@ const formattedWorkSchema = z.object({
   tags: z.array(z.object({ id: z.number(), name: z.string() })),
   vas: z.array(z.object({ id: z.string(), name: z.string() })),
   userRating: z.number().nullable(),
+  language: z.string().nullable(),
+  sourceId: z.string().nullable(),
 });
 
 const paginationSchema = z.object({
@@ -128,7 +131,6 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
           z.object({
             type: z.literal('folder'),
             title: z.string(),
-            hash: z.string(),
             children: z.lazy(() => z.array(z.any())),
           }),
           z.object({
@@ -176,13 +178,81 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get('/cover/:id', {
     schema: {
       params: idParamsSchema,
+      querystring: z.object({
+        type: z.enum([ 'main', 'sam', '240x240', '360x360' ]).default('main'),
+      }),
       response: {
+        200: z.object({
+          url: z.string(),
+          type: z.string(),
+          exists: z.boolean(),
+        }),
         404: z.object({ error: z.string() }),
       },
     },
   }, async (request, reply) => {
     const { id } = request.params;
+    const { type } = request.query as { type: CoverType; };
+
+    // 检查作品是否存在
+    let work;
+    try {
+      work = await getWorkById(id);
+    }
+    catch {
+      return reply.status(404).send({ error: `Work ${id} not found` });
+    }
+
+    // 检查封面是否已存在
+    const exists = coverExists(id, type);
+
+    if (exists) {
+      const filePath = getCoverFilePath(id, type);
+      if (filePath) {
+        // 返回本地文件路径
+        return reply.send({
+          url: `/api/cover/${id}/file?type=${type}`,
+          type,
+          exists: true,
+        });
+      }
+    }
+
+    // 尝试下载封面（使用 sourceId 如果存在）
+    const sourceId = work.sourceId || undefined;
+    const downloadResult = await downloadCover(id, type, undefined, sourceId);
+
+    if (downloadResult) {
+      return reply.send({
+        url: `/api/cover/${id}/file?type=${type}`,
+        type,
+        exists: true,
+      });
+    }
+
     return reply.status(404).send({ error: `Cover for work ${id} not found` });
+  });
+
+  fastify.get('/cover/:id/file', {
+    schema: {
+      params: idParamsSchema,
+      querystring: z.object({
+        type: z.enum([ 'main', 'sam', '240x240', '360x360' ]).default('main'),
+      }),
+    },
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { type } = request.query as { type: CoverType; };
+
+    const filePath = getCoverFilePath(id, type);
+    if (!filePath) {
+      return reply.status(404).send({ error: `Cover for work ${id} not found` });
+    }
+
+    // 读取文件并返回
+    const { readFileSync } = await import('fs');
+    const fileBuffer = readFileSync(filePath);
+    return reply.type('image/jpeg').send(fileBuffer);
   });
 
   fastify.get('/circles/', {

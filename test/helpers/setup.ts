@@ -1,9 +1,26 @@
 import { mkdirSync, existsSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 export function setupTestEnvironment(): void {
-  // Create necessary directories
-  if (!existsSync('./sqlite')) {
-    mkdirSync('./sqlite', { recursive: true });
+  // 获取工作目录
+  const workDir = process.env.WORK_DIR || process.cwd();
+
+  // 创建数据目录
+  const dataDir = join(workDir, 'data');
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
+  }
+
+  // 创建sqlite目录
+  const sqliteDir = join(dataDir, 'sqlite');
+  if (!existsSync(sqliteDir)) {
+    mkdirSync(sqliteDir, { recursive: true });
+  }
+
+  // 创建covers目录
+  const coversDir = join(dataDir, 'covers');
+  if (!existsSync(coversDir)) {
+    mkdirSync(coversDir, { recursive: true });
   }
 
   // Create a default config file for testing
@@ -11,6 +28,8 @@ export function setupTestEnvironment(): void {
     const defaultConfig = {
       md5secret: 'test-md5-secret',
       jwtsecret: 'test-jwt-secret',
+      coverFolderDir: './data/covers',
+      databaseFolderDir: './data/sqlite',
     };
     writeFileSync('./config.json', JSON.stringify(defaultConfig, null, 2), 'utf-8');
   }
