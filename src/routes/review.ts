@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getReviewsByWorkId, getReviewsByUsername, upsertReview, deleteReview } from '../services/review.service.js';
 
 const reviewSchema = z.object({
-  work_id: z.number(),
+  work_id: z.string(),
   rating: z.number().min(1).max(5).optional(),
   review_text: z.string().optional(),
   progress: z.enum([ 'marked', 'listening', 'listened', 'replay', 'postponed' ]).optional(),
@@ -12,19 +12,19 @@ const reviewSchema = z.object({
 });
 
 const reviewQuerySchema = z.object({
-  work_id: z.coerce.number().int().positive().optional(),
+  work_id: z.string().optional(),
   username: z.string().min(1).optional(),
 }).refine(data => data.work_id || data.username, {
   message: 'work_id or username is required',
 });
 
 const deleteReviewSchema = z.object({
-  work_id: z.number().int().positive(),
+  work_id: z.string(),
 });
 
 const reviewResponseSchema = z.object({
   userName: z.string(),
-  workId: z.number(),
+  workId: z.string(),
   rating: z.number().nullable(),
   reviewText: z.string().nullable(),
   progress: z.string().nullable(),

@@ -13,7 +13,7 @@ type WorkWithRelations = Work & {
 
 // 格式化后的输出类型
 export interface FormattedWork {
-  id: number;
+  id: string;
   rootFolder: string;
   dir: string;
   title: string;
@@ -54,7 +54,7 @@ function formatWork(row: WorkWithRelations): FormattedWork {
   };
 }
 
-export async function getWorkById(id: number, username?: string) {
+export async function getWorkById(id: string, username?: string) {
   const row = await db.query.works.findFirst({
     where: eq(works.id, id),
     with: {
@@ -109,11 +109,12 @@ export async function getWorksPaginated(opts: {
 }
 
 export async function searchWorks(keyword: string) {
-  const rjMatch = keyword.match(/([Rr][Jj])?(\d+)/);
-  if (rjMatch) {
-    const rjId = parseInt(rjMatch[2]!, 10);
+  // Try to match RJ code
+  const rjMatch = keyword.match(/([Rr][Jj])(\d{6,8})/);
+  if (rjMatch && rjMatch[2]) {
+    const rjCode = `RJ${rjMatch[2].padStart(8, '0')}`;
     const items = await db.query.works.findMany({
-      where: eq(works.id, rjId),
+      where: eq(works.id, rjCode),
       with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
     });
     return { works: items.map(item => formatWork(item)) };
@@ -140,17 +141,19 @@ export async function searchWorks(keyword: string) {
   return { works: items.map(item => formatWork(item)) };
 }
 
-export async function getCircleById(id: number) {
+export async function getCircleById(id: number | string) {
+  const numId = typeof id === 'string' ? parseInt(id, 10) : id;
   const row = await db.query.circles.findFirst({
-    where: eq(circles.id, id),
+    where: eq(circles.id, numId),
   });
   if (!row) throw new Error(`Circle ${id} not found`);
   return row;
 }
 
-export async function getCircleWorks(circleId: number) {
+export async function getCircleWorks(circleId: number | string) {
+  const numId = typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
   const items = await db.query.works.findMany({
-    where: eq(works.circleId, circleId),
+    where: eq(works.circleId, numId),
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
   return items.map(item => formatWork(item));
@@ -160,17 +163,19 @@ export async function getCircles() {
   return db.query.circles.findMany();
 }
 
-export async function getTagById(id: number) {
+export async function getTagById(id: number | string) {
+  const numId = typeof id === 'string' ? parseInt(id, 10) : id;
   const row = await db.query.tags.findFirst({
-    where: eq(tags.id, id),
+    where: eq(tags.id, numId),
   });
   if (!row) throw new Error(`Tag ${id} not found`);
   return row;
 }
 
-export async function getTagWorks(tagId: number) {
+export async function getTagWorks(tagId: number | string) {
+  const numId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
   const tagWorkItems = await db.query.tagWork.findMany({
-    where: eq(tagWork.tagId, tagId),
+    where: eq(tagWork.tagId, numId),
     with: {
       work: {
         with: {

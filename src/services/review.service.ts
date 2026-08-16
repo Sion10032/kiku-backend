@@ -2,7 +2,7 @@ import { db } from '../db/index.js';
 import { reviews, works } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 
-export async function getReviewsByWorkId(workId: number) {
+export async function getReviewsByWorkId(workId: string) {
   return db.query.reviews.findMany({
     where: eq(reviews.workId, workId),
     with: { user: true },
@@ -16,7 +16,7 @@ export async function getReviewsByUsername(username: string) {
   });
 }
 
-export async function getReview(username: string, workId: number) {
+export async function getReview(username: string, workId: string) {
   return db.query.reviews.findFirst({
     where: and(
       eq(reviews.userName, username),
@@ -27,7 +27,7 @@ export async function getReview(username: string, workId: number) {
 
 export async function upsertReview(data: {
   userName: string;
-  workId: number;
+  workId: string;
   rating?: number;
   reviewText?: string;
   progress?: string;
@@ -60,7 +60,7 @@ export async function upsertReview(data: {
   return getReview(data.userName, data.workId);
 }
 
-export async function deleteReview(username: string, workId: number) {
+export async function deleteReview(username: string, workId: string) {
   await db.delete(reviews).where(and(
     eq(reviews.userName, username),
     eq(reviews.workId, workId),
@@ -69,7 +69,7 @@ export async function deleteReview(username: string, workId: number) {
   await updateWorkReviewStats(workId);
 }
 
-async function updateWorkReviewStats(workId: number) {
+async function updateWorkReviewStats(workId: string) {
   const allReviews = await db.query.reviews.findMany({
     where: eq(reviews.workId, workId),
   });

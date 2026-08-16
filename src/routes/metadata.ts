@@ -16,7 +16,7 @@ import {
 } from '../services/work.service.js';
 
 const idParamsSchema = z.object({
-  id: z.coerce.number().int().positive(),
+  id: z.string(),
 });
 
 // VA 的 id 是 string（如 v1），与 number 类型的 circle/tag 区分（见 vaSchema）
@@ -51,7 +51,7 @@ const vaSchema = z.object({
 });
 
 const formattedWorkSchema = z.object({
-  id: z.number(),
+  id: z.string(),
   rootFolder: z.string(),
   dir: z.string(),
   title: z.string(),

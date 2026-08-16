@@ -4,14 +4,14 @@ import { eq } from 'drizzle-orm';
 import type { Config } from '../config/schema.js';
 
 export interface UpdateResult {
-  workId: number;
+  workId: string;
   title: string;
   success: boolean;
   error?: string;
 }
 
 export async function updateWorkMetadata(
-  workId: number,
+  workId: string,
   metadata: {
     title?: string;
     circleName?: string;
@@ -71,13 +71,13 @@ export async function updateWorkMetadata(
     if (Object.keys(updateData).length > 0) {
       await db.update(works)
         .set(updateData)
-        .where(eq(works.id, workId));
+        .where(eq(works.id, workId as string));
     }
 
     // Update tags if provided
     if (metadata.tags) {
       // Remove existing tag associations
-      await db.delete(tagWork).where(eq(tagWork.workId, workId));
+      await db.delete(tagWork).where(eq(tagWork.workId, workId as string));
 
       // Add new tags
       for (const tagName of metadata.tags) {
@@ -102,7 +102,7 @@ export async function updateWorkMetadata(
     // Update VAs if provided
     if (metadata.vas) {
       // Remove existing VA associations
-      await db.delete(vaWork).where(eq(vaWork.workId, workId));
+      await db.delete(vaWork).where(eq(vaWork.workId, workId as string));
 
       // Add new VAs
       for (const va of metadata.vas) {

@@ -6,7 +6,7 @@ import { existsSync, statSync, createReadStream } from 'fs';
 import { join, extname } from 'path';
 
 const mediaParamsSchema = z.object({
-  id: z.coerce.number().int().positive(),
+  id: z.string(),
   index: z.string().min(1),
 });
 
@@ -95,7 +95,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       params: mediaParamsSchema,
       response: {
         200: z.object({
-          id: z.number(),
+          id: z.string(),
           index: z.string(),
           hasLrc: z.boolean(),
         }),

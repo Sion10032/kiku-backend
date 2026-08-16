@@ -7,6 +7,8 @@ interface ScanTask {
   title: string;
   folderPath: string;
   rootFolder: string;
+  rjCode: string; // Full RJ code like "RJ01578781"
+  dirName: string;
   status: 'pending' | 'scanning' | 'completed' | 'failed';
   error?: string;
 }
@@ -50,17 +52,22 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
 
     const folders = await getFolderList(rootFolder.path, config.scannerMaxRecursionDepth);
 
-    for (const folderPath of folders) {
+    for (const folder of folders) {
       if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
-      const tracks = await getTrackList(folderPath);
+      // Skip folders without RJ code
+      if (folder.rjCode === null) continue;
+
+      const tracks = await getTrackList(folder.path);
 
       if (tracks.length > 0) {
         const task: ScanTask = {
           id: tasks.length + 1,
-          title: folderPath.replace(rootFolder.path, '').replace(/^\//, ''),
-          folderPath,
+          title: `${folder.rjCode} ${folder.dirName}`,
+          folderPath: folder.path,
           rootFolder: rootFolder.name,
+          rjCode: folder.rjCode,
+          dirName: folder.dirName,
           status: 'pending',
         };
 

@@ -1,12 +1,27 @@
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 
-export async function getFolderList(dirPath: string, maxDepth: number, currentDepth: number = 0): Promise<string[]> {
+export interface FolderInfo {
+  path: string;
+  rjCode: string | null; // Full RJ code like "RJ01578781"
+  dirName: string;
+}
+
+/** Extract RJ code from folder name. Returns full code like "RJ01578781" or null. */
+export function extractRJFromFolderName(name: string): string | null {
+  const match = name.match(/([Rr][Jj])(\d{6,8})/);
+  if (match && match[2]) {
+    return `RJ${match[2].padStart(8, '0')}`;
+  }
+  return null;
+}
+
+export async function getFolderList(dirPath: string, maxDepth: number, currentDepth: number = 0): Promise<FolderInfo[]> {
   if (currentDepth >= maxDepth) {
     return [];
   }
 
-  const folders: string[] = [];
+  const folders: FolderInfo[] = [];
 
   try {
     const entries = await readdir(dirPath, { withFileTypes: true });
@@ -14,8 +29,16 @@ export async function getFolderList(dirPath: string, maxDepth: number, currentDe
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const fullPath = join(dirPath, entry.name);
-        folders.push(fullPath);
-        folders.push(...await getFolderList(fullPath, maxDepth, currentDepth + 1));
+        const rjCode = extractRJFromFolderName(entry.name);
+
+        // If this folder has an RJ code, it's a work folder — don't recurse deeper
+        if (rjCode !== null) {
+          folders.push({ path: fullPath, rjCode, dirName: entry.name });
+        }
+        else {
+          // No RJ code — recurse to find work folders inside
+          folders.push(...await getFolderList(fullPath, maxDepth, currentDepth + 1));
+        }
       }
     }
   }

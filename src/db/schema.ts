@@ -6,7 +6,7 @@ export const circles = sqliteTable('t_circle', {
 });
 
 export const works = sqliteTable('t_work', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+  id: text('id').primaryKey(),
   rootFolder: text('root_folder').notNull(),
   dir: text('dir').notNull(),
   title: text('title').notNull(),
@@ -34,12 +34,12 @@ export const vas = sqliteTable('t_va', {
 
 export const tagWork = sqliteTable('r_tag_work', {
   tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
-  workId: integer('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
+  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
 }, t => [ primaryKey({ columns: [ t.tagId, t.workId ] }) ]);
 
 export const vaWork = sqliteTable('r_va_work', {
   vaId: text('va_id').notNull().references(() => vas.id, { onDelete: 'cascade' }),
-  workId: integer('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
+  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
 }, t => [ primaryKey({ columns: [ t.vaId, t.workId ] }) ]);
 
 export const users = sqliteTable('t_user', {
@@ -50,7 +50,7 @@ export const users = sqliteTable('t_user', {
 
 export const reviews = sqliteTable('t_review', {
   userName: text('user_name').notNull().references(() => users.name, { onDelete: 'cascade' }),
-  workId: integer('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
+  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
   rating: integer('rating'),
   reviewText: text('review_text'),
   createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
