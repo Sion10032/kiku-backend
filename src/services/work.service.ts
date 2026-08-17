@@ -246,9 +246,39 @@ export async function getWorksPaginated(opts: {
   orderBy?: string;
   sortDir?: 'asc' | 'desc';
   username?: string;
+  seed?: number;
 }) {
-  const { page = 1, pageSize = 12, orderBy = 'release', sortDir = 'desc' } = opts;
+  const { page = 1, pageSize = 12, orderBy = 'release', sortDir = 'desc', seed } = opts;
   const offset = (page - 1) * pageSize;
+
+  // 处理随机排序：先随机取 id，再用 findMany 查关联
+  if (orderBy === 'random' || orderBy === 'betterRandom') {
+    // 子查询：随机排序取一页 id
+    const randomIds = db
+      .select({ id: works.id })
+      .from(works)
+      .orderBy(sql`RANDOM()`)
+      .limit(pageSize)
+      .offset(offset);
+
+    const [items, countResult] = await Promise.all([
+      db.query.works.findMany({
+        with: {
+          circle: true,
+          tags: { with: { tag: true } },
+          vas: { with: { va: true } },
+        },
+        where: inArray(works.id, randomIds),
+      }),
+      db.select({ count: sql<number>`count(*)` }).from(works),
+    ]);
+    const totalCount = countResult[0]?.count ?? 0;
+
+    return {
+      works: items.map(item => formatWork(item)),
+      pagination: { currentPage: page, pageSize, totalCount },
+    };
+  }
 
   const orderCol = {
     id: works.id,

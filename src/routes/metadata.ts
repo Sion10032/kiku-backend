@@ -92,7 +92,7 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
   }, async (request) => {
-    const { page, order, sort } = request.query;
+    const { page, order, sort, seed } = request.query;
     const user = (request.user as { name?: string; })?.name;
 
     return getWorksPaginated({
@@ -100,6 +100,7 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       orderBy: order,
       sortDir: sort,
       username: user,
+      seed,
     });
   });
 
