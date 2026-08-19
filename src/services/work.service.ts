@@ -334,6 +334,7 @@ export async function searchWorks(keyword: string) {
   const items = await db.query.works.findMany({
     where: or(
       like(works.title, `%${keyword}%`),
+      like(works.id, `%${keyword}%`),
       inArray(works.circleId, circleIds),
       inArray(works.id, tagWorkIds),
       inArray(works.id, vaWorkIds),
