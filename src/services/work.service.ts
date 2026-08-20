@@ -1,9 +1,10 @@
 import { db } from '../db/index.js';
 import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/schema.js';
 import type { Work, Circle, Tag, Va } from '../db/schema.js';
-import { eq, like, inArray, or, sql, desc, asc } from 'drizzle-orm';
+import { eq, like, inArray, or, sql, desc, asc, and } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
+import { getProgressByWorks, type WorkProgressSummary } from './progress.service.js';
 
 // ---------- Upsert (used by scanner) ----------
 
@@ -198,6 +199,8 @@ export interface FormattedWork {
   tags: Array<{ id: number; name: string; }>;
   vas: Array<{ id: string; name: string; }>;
   userRating: number | null;
+  /** 当前用户播放进度聚合（null = 未读/未登录） */
+  userProgress: WorkProgressSummary | null;
   language: string | null;
   sourceId: string | null;
 }
@@ -221,9 +224,35 @@ function formatWork(row: WorkWithRelations): FormattedWork {
     tags: row.tags?.map(tw => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
     vas: row.vas?.map(vw => ({ id: vw.va.id, name: vw.va.name })) ?? [],
     userRating: row.reviews?.[0]?.rating ?? null,
+    userProgress: null,
     language: row.language,
     sourceId: row.sourceId,
   };
+}
+
+/**
+ * 批量注入当前用户的评分与播放进度（userRating/userProgress，避免逐作品 N+1）。
+ *
+ * 未登录（username 为空）时保持 null（未读态），不做任何查询。
+ * 到调用点后再覆盖 formatWork 的默认值。
+ */
+async function attachUserData(items: FormattedWork[], username?: string): Promise<void> {
+  if (!username || items.length === 0) return;
+  const workIds = items.map(w => w.id);
+
+  const [ reviewRows, progressMap ] = await Promise.all([
+    db.query.reviews.findMany({
+      where: and(eq(reviews.userName, username), inArray(reviews.workId, workIds)),
+      columns: { workId: true, rating: true },
+    }),
+    getProgressByWorks(username, workIds),
+  ]);
+
+  const ratingByWork = new Map(reviewRows.map(r => [ r.workId, r.rating ]));
+  for (const item of items) {
+    item.userRating = ratingByWork.get(item.id) ?? null;
+    item.userProgress = progressMap.get(item.id) ?? null;
+  }
 }
 
 export async function getWorkById(id: string, username?: string) {
@@ -233,11 +262,12 @@ export async function getWorkById(id: string, username?: string) {
       circle: true,
       tags: { with: { tag: true } },
       vas: { with: { va: true } },
-      ...(username ? { reviews: { where: eq(reviews.userName, username) } } : {}),
     },
   });
   if (!row) throw new Error(`Work ${id} not found`);
-  return formatWork(row);
+  const work = formatWork(row);
+  await attachUserData([ work ], username);
+  return work;
 }
 
 export async function getWorksPaginated(opts: {
@@ -248,7 +278,7 @@ export async function getWorksPaginated(opts: {
   username?: string;
   seed?: number;
 }) {
-  const { page = 1, pageSize = 12, orderBy = 'release', sortDir = 'desc', seed } = opts;
+  const { page = 1, pageSize = 12, orderBy = 'release', sortDir = 'desc', username } = opts;
   const offset = (page - 1) * pageSize;
 
   // 处理随机排序：先随机取 id，再用 findMany 查关联
@@ -261,7 +291,7 @@ export async function getWorksPaginated(opts: {
       .limit(pageSize)
       .offset(offset);
 
-    const [items, countResult] = await Promise.all([
+    const [ items, countResult ] = await Promise.all([
       db.query.works.findMany({
         with: {
           circle: true,
@@ -274,8 +304,11 @@ export async function getWorksPaginated(opts: {
     ]);
     const totalCount = countResult[0]?.count ?? 0;
 
+    const formatted = items.map(item => formatWork(item));
+    await attachUserData(formatted, username);
+
     return {
-      works: items.map(item => formatWork(item)),
+      works: formatted,
       pagination: { currentPage: page, pageSize, totalCount },
     };
   }
@@ -304,13 +337,16 @@ export async function getWorksPaginated(opts: {
   ]);
   const totalCount = countResult[0]?.count ?? 0;
 
+  const formatted = items.map(item => formatWork(item));
+  await attachUserData(formatted, username);
+
   return {
-    works: items.map(item => formatWork(item)),
+    works: formatted,
     pagination: { currentPage: page, pageSize, totalCount },
   };
 }
 
-export async function searchWorks(keyword: string) {
+export async function searchWorks(keyword: string, username?: string) {
   // Try to match RJ code
   const rjMatch = keyword.match(/([Rr][Jj])(\d{6,8})/);
   if (rjMatch && rjMatch[2]) {
@@ -319,7 +355,9 @@ export async function searchWorks(keyword: string) {
       where: eq(works.id, rjCode),
       with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
     });
-    return { works: items.map(item => formatWork(item)) };
+    const formatted = items.map(item => formatWork(item));
+    await attachUserData(formatted, username);
+    return { works: formatted };
   }
 
   const circleIds = db.select({ id: circles.id }).from(circles)
@@ -341,7 +379,9 @@ export async function searchWorks(keyword: string) {
     ),
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
-  return { works: items.map(item => formatWork(item)) };
+  const formatted = items.map(item => formatWork(item));
+  await attachUserData(formatted, username);
+  return { works: formatted };
 }
 
 export async function getCircleById(id: number | string) {
@@ -353,13 +393,15 @@ export async function getCircleById(id: number | string) {
   return row;
 }
 
-export async function getCircleWorks(circleId: number | string) {
+export async function getCircleWorks(circleId: number | string, username?: string) {
   const numId = typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
   const items = await db.query.works.findMany({
     where: eq(works.circleId, numId),
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
-  return items.map(item => formatWork(item));
+  const formatted = items.map(item => formatWork(item));
+  await attachUserData(formatted, username);
+  return formatted;
 }
 
 export async function getCircles() {
@@ -375,7 +417,7 @@ export async function getTagById(id: number | string) {
   return row;
 }
 
-export async function getTagWorks(tagId: number | string) {
+export async function getTagWorks(tagId: number | string, username?: string) {
   const numId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
   const tagWorkItems = await db.query.tagWork.findMany({
     where: eq(tagWork.tagId, numId),
@@ -389,7 +431,9 @@ export async function getTagWorks(tagId: number | string) {
       },
     },
   });
-  return tagWorkItems.map(item => formatWork(item.work));
+  const formatted = tagWorkItems.map(item => formatWork(item.work));
+  await attachUserData(formatted, username);
+  return formatted;
 }
 
 export async function getTags() {
@@ -404,7 +448,7 @@ export async function getVaById(id: string) {
   return row;
 }
 
-export async function getVaWorks(vaId: string) {
+export async function getVaWorks(vaId: string, username?: string) {
   const vaWorkItems = await db.query.vaWork.findMany({
     where: eq(vaWork.vaId, vaId),
     with: {
@@ -417,7 +461,9 @@ export async function getVaWorks(vaId: string) {
       },
     },
   });
-  return vaWorkItems.map(item => formatWork(item.work));
+  const formatted = vaWorkItems.map(item => formatWork(item.work));
+  await attachUserData(formatted, username);
+  return formatted;
 }
 
 export async function getVas() {

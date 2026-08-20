@@ -9,6 +9,7 @@ import { metadataRoutes } from './routes/metadata.js';
 import { mediaRoutes } from './routes/media.js';
 import { credentialsRoutes } from './routes/credentials.js';
 import { reviewRoutes } from './routes/review.js';
+import { progressRoutes } from './routes/progress.js';
 import { configRoutes } from './routes/config.js';
 import { versionRoutes } from './routes/version.js';
 import { scannerRoutes } from './routes/scanner.js';
@@ -37,6 +38,7 @@ export async function buildApp() {
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
   await app.register(reviewRoutes, { prefix: '/api' });
+  await app.register(progressRoutes, { prefix: '/api' });
   await app.register(configRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
   await app.register(scannerRoutes, { prefix: '/api/scanner' });

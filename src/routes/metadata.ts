@@ -52,6 +52,15 @@ const vaSchema = z.object({
   name: z.string(),
 });
 
+const userProgressSchema = z.object({
+  mediaIndex: z.string(),
+  trackTitle: z.string().nullable(),
+  position: z.number(),
+  duration: z.number().nullable(),
+  listenedCount: z.number(),
+  updatedAt: z.string(),
+});
+
 const formattedWorkSchema = z.object({
   id: z.string(),
   rootFolder: z.string(),
@@ -70,6 +79,7 @@ const formattedWorkSchema = z.object({
   tags: z.array(z.object({ id: z.number(), name: z.string() })),
   vas: z.array(z.object({ id: z.string(), name: z.string() })),
   userRating: z.number().nullable(),
+  userProgress: userProgressSchema.nullable(),
   language: z.string().nullable(),
   sourceId: z.string().nullable(),
 });
@@ -81,6 +91,13 @@ const paginationSchema = z.object({
 });
 
 export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // 可选鉴权：携带合法 token 则解析 request.user（works 列表/详情注入
+  // userRating/userProgress）；匿名请求静默放行（公开浏览）。
+  // 未验证时 request.user 为 undefined，各 handler 用 as { name?: string } 容错。
+  fastify.addHook('onRequest', async (request) => {
+    await request.jwtVerify().catch(() => {});
+  });
+
   fastify.get('/works', {
     schema: {
       querystring: worksQuerySchema,
@@ -173,7 +190,8 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   }, async (request) => {
     const { keyword } = request.params;
-    return searchWorks(keyword);
+    const user = (request.user as { name?: string; })?.name;
+    return searchWorks(keyword, user);
   });
 
   fastify.get('/cover/:id', {
@@ -294,8 +312,9 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   }, async (request, reply) => {
     const { id } = request.params;
+    const user = (request.user as { name?: string; })?.name;
     try {
-      return await getCircleWorks(id);
+      return await getCircleWorks(id, user);
     }
     catch {
       return reply.status(404).send({ error: `Circle ${id} not found` });
@@ -340,8 +359,9 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   }, async (request, reply) => {
     const { id } = request.params;
+    const user = (request.user as { name?: string; })?.name;
     try {
-      return await getTagWorks(id);
+      return await getTagWorks(id, user);
     }
     catch {
       return reply.status(404).send({ error: `Tag ${id} not found` });
@@ -386,8 +406,9 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   }, async (request, reply) => {
     const { id } = request.params;
+    const user = (request.user as { name?: string; })?.name;
     try {
-      return await getVaWorks(String(id));
+      return await getVaWorks(String(id), user);
     }
     catch {
       return reply.status(404).send({ error: `VA ${id} not found` });

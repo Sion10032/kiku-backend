@@ -60,6 +60,21 @@ export const reviews = sqliteTable('t_review', {
   progress: text('progress'),
 }, t => [ primaryKey({ columns: [ t.userName, t.workId ] }) ]);
 
+// 动态播放进度：记录用户播放到每个作品的哪个音轨的哪个时间（与 t_review.progress 手动枚举无关）
+export const userProgress = sqliteTable('t_user_progress', {
+  userName: text('user_name').notNull().references(() => users.name, { onDelete: 'cascade' }),
+  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
+  // 音轨标识 = 文件相对路径（media index，即前端 Track.hash）
+  mediaIndex: text('media_index').notNull(),
+  // 标题快照（列表展示时免读文件系统）
+  trackTitle: text('track_title'),
+  // 已播放到的时间（秒）
+  position: real('position').notNull().default(0),
+  // 音轨总时长（秒，未知为 null）
+  duration: real('duration'),
+  updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
+}, t => [ primaryKey({ columns: [ t.userName, t.workId, t.mediaIndex ] }) ]);
+
 // Export types for all tables
 export type Circle = typeof circles.$inferSelect;
 export type NewCircle = typeof circles.$inferInsert;
@@ -81,3 +96,6 @@ export type NewUser = typeof users.$inferInsert;
 
 export type Review = typeof reviews.$inferSelect;
 export type NewReview = typeof reviews.$inferInsert;
+
+export type UserProgress = typeof userProgress.$inferSelect;
+export type NewUserProgress = typeof userProgress.$inferInsert;
