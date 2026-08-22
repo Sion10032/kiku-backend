@@ -162,10 +162,9 @@ describe('Progress Routes', () => {
       // 上次播放 = updatedAt 最新的 track04
       expect(work.userProgress.mediaIndex).toBe('track04.mp3');
 
-      // 匿名请求：userProgress 恒 null
+      // 匿名请求：私有模式下被全局 hook 拒绝（401）
       const anon = await app.inject({ method: 'GET', url: '/api/works' });
-      const anonWork = anon.json().works.find((w: { id: string; }) => w.id === WORK_ID);
-      expect(anonWork.userProgress).toBeNull();
+      expect(anon.statusCode).toBe(401);
     });
   });
 

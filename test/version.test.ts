@@ -7,10 +7,13 @@ setupTestEnvironment();
 
 describe('Version Routes', () => {
   let app: FastifyInstance;
+  let token: string;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
+    // 默认私有模式下需要鉴权
+    token = app.jwt.sign({ name: 'version_tester', group: 'user' });
   });
 
   afterAll(async () => {
@@ -22,6 +25,7 @@ describe('Version Routes', () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/version',
+        headers: { authorization: `Bearer ${token}` },
       });
 
       expect(response.statusCode).toBe(200);

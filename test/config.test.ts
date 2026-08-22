@@ -26,7 +26,8 @@ describe('Config Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body).toHaveProperty('auth');
+      expect(body).toHaveProperty('instanceMode');
+      expect(body).toHaveProperty('allowRegistration');
       expect(body).toHaveProperty('pageSize');
       expect(body).toHaveProperty('tagLanguage');
       expect(body).toHaveProperty('enableGzip');

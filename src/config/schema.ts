@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 export const sharedConfigSchema = z.object({
-  auth: z.boolean().default(true),
+  instanceMode: z.enum([ 'private', 'public' ]).default('private'),
+  allowRegistration: z.boolean().default(false),
   pageSize: z.number().default(12),
   tagLanguage: z.enum([ 'ja-jp', 'zh-tw', 'zh-cn' ]).default('zh-cn'),
   enableGzip: z.boolean().default(true),

@@ -3,6 +3,7 @@ import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fas
 import sensible from '@fastify/sensible';
 import fastifySSE from '@fastify/sse';
 import { authPlugin } from './auth/plugin.js';
+import { initAdminFromEnv } from './auth/init.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { metadataRoutes } from './routes/metadata.js';
@@ -28,6 +29,10 @@ export async function buildApp() {
   initializeDirectories();
 
   app.register(sensible);
+
+  // 环境变量管理员初始化（注册路由前）
+  await initAdminFromEnv();
+
   app.register(authPlugin);
   await app.register(fastifySSE);
 
