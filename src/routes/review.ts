@@ -1,10 +1,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
-  getReviewsByWorkId,
-  getReviewsByUsername,
-  upsertReview,
   deleteReview,
+  getReviewsByUsername,
+  getReviewsByWorkId,
+  upsertReview,
 } from '../services/review.service.js';
 
 const reviewSchema = z.object({

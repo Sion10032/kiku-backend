@@ -1,8 +1,8 @@
 import * as cheerio from 'cheerio';
-import { fetchHtml, fetchJson } from './client.js';
-import { fetchHVDBWorkInfo } from './hvdb.js';
 import { getConfig } from '../config/index.js';
 import { hasLetter, nameToUUID } from '../filesystem/utils.js';
+import { fetchHtml, fetchJson } from './client.js';
+import { fetchHVDBWorkInfo } from './hvdb.js';
 
 export interface DLsiteWorkInfo {
   id: string;

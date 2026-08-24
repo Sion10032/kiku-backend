@@ -1,11 +1,11 @@
+import { sql } from 'drizzle-orm';
 import {
+  blob,
+  integer,
+  primaryKey,
   sqliteTable,
   text,
-  integer,
-  blob,
-  primaryKey,
 } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
 
 /**
  * 通用二进制存储表（blob.db）

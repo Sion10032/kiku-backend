@@ -1,5 +1,5 @@
+import { blobExists, deleteBlob, getBlob, putBlob } from '../db/blob/index.js';
 import { retryFetch } from '../scraper/client.js';
-import { putBlob, getBlob, blobExists, deleteBlob } from '../db/blob/index.js';
 
 /**
  * 封面图片类型
@@ -19,12 +19,12 @@ const COVER_NAMESPACE = 'cover';
  */
 function getCoverUrl(rjcode: string, type: CoverType): string {
   // 从ID中提取数字部分
-  const idMatch = rjcode.match(/(\d+)/);
-  if (!idMatch) {
+  const numStr = rjcode.match(/(\d+)/)?.[1];
+  if (!numStr) {
     throw new Error(`Invalid work ID: ${rjcode}`);
   }
 
-  const numId = parseInt(idMatch[1]!, 10);
+  const numId = parseInt(numStr, 10);
 
   // 计算用于URL的ID（每1000/10000个一组）
   const codeLength = numId > 999999 ? 8 : 6;
@@ -33,7 +33,7 @@ function getCoverUrl(rjcode: string, type: CoverType): string {
     numId % groupCount === 0
       ? numId
       : Math.floor(numId / groupCount) * groupCount + groupCount;
-  const groupRJCode = 'RJ' + groupId.toString().padStart(codeLength, '0');
+  const groupRJCode = `RJ${groupId.toString().padStart(codeLength, '0')}`;
 
   const url =
     type === '240x240' || type === '360x360'

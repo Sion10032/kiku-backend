@@ -1,10 +1,10 @@
+import { Database } from 'bun:sqlite';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { Database } from 'bun:sqlite';
-import { relations } from './relations.js';
 import { getConfig } from '../../config/index.js';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { relations } from './relations.js';
 
 // 获取数据库路径
 function getDatabasePath(): string {

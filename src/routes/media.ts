@@ -1,9 +1,9 @@
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, extname, join } from 'node:path';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { getWorkById } from '../services/work.service.js';
 import { getConfig } from '../config/index.js';
-import { existsSync, statSync, createReadStream, readFileSync } from 'fs';
-import { join, extname, dirname, basename } from 'path';
+import { getWorkById } from '../services/work.service.js';
 
 // 通配参数（路由形如 /stream/:id/*）：媒体相对路径可含子文件夹（"早期特典/mp3/x.mp3"）
 const mediaParamsSchema = z.object({

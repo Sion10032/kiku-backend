@@ -6,7 +6,7 @@
       "test/**",
       "*.config.ts",
       "*.json",
-      "!**/migrations/**",
+      "!**/migrations",
       "!!**/node_modules",
       "!!**/dist"
     ]
@@ -17,7 +17,22 @@
     "indentWidth": 2
   },
   "linter": {
-    "enabled": false
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedVariables": { "level": "error" },
+        "noUndeclaredVariables": "error"
+      },
+      "suspicious": {
+        "noUnusedExpressions": "warn"
+      },
+      "style": {
+        "noNamespace": "warn",
+        "noCommonJs": "warn",
+        "useAsConstAssertion": "warn"
+      }
+    }
   },
   "javascript": {
     "formatter": {

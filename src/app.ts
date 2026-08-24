@@ -1,26 +1,26 @@
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import sensible from '@fastify/sensible';
+import fastifySSE from '@fastify/sse';
 import Fastify from 'fastify';
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
-import sensible from '@fastify/sensible';
-import fastifySSE from '@fastify/sse';
-import { authPlugin } from './auth/plugin.js';
 import { initAdminFromEnv } from './auth/init.js';
-import { healthRoutes } from './routes/health.js';
-import { authRoutes } from './routes/auth.js';
-import { metadataRoutes } from './routes/metadata.js';
-import { mediaRoutes } from './routes/media.js';
-import { credentialsRoutes } from './routes/credentials.js';
-import { reviewRoutes } from './routes/review.js';
-import { progressRoutes } from './routes/progress.js';
-import { configRoutes } from './routes/config.js';
-import { versionRoutes } from './routes/version.js';
-import { scannerRoutes } from './routes/scanner.js';
+import { authPlugin } from './auth/plugin.js';
 import { getConfig } from './config/index.js';
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { authRoutes } from './routes/auth.js';
+import { configRoutes } from './routes/config.js';
+import { credentialsRoutes } from './routes/credentials.js';
+import { healthRoutes } from './routes/health.js';
+import { mediaRoutes } from './routes/media.js';
+import { metadataRoutes } from './routes/metadata.js';
+import { progressRoutes } from './routes/progress.js';
+import { reviewRoutes } from './routes/review.js';
+import { scannerRoutes } from './routes/scanner.js';
+import { versionRoutes } from './routes/version.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();

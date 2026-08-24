@@ -1,5 +1,5 @@
-import { mkdirSync, existsSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export function setupTestEnvironment(): void {
   // 获取工作目录

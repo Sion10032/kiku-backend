@@ -1,13 +1,13 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { hashPassword } from '../auth/utils.js';
 import {
-  getUsers,
   createUser,
-  updateUserPassword,
   deleteUser,
   getUserByName,
+  getUsers,
+  updateUserPassword,
 } from '../services/user.service.js';
-import { hashPassword } from '../auth/utils.js';
 
 const createUserSchema = z.object({
   name: z.string().min(4),

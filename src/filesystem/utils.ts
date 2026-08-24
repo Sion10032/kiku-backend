@@ -1,5 +1,5 @@
-import { readdir } from 'fs/promises';
-import { join, extname } from 'path';
+import { readdir } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import { extractRJCode } from '../utils/rjcode.js';
 
 export interface FolderInfo {

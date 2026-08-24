@@ -1,15 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { setupTestEnvironment } from './helpers/setup';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import type { InferInsertModel } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { initAdminFromEnv } from '../src/auth/init.js';
+import { verifyPassword } from '../src/auth/utils.js';
+import { getConfig, updateConfig } from '../src/config/index.js';
 import { db } from '../src/db/main/index.js';
 import { users } from '../src/db/main/schema.js';
-import type { InferInsertModel } from 'drizzle-orm';
-import { getConfig, updateConfig } from '../src/config/index.js';
-import { getUserByName, deleteUser } from '../src/services/user.service.js';
-import { verifyPassword } from '../src/auth/utils.js';
-import type { FastifyInstance } from 'fastify';
+import { deleteUser, getUserByName } from '../src/services/user.service.js';
+import { expectNotNull } from './helpers/assert';
+import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
 
@@ -219,7 +220,8 @@ describe('Setup / Register / Private-mode', () => {
       await initAdminFromEnv();
       const user = await getUserByName(ENV_ADMIN);
       expect(user?.group).toBe('administrator');
-      expect(verifyPassword('env-pass-123', user!.password)).toBe(true);
+      expectNotNull(user);
+      expect(verifyPassword('env-pass-123', user.password)).toBe(true);
     } finally {
       delete process.env.KIKU_ADMIN_USER;
       delete process.env.KIKU_ADMIN_PASSWORD;

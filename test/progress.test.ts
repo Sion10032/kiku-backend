@@ -1,16 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { setupTestEnvironment } from './helpers/setup';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { db } from '../src/db/main/index.js';
 import {
-  users,
   circles,
-  works,
-  userProgress,
   reviews,
+  userProgress,
+  users,
+  works,
 } from '../src/db/main/schema.js';
-import { eq } from 'drizzle-orm';
-import type { FastifyInstance } from 'fastify';
+import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
 

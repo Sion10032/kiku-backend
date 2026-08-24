@@ -1,9 +1,9 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
-  upsertProgress,
-  getWorkProgress,
   deleteWorkProgress,
+  getWorkProgress,
+  upsertProgress,
 } from '../services/progress.service.js';
 import { getUserByName } from '../services/user.service.js';
 import { getWorkById } from '../services/work.service.js';

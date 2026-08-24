@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { getConfig } from '../config/index.js';
 

@@ -1,6 +1,6 @@
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
 import { reviews, works } from '../db/main/schema.js';
-import { eq, and } from 'drizzle-orm';
 
 export async function getReviewsByWorkId(workId: string) {
   return db.query.reviews.findMany({
@@ -20,6 +20,7 @@ export async function getReview(username: string, workId: string) {
   return db.query.reviews.findFirst({
     where: {
       RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
         op.and(op.eq(t.userName, username), op.eq(t.workId, workId))!,
     },
   });
@@ -74,9 +75,9 @@ async function updateWorkReviewStats(workId: string) {
     where: { RAW: (t, op) => op.eq(t.workId, workId) },
   });
 
-  const ratings = allReviews
-    .filter((r) => r.rating != null)
-    .map((r) => r.rating!);
+  const ratings = allReviews.flatMap((r) =>
+    r.rating != null ? [r.rating] : [],
+  );
   const reviewCount = allReviews.length;
   const rateCount = ratings.length;
   const rateAverage2dp =

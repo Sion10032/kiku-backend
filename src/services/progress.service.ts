@@ -1,6 +1,6 @@
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
 import { userProgress } from '../db/main/schema.js';
-import { and, eq, sql } from 'drizzle-orm';
 
 /** 单作品的进度聚合（列表注入用，camelCase 对齐前端 Review 响应风格）。 */
 export interface WorkProgressSummary {
@@ -57,6 +57,7 @@ export async function getWorkProgress(userName: string, workId: string) {
   return db.query.userProgress.findMany({
     where: {
       RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
         op.and(op.eq(t.userName, userName), op.eq(t.workId, workId))!,
     },
   });
@@ -80,6 +81,7 @@ export async function getProgressByWorks(
   const rows = await db.query.userProgress.findMany({
     where: {
       RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
         op.and(op.eq(t.userName, userName), op.inArray(t.workId, workIds))!,
     },
   });

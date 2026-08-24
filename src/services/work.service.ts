@@ -1,15 +1,15 @@
-import { db } from '../db/main/index.js';
-import {
-  works,
-  circles,
-  tags,
-  vas,
-  tagWork,
-  vaWork,
-} from '../db/main/schema.js';
-import type { Work, Circle, Tag, Va } from '../db/main/schema.js';
 import { eq, like, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
+import { db } from '../db/main/index.js';
+import type { Circle, Tag, Va, Work } from '../db/main/schema.js';
+import {
+  circles,
+  tags,
+  tagWork,
+  vas,
+  vaWork,
+  works,
+} from '../db/main/schema.js';
 import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
 import { extractRJCode } from '../utils/rjcode.js';
 import {
@@ -312,6 +312,7 @@ async function attachUserData(
     db.query.reviews.findMany({
       where: {
         RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
           op.and(op.eq(t.userName, username), op.inArray(t.workId, workIds))!,
       },
       columns: { workId: true, rating: true },
@@ -462,6 +463,7 @@ export async function searchWorks(keyword: string, username?: string) {
   const items = await db.query.works.findMany({
     where: {
       RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
         op.or(
           op.like(t.title, `%${keyword}%`),
           op.like(t.id, `%${keyword}%`),
@@ -602,7 +604,7 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
     throw new Error(`Root folder "${row.rootFolder}" not found`);
   }
 
-  const { join } = await import('path');
+  const { join } = await import('node:path');
   const dirPath = join(rootFolder.path, row.dir);
 
   return buildTrackTree(dirPath);

@@ -1,26 +1,26 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  type CoverType,
+  coverExists,
+  downloadCover,
+  getCoverData,
+} from '../services/cover.service.js';
+import {
+  getCircleById,
+  getCircles,
+  getCircleWorks,
+  getTagById,
+  getTags,
+  getTagWorks,
+  getVaById,
+  getVas,
+  getVaWorks,
   getWorkById,
   getWorksPaginated,
-  searchWorks,
-  getCircleById,
-  getCircleWorks,
-  getCircles,
-  getTagById,
-  getTagWorks,
-  getTags,
-  getVaById,
-  getVaWorks,
-  getVas,
   getWorkTracks,
+  searchWorks,
 } from '../services/work.service.js';
-import {
-  downloadCover,
-  coverExists,
-  getCoverData,
-  type CoverType,
-} from '../services/cover.service.js';
 
 const idParamsSchema = z.object({
   id: z.string(),
@@ -238,10 +238,8 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { type } = request.query as { type: CoverType };
 
       // 检查作品是否存在
-      let work;
-      try {
-        work = await getWorkById(id);
-      } catch {
+      const work = await getWorkById(id).catch(() => undefined);
+      if (!work) {
         return reply.status(404).send({ error: `Work ${id} not found` });
       }
 

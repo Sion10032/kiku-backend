@@ -1,6 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
 import { users } from '../db/main/schema.js';
-import { eq } from 'drizzle-orm';
 
 export async function getUserByName(name: string) {
   return db.query.users.findFirst({

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { expectNotNull } from './helpers/assert';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
@@ -35,10 +36,10 @@ describe('cover.service（blob.db 存储）', () => {
 
     expect(coverExists('RJ000007', 'main')).toBe(true);
     const got = getCoverData('RJ000007', 'main');
-    expect(got).not.toBeNull();
-    expect(got!.data.equals(fakeBytes)).toBe(true);
-    expect(got!.mimeType).toBe('image/jpeg');
-    expect(got!.size).toBe(4);
+    expectNotNull(got);
+    expect(got.data.equals(fakeBytes)).toBe(true);
+    expect(got.mimeType).toBe('image/jpeg');
+    expect(got.size).toBe(4);
   });
 
   it('已存在时跳过下载', async () => {
@@ -53,7 +54,9 @@ describe('cover.service（blob.db 存储）', () => {
     const ok = await downloadCover('RJ000008', 'main', undefined, 'RJ123456');
     expect(ok).toBe(true);
     // URL 由 sourceId 构建
-    expect(fetchMock.mock.calls[0]![0]).toContain('RJ123456');
+    const firstUrl = fetchMock.mock.calls[0]?.[0];
+    expectNotNull(firstUrl);
+    expect(firstUrl).toContain('RJ123456');
     expect(coverExists('RJ000008', 'main')).toBe(true);
     deleteBlob('cover', 'RJ000008_main');
   });

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { setupTestEnvironment } from './helpers/setup';
-import { buildApp } from '../src/app';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { FastifyInstance } from 'fastify';
+import { buildApp } from '../src/app';
+import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
 

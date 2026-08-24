@@ -1,9 +1,9 @@
 import {
+  integer,
+  primaryKey,
+  real,
   sqliteTable,
   text,
-  integer,
-  real,
-  primaryKey,
 } from 'drizzle-orm/sqlite-core';
 
 export const circles = sqliteTable('t_circle', {

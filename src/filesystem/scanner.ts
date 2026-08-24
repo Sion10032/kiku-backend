@@ -1,13 +1,13 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import type { Config } from '../config/schema.js';
-import { getFolderList, getTrackList } from './utils.js';
 import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
-import { upsertWork } from '../services/work.service.js';
 import {
-  downloadCover,
-  coverExists,
   type CoverType,
+  coverExists,
+  downloadCover,
 } from '../services/cover.service.js';
+import { upsertWork } from '../services/work.service.js';
+import { getFolderList, getTrackList } from './utils.js';
 
 interface ScanTask {
   id: number;

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { scanner, type ScanEvent } from '../filesystem/scanner.js';
 import { getConfig } from '../config/index.js';
+import { type ScanEvent, scanner } from '../filesystem/scanner.js';
 
 export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // SSE event stream — pushes scan progress to the frontend.

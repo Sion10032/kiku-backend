@@ -1,6 +1,6 @@
+import { join } from 'node:path';
 import { defineConfig } from 'drizzle-kit';
 import { getConfig } from './src/config/index.js';
-import { join } from 'path';
 
 // 获取二进制数据库路径（与主库同目录，文件名不同）
 function getBlobDatabasePath(): string {
