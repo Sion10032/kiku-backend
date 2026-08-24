@@ -15,7 +15,7 @@ import {
   getVas,
   getWorkTracks,
 } from '../services/work.service.js';
-import { downloadCover, coverExists, getCoverFilePath, type CoverType } from '../services/cover.service.js';
+import { downloadCover, coverExists, getCoverData, type CoverType } from '../services/cover.service.js';
 
 const idParamsSchema = z.object({
   id: z.string(),
@@ -226,15 +226,11 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const exists = coverExists(id, type);
 
     if (exists) {
-      const filePath = getCoverFilePath(id, type);
-      if (filePath) {
-        // 返回本地文件路径
-        return reply.send({
-          url: `/api/cover/${id}/file?type=${type}`,
-          type,
-          exists: true,
-        });
-      }
+      return reply.send({
+        url: `/api/cover/${id}/file?type=${type}`,
+        type,
+        exists: true,
+      });
     }
 
     // 尝试下载封面（使用 sourceId 如果存在）
@@ -263,15 +259,12 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const { id } = request.params;
     const { type } = request.query as { type: CoverType; };
 
-    const filePath = getCoverFilePath(id, type);
-    if (!filePath) {
+    const cover = getCoverData(id, type);
+    if (!cover) {
       return reply.status(404).send({ error: `Cover for work ${id} not found` });
     }
 
-    // 读取文件并返回
-    const { readFileSync } = await import('fs');
-    const fileBuffer = readFileSync(filePath);
-    return reply.type('image/jpeg').send(fileBuffer);
+    return reply.type(cover.mimeType ?? 'image/jpeg').send(cover.data);
   });
 
   fastify.get('/circles/', {

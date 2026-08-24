@@ -56,13 +56,6 @@ function initializeDirectories() {
     const config = getConfig();
     const workDir = process.env.WORK_DIR || process.cwd();
 
-    // 确保封面目录存在
-    const coverDir = resolveDir(config.coverFolderDir, workDir);
-    if (!existsSync(coverDir)) {
-      mkdirSync(coverDir, { recursive: true });
-      console.log(`Created cover directory: ${coverDir}`);
-    }
-
     // 确保数据库目录存在
     const dbDir = resolveDir(config.databaseFolderDir, workDir);
     if (!existsSync(dbDir)) {

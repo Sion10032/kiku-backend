@@ -23,7 +23,6 @@ export const configSchema = sharedConfigSchema.extend({
     name: z.string(),
     path: z.string(),
   })).default([]),
-  coverFolderDir: z.string().default('./data/covers'),
   databaseFolderDir: z.string().default('./data/sqlite'),
   md5secret: z.string(),
   jwtsecret: z.string(),
