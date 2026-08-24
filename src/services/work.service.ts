@@ -1,6 +1,6 @@
-import { db } from '../db/index.js';
-import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/schema.js';
-import type { Work, Circle, Tag, Va } from '../db/schema.js';
+import { db } from '../db/main/index.js';
+import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/main/schema.js';
+import type { Work, Circle, Tag, Va } from '../db/main/schema.js';
 import { eq, like, inArray, or, sql, desc, asc, and } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';

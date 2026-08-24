@@ -10,12 +10,12 @@ function getBlobDatabasePath(): string {
     ? config.databaseFolderDir
     : join(workDir, config.databaseFolderDir);
 
-  return join(dbDir, 'binary.db');
+  return join(dbDir, 'blob.db');
 }
 
 export default defineConfig({
-  schema: './src/db/blob-schema.ts',
-  out: './src/db/blob-migrations',
+  schema: './src/db/blob/schema.ts',
+  out: './src/db/blob/migrations',
   dialect: 'sqlite',
   dbCredentials: {
     url: getBlobDatabasePath(),

@@ -1,5 +1,5 @@
-import { db } from '../db/index.js';
-import { reviews, works } from '../db/schema.js';
+import { db } from '../db/main/index.js';
+import { reviews, works } from '../db/main/schema.js';
 import { eq, and } from 'drizzle-orm';
 
 export async function getReviewsByWorkId(workId: string) {

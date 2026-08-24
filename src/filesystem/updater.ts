@@ -1,5 +1,5 @@
-import { db } from '../db/index.js';
-import { works, circles, tags, vas, tagWork, vaWork } from '../db/schema.js';
+import { db } from '../db/main/index.js';
+import { works, circles, tags, vas, tagWork, vaWork } from '../db/main/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Config } from '../config/schema.js';
 

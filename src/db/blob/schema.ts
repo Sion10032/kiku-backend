@@ -2,7 +2,7 @@ import { sqliteTable, text, integer, blob, primaryKey } from 'drizzle-orm/sqlite
 import { sql } from 'drizzle-orm';
 
 /**
- * 通用二进制存储表（binary.db）
+ * 通用二进制存储表（blob.db）
  * 封面等二进制数据以 namespace + key 定位，data 存原始字节
  */
 export const blobs = sqliteTable('blobs', {

@@ -4,7 +4,7 @@ import { setupTestEnvironment } from './helpers/setup';
 setupTestEnvironment();
 
 // 动态 import：确保 blobStore 开库发生在测试环境就绪之后
-const { putBlob, getBlob, blobExists, deleteBlob } = await import('../src/db/blobStore');
+const { putBlob, getBlob, blobExists, deleteBlob } = await import('../src/db/blob/index');
 
 const NS = 'test-blob';
 

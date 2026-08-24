@@ -2,13 +2,13 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { Database } from 'bun:sqlite';
 import { and, eq, sql } from 'drizzle-orm';
-import { blobs } from './blob-schema.js';
-import { getConfig } from '../config/index.js';
+import { blobs } from './schema.js';
+import { getConfig } from '../../config/index.js';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 /**
- * 通用二进制存储（独立 binary.db）
+ * 通用二进制存储（独立 blob.db）
  * 与元数据库 kiku.db 分离：大 BLOB 不拖慢主库，备份/VACUUM 独立
  */
 
@@ -25,7 +25,7 @@ function getBlobDatabasePath(): string {
     mkdirSync(dbDir, { recursive: true });
   }
 
-  return join(dbDir, 'binary.db');
+  return join(dbDir, 'blob.db');
 }
 
 const blobSqlite = new Database(getBlobDatabasePath(), {
@@ -38,7 +38,7 @@ blobSqlite.exec('PRAGMA busy_timeout = 1000');
 export const blobDb = drizzle(blobSqlite, { schema: { blobs } });
 
 // 启动时应用待处理迁移（经 __drizzle_migrations 表幂等）
-migrate(blobDb, { migrationsFolder: './src/db/blob-migrations' });
+migrate(blobDb, { migrationsFolder: './src/db/blob/migrations' });
 
 /**
  * 已存储的二进制记录

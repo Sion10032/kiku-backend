@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { setupTestEnvironment } from './helpers/setup';
 import { buildApp } from '../src/app';
-import { db } from '../src/db/index.js';
-import { users } from '../src/db/schema.js';
+import { db } from '../src/db/main/index.js';
+import { users } from '../src/db/main/schema.js';
 import { hashPassword } from '../src/auth/utils.js';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';

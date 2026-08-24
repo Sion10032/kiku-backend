@@ -1,5 +1,5 @@
-import { db } from '../db/index.js';
-import { userProgress } from '../db/schema.js';
+import { db } from '../db/main/index.js';
+import { userProgress } from '../db/main/schema.js';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 /** 单作品的进度聚合（列表注入用，camelCase 对齐前端 Review 响应风格）。 */
