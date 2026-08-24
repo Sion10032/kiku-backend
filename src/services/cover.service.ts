@@ -1,12 +1,15 @@
-import { getConfig } from '../config/index.js';
 import { retryFetch } from '../scraper/client.js';
-import { existsSync, mkdirSync, createWriteStream, statSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { putBlob, getBlob, blobExists, deleteBlob } from '../db/blob/index.js';
 
 /**
  * 封面图片类型
  */
 export type CoverType = 'main' | 'sam' | '240x240' | '360x360';
+
+/**
+ * 封面在 blob 库中的命名空间
+ */
+const COVER_NAMESPACE = 'cover';
 
 /**
  * 获取封面图片的URL
@@ -37,43 +40,18 @@ function getCoverUrl(rjcode: string, type: CoverType): string {
 }
 
 /**
- * 获取封面文件路径
+ * 生成封面在 blob 库中的 key（直接使用作品ID，不做规范化）
  * @param id 作品ID
  * @param type 封面类型
- * @returns 封面文件的完整路径
+ * @returns blob key（如 RJ000007_main）
  */
-function getCoverPath(id: string, type: CoverType): string {
-  const config = getConfig();
-  const coverDir = resolveCoverDir(config.coverFolderDir);
-
-  // 确保封面目录存在
-  if (!existsSync(coverDir)) {
-    mkdirSync(coverDir, { recursive: true });
-  }
-
-  const rjcode = id.replace(/^RJ/, '').padStart(6, '0');
-  return join(coverDir, `RJ${rjcode}_img_${type}.jpg`);
+function getCoverKey(id: string, type: CoverType): string {
+  return `${id}_${type}`;
 }
 
 /**
- * 解析封面目录路径（相对于工作目录）
- * @param coverDir 配置中的封面目录路径
- * @returns 解析后的绝对路径
- */
-function resolveCoverDir(coverDir: string): string {
-  // 如果是绝对路径，直接返回
-  if (coverDir.startsWith('/')) {
-    return coverDir;
-  }
-
-  // 相对于工作目录
-  const workDir = process.env.WORK_DIR || process.cwd();
-  return join(workDir, coverDir);
-}
-
-/**
- * 下载封面图片并保存到磁盘
- * @param id 作品ID（用于保存文件名）
+ * 下载封面图片并存入 binary.db
+ * @param id 作品ID（用作存储 key）
  * @param type 封面类型
  * @param signal 可选的取消信号
  * @param sourceId 未翻译版本的 RJ 号（用于下载封面 URL）
@@ -88,14 +66,11 @@ export async function downloadCover(
   try {
     // 使用 sourceId 构建下载 URL，如果未提供则使用 id
     const url = getCoverUrl(sourceId || id, type);
-    const filePath = getCoverPath(id, type);
+    const key = getCoverKey(id, type);
 
-    // 如果文件已存在，跳过下载
-    if (existsSync(filePath)) {
-      const stat = statSync(filePath);
-      if (stat.size > 0) {
-        return true;
-      }
+    // 如果已存储，跳过下载
+    if (blobExists(COVER_NAMESPACE, key)) {
+      return true;
     }
 
     console.log(`Downloading cover: ${url}`);
@@ -117,30 +92,11 @@ export async function downloadCover(
       return false;
     }
 
-    // 保存到文件
-    const fileStream = createWriteStream(filePath);
+    // 封面仅几十~几百 KB，一次性读入后整块入库
+    const data = Buffer.from(await response.arrayBuffer());
+    putBlob(COVER_NAMESPACE, key, data, contentType ?? undefined);
 
-    // 将响应体写入文件
-    if (response.body) {
-      const reader = response.body.getReader();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        fileStream.write(value);
-      }
-    }
-
-    fileStream.end();
-
-    // 等待文件写入完成
-    await new Promise<void>((resolve, reject) => {
-      fileStream.on('finish', resolve);
-      fileStream.on('error', reject);
-    });
-
-    console.log(`Cover saved: ${filePath}`);
+    console.log(`Cover saved: ${key}`);
     return true;
   }
   catch (error) {
@@ -188,40 +144,30 @@ export async function downloadAllCovers(
  * @returns 封面是否存在
  */
 export function coverExists(id: string, type: CoverType = 'main'): boolean {
-  const filePath = getCoverPath(id, type);
-  return existsSync(filePath);
+  return blobExists(COVER_NAMESPACE, getCoverKey(id, type));
 }
 
 /**
- * 获取封面文件路径（如果存在）
+ * 读取封面数据（如果存在）
  * @param id 作品ID
  * @param type 封面类型
- * @returns 封面文件路径，如果不存在则返回null
+ * @returns 封面二进制数据与 MIME，不存在则返回 null
  */
-export function getCoverFilePath(id: string, type: CoverType = 'main'): string | null {
-  const filePath = getCoverPath(id, type);
-  return existsSync(filePath) ? filePath : null;
+export function getCoverData(
+  id: string,
+  type: CoverType = 'main',
+): { data: Buffer; mimeType: string | null; size: number; } | null {
+  return getBlob(COVER_NAMESPACE, getCoverKey(id, type));
 }
 
 /**
- * 删除封面文件
+ * 删除封面
  * @param id 作品ID
  * @param type 封面类型
  * @returns 是否成功删除
  */
 export function deleteCover(id: string, type: CoverType): boolean {
-  try {
-    const filePath = getCoverPath(id, type);
-    if (existsSync(filePath)) {
-      unlinkSync(filePath);
-      return true;
-    }
-    return false;
-  }
-  catch (error) {
-    console.error(`Error deleting cover for ${id}:`, error);
-    return false;
-  }
+  return deleteBlob(COVER_NAMESPACE, getCoverKey(id, type));
 }
 
 /**
