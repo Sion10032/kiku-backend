@@ -1,0 +1,583 @@
+{
+  "dialect": "sqlite",
+  "id": "0a43f61a-9c06-4166-abd3-823e104efcdb",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "version": "7",
+  "ddl": [
+    {
+      "name": "t_circle",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "t_circle",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "t_circle_pk",
+      "table": "t_circle",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "t_circle",
+      "entityType": "columns"
+    },
+    {
+      "name": "t_review",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_name",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "work_id",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rating",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "review_text",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": "'CURRENT_TIMESTAMP'",
+      "generated": null,
+      "name": "created_at",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": "'CURRENT_TIMESTAMP'",
+      "generated": null,
+      "name": "updated_at",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "progress",
+      "table": "t_review",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "user_name",
+        "work_id"
+      ],
+      "nameExplicit": false,
+      "name": "t_review_user_name_work_id_pk",
+      "table": "t_review",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "user_name"
+      ],
+      "tableTo": "t_user",
+      "columnsTo": [
+        "name"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "t_review_user_name_t_user_name_fk",
+      "table": "t_review",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "work_id"
+      ],
+      "tableTo": "t_work",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "t_review_work_id_t_work_id_fk",
+      "table": "t_review",
+      "entityType": "fks"
+    },
+    {
+      "name": "r_tag_work",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tag_id",
+      "table": "r_tag_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "work_id",
+      "table": "r_tag_work",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "tag_id",
+        "work_id"
+      ],
+      "nameExplicit": false,
+      "name": "r_tag_work_tag_id_work_id_pk",
+      "table": "r_tag_work",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "tag_id"
+      ],
+      "tableTo": "t_tag",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "r_tag_work_tag_id_t_tag_id_fk",
+      "table": "r_tag_work",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "work_id"
+      ],
+      "tableTo": "t_work",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "r_tag_work_work_id_t_work_id_fk",
+      "table": "r_tag_work",
+      "entityType": "fks"
+    },
+    {
+      "name": "t_tag",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "t_tag",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "t_tag_pk",
+      "table": "t_tag",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "t_tag",
+      "entityType": "columns"
+    },
+    {
+      "name": "t_user",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "t_user",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "name"
+      ],
+      "nameExplicit": false,
+      "name": "t_user_pk",
+      "table": "t_user",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "password",
+      "table": "t_user",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "group",
+      "table": "t_user",
+      "entityType": "columns"
+    },
+    {
+      "name": "r_va_work",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "va_id",
+      "table": "r_va_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "work_id",
+      "table": "r_va_work",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "va_id",
+        "work_id"
+      ],
+      "nameExplicit": false,
+      "name": "r_va_work_va_id_work_id_pk",
+      "table": "r_va_work",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "va_id"
+      ],
+      "tableTo": "t_va",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "r_va_work_va_id_t_va_id_fk",
+      "table": "r_va_work",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "work_id"
+      ],
+      "tableTo": "t_work",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "r_va_work_work_id_t_work_id_fk",
+      "table": "r_va_work",
+      "entityType": "fks"
+    },
+    {
+      "name": "t_va",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "t_va",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "t_va_pk",
+      "table": "t_va",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "t_va",
+      "entityType": "columns"
+    },
+    {
+      "name": "t_work",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "t_work_pk",
+      "table": "t_work",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "root_folder",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "dir",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "circle_id",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "nsfw",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "release",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "dl_count",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "price",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "review_count",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rate_count",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rate_average_2dp",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rate_count_detail",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rank",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "language",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_id",
+      "table": "t_work",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "tableTo": "t_circle",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "t_work_circle_id_t_circle_id_fk",
+      "table": "t_work",
+      "entityType": "fks"
+    }
+  ],
+  "renames": []
+}

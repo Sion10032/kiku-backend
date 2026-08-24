@@ -1,7 +1,7 @@
 import { db } from '../db/main/index.js';
-import { works, circles, tags, vas, tagWork, vaWork, reviews } from '../db/main/schema.js';
+import { works, circles, tags, vas, tagWork, vaWork } from '../db/main/schema.js';
 import type { Work, Circle, Tag, Va } from '../db/main/schema.js';
-import { eq, like, inArray, or, sql, desc, asc, and } from 'drizzle-orm';
+import { eq, like, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
 import { getProgressByWorks, type WorkProgressSummary } from './progress.service.js';
@@ -46,7 +46,7 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
   try {
     // 1. Find or create circle
     let circle = await db.query.circles.findFirst({
-      where: eq(circles.name, input.circleName),
+      where: { RAW: (t, op) => op.eq(t.name, input.circleName) },
     });
     if (!circle) {
       const result = await db.insert(circles).values({ name: input.circleName }).returning();
@@ -56,7 +56,7 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
 
     // 2. Check if work already exists
     const existing = await db.query.works.findFirst({
-      where: eq(works.id, input.id),
+      where: { RAW: (t, op) => op.eq(t.id, input.id) },
     });
 
     if (existing) {
@@ -87,7 +87,7 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       if (input.tags) {
         await db.delete(tagWork).where(eq(tagWork.workId, input.id));
         for (const tagName of input.tags) {
-          let tag = await db.query.tags.findFirst({ where: eq(tags.name, tagName) });
+          let tag = await db.query.tags.findFirst({ where: { RAW: (t, op) => op.eq(t.name, tagName) } });
           if (!tag) {
             const result = await db.insert(tags).values({ name: tagName }).returning();
             tag = result[0];
@@ -102,7 +102,7 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       if (input.vas) {
         await db.delete(vaWork).where(eq(vaWork.workId, input.id));
         for (const va of input.vas) {
-          let existingVa = await db.query.vas.findFirst({ where: eq(vas.id, va.id) });
+          let existingVa = await db.query.vas.findFirst({ where: { RAW: (t, op) => op.eq(t.id, va.id) } });
           if (!existingVa) {
             const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
             existingVa = result[0];
@@ -139,7 +139,7 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       // Create tags
       if (input.tags) {
         for (const tagName of input.tags) {
-          let tag = await db.query.tags.findFirst({ where: eq(tags.name, tagName) });
+          let tag = await db.query.tags.findFirst({ where: { RAW: (t, op) => op.eq(t.name, tagName) } });
           if (!tag) {
             const result = await db.insert(tags).values({ name: tagName }).returning();
             tag = result[0];
@@ -153,7 +153,7 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       // Create VAs
       if (input.vas) {
         for (const va of input.vas) {
-          let existingVa = await db.query.vas.findFirst({ where: eq(vas.id, va.id) });
+          let existingVa = await db.query.vas.findFirst({ where: { RAW: (t, op) => op.eq(t.id, va.id) } });
           if (!existingVa) {
             const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
             existingVa = result[0];
@@ -242,7 +242,7 @@ async function attachUserData(items: FormattedWork[], username?: string): Promis
 
   const [ reviewRows, progressMap ] = await Promise.all([
     db.query.reviews.findMany({
-      where: and(eq(reviews.userName, username), inArray(reviews.workId, workIds)),
+      where: { RAW: (t, op) => op.and(op.eq(t.userName, username), op.inArray(t.workId, workIds))! },
       columns: { workId: true, rating: true },
     }),
     getProgressByWorks(username, workIds),
@@ -257,7 +257,7 @@ async function attachUserData(items: FormattedWork[], username?: string): Promis
 
 export async function getWorkById(id: string, username?: string) {
   const row = await db.query.works.findFirst({
-    where: eq(works.id, id),
+    where: { RAW: (t, op) => op.eq(t.id, id) },
     with: {
       circle: true,
       tags: { with: { tag: true } },
@@ -298,7 +298,7 @@ export async function getWorksPaginated(opts: {
           tags: { with: { tag: true } },
           vas: { with: { va: true } },
         },
-        where: inArray(works.id, randomIds),
+        where: { RAW: (t, op) => op.inArray(t.id, randomIds) },
       }),
       db.select({ count: sql<number>`count(*)` }).from(works),
     ]);
@@ -313,14 +313,14 @@ export async function getWorksPaginated(opts: {
     };
   }
 
-  const orderCol = {
-    id: works.id,
-    release: works.release,
-    dl_count: works.dlCount,
-    price: works.price,
-    rate_average_2dp: works.rateAverage2dp,
-    review_count: works.reviewCount,
-  }[orderBy] ?? works.release;
+  const orderKey = ({
+    id: 'id',
+    release: 'release',
+    dl_count: 'dlCount',
+    price: 'price',
+    rate_average_2dp: 'rateAverage2dp',
+    review_count: 'reviewCount',
+  } as const)[orderBy] ?? 'release';
 
   const [ items, countResult ] = await Promise.all([
     db.query.works.findMany({
@@ -329,7 +329,7 @@ export async function getWorksPaginated(opts: {
         tags: { with: { tag: true } },
         vas: { with: { va: true } },
       },
-      orderBy: sortDir === 'asc' ? [ asc(orderCol) ] : [ desc(orderCol) ],
+      orderBy: (t, { asc: ascOp, desc: descOp }) => (sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey])),
       limit: pageSize,
       offset,
     }),
@@ -352,7 +352,7 @@ export async function searchWorks(keyword: string, username?: string) {
   if (rjMatch && rjMatch[2]) {
     const rjCode = `RJ${rjMatch[2].padStart(8, '0')}`;
     const items = await db.query.works.findMany({
-      where: eq(works.id, rjCode),
+      where: { RAW: (t, op) => op.eq(t.id, rjCode) },
       with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
     });
     const formatted = items.map(item => formatWork(item));
@@ -370,13 +370,13 @@ export async function searchWorks(keyword: string, username?: string) {
     .where(like(vas.name, `%${keyword}%`));
 
   const items = await db.query.works.findMany({
-    where: or(
-      like(works.title, `%${keyword}%`),
-      like(works.id, `%${keyword}%`),
-      inArray(works.circleId, circleIds),
-      inArray(works.id, tagWorkIds),
-      inArray(works.id, vaWorkIds),
-    ),
+    where: { RAW: (t, op) => op.or(
+      op.like(t.title, `%${keyword}%`),
+      op.like(t.id, `%${keyword}%`),
+      op.inArray(t.circleId, circleIds),
+      op.inArray(t.id, tagWorkIds),
+      op.inArray(t.id, vaWorkIds),
+    )! },
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
   const formatted = items.map(item => formatWork(item));
@@ -387,7 +387,7 @@ export async function searchWorks(keyword: string, username?: string) {
 export async function getCircleById(id: number | string) {
   const numId = typeof id === 'string' ? parseInt(id, 10) : id;
   const row = await db.query.circles.findFirst({
-    where: eq(circles.id, numId),
+    where: { RAW: (t, op) => op.eq(t.id, numId) },
   });
   if (!row) throw new Error(`Circle ${id} not found`);
   return row;
@@ -396,7 +396,7 @@ export async function getCircleById(id: number | string) {
 export async function getCircleWorks(circleId: number | string, username?: string) {
   const numId = typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
   const items = await db.query.works.findMany({
-    where: eq(works.circleId, numId),
+    where: { RAW: (t, op) => op.eq(t.circleId, numId) },
     with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
   });
   const formatted = items.map(item => formatWork(item));
@@ -411,7 +411,7 @@ export async function getCircles() {
 export async function getTagById(id: number | string) {
   const numId = typeof id === 'string' ? parseInt(id, 10) : id;
   const row = await db.query.tags.findFirst({
-    where: eq(tags.id, numId),
+    where: { RAW: (t, op) => op.eq(t.id, numId) },
   });
   if (!row) throw new Error(`Tag ${id} not found`);
   return row;
@@ -420,7 +420,7 @@ export async function getTagById(id: number | string) {
 export async function getTagWorks(tagId: number | string, username?: string) {
   const numId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
   const tagWorkItems = await db.query.tagWork.findMany({
-    where: eq(tagWork.tagId, numId),
+    where: { RAW: (t, op) => op.eq(t.tagId, numId) },
     with: {
       work: {
         with: {
@@ -442,7 +442,7 @@ export async function getTags() {
 
 export async function getVaById(id: string) {
   const row = await db.query.vas.findFirst({
-    where: eq(vas.id, id),
+    where: { RAW: (t, op) => op.eq(t.id, id) },
   });
   if (!row) throw new Error(`VA ${id} not found`);
   return row;
@@ -450,7 +450,7 @@ export async function getVaById(id: string) {
 
 export async function getVaWorks(vaId: string, username?: string) {
   const vaWorkItems = await db.query.vaWork.findMany({
-    where: eq(vaWork.vaId, vaId),
+    where: { RAW: (t, op) => op.eq(t.vaId, vaId) },
     with: {
       work: {
         with: {
@@ -477,7 +477,7 @@ export async function getVas() {
  */
 export async function getWorkTracks(id: string): Promise<TrackNode[]> {
   const row = await db.query.works.findFirst({
-    where: eq(works.id, id),
+    where: { RAW: (t, op) => op.eq(t.id, id) },
     columns: {
       id: true,
       rootFolder: true,

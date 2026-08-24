@@ -35,7 +35,7 @@ const blobSqlite = new Database(getBlobDatabasePath(), {
 blobSqlite.exec('PRAGMA journal_mode = WAL');
 blobSqlite.exec('PRAGMA busy_timeout = 1000');
 
-export const blobDb = drizzle(blobSqlite, { schema: { blobs } });
+export const blobDb = drizzle({ client: blobSqlite });
 
 // 启动时应用待处理迁移（经 __drizzle_migrations 表幂等）
 migrate(blobDb, { migrationsFolder: './src/db/blob/migrations' });

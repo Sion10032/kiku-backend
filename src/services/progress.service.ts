@@ -1,6 +1,6 @@
 import { db } from '../db/main/index.js';
 import { userProgress } from '../db/main/schema.js';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 /** 单作品的进度聚合（列表注入用，camelCase 对齐前端 Review 响应风格）。 */
 export interface WorkProgressSummary {
@@ -50,10 +50,10 @@ export async function upsertProgress(data: {
 /** 某用户在某作品的全部进度行（详情页/继续播放用）。 */
 export async function getWorkProgress(userName: string, workId: string) {
   return db.query.userProgress.findMany({
-    where: and(
-      eq(userProgress.userName, userName),
-      eq(userProgress.workId, workId),
-    ),
+    where: { RAW: (t, op) => op.and(
+      op.eq(t.userName, userName),
+      op.eq(t.workId, workId),
+    )! },
   });
 }
 
@@ -73,10 +73,10 @@ export async function getProgressByWorks(
   if (workIds.length === 0) return result;
 
   const rows = await db.query.userProgress.findMany({
-    where: and(
-      eq(userProgress.userName, userName),
-      inArray(userProgress.workId, workIds),
-    ),
+    where: { RAW: (t, op) => op.and(
+      op.eq(t.userName, userName),
+      op.inArray(t.workId, workIds),
+    )! },
   });
 
   const byWork = new Map<string, typeof rows>();

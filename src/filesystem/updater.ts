@@ -30,7 +30,7 @@ export async function updateWorkMetadata(
 ): Promise<UpdateResult> {
   try {
     const work = await db.query.works.findFirst({
-      where: eq(works.id, workId),
+      where: { RAW: (t, op) => op.eq(t.id, workId) },
     });
 
     if (!work) {
@@ -39,8 +39,9 @@ export async function updateWorkMetadata(
 
     // Update circle if provided
     if (metadata.circleName) {
+      const circleName = metadata.circleName;
       let circle = await db.query.circles.findFirst({
-        where: eq(circles.name, metadata.circleName),
+        where: { RAW: (t, op) => op.eq(t.name, circleName) },
       });
 
       if (!circle) {
@@ -82,7 +83,7 @@ export async function updateWorkMetadata(
       // Add new tags
       for (const tagName of metadata.tags) {
         let tag = await db.query.tags.findFirst({
-          where: eq(tags.name, tagName),
+          where: { RAW: (t, op) => op.eq(t.name, tagName) },
         });
 
         if (!tag) {
@@ -107,7 +108,7 @@ export async function updateWorkMetadata(
       // Add new VAs
       for (const va of metadata.vas) {
         let existingVa = await db.query.vas.findFirst({
-          where: eq(vas.id, va.id),
+          where: { RAW: (t, op) => op.eq(t.id, va.id) },
         });
 
         if (!existingVa) {

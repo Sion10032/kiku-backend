@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 
 export async function getUserByName(name: string) {
   return db.query.users.findFirst({
-    where: eq(users.name, name),
+    where: { RAW: (t, op) => op.eq(t.name, name) },
   });
 }
 

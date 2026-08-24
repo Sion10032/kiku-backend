@@ -41,7 +41,7 @@ describe('Progress Routes', () => {
     await db.delete(works).where(eq(works.id, WORK_ID));
     await db.delete(userProgress).where(eq(userProgress.workId, WORK_ID));
     await db.delete(reviews).where(eq(reviews.workId, WORK_ID));
-    const circle = await db.query.circles.findFirst({ where: eq(circles.name, `测试社团_${RUN}`) });
+    const circle = await db.query.circles.findFirst({ where: { RAW: (t, op) => op.eq(t.name, `测试社团_${RUN}`) } });
     if (circle) await db.delete(circles).where(eq(circles.id, circle.id));
     await app.close();
   });

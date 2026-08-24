@@ -4,24 +4,24 @@ import { eq, and } from 'drizzle-orm';
 
 export async function getReviewsByWorkId(workId: string) {
   return db.query.reviews.findMany({
-    where: eq(reviews.workId, workId),
+    where: { RAW: (t, op) => op.eq(t.workId, workId) },
     with: { user: true },
   });
 }
 
 export async function getReviewsByUsername(username: string) {
   return db.query.reviews.findMany({
-    where: eq(reviews.userName, username),
+    where: { RAW: (t, op) => op.eq(t.userName, username) },
     with: { work: true },
   });
 }
 
 export async function getReview(username: string, workId: string) {
   return db.query.reviews.findFirst({
-    where: and(
-      eq(reviews.userName, username),
-      eq(reviews.workId, workId),
-    ),
+    where: { RAW: (t, op) => op.and(
+      op.eq(t.userName, username),
+      op.eq(t.workId, workId),
+    )! },
   });
 }
 
@@ -71,7 +71,7 @@ export async function deleteReview(username: string, workId: string) {
 
 async function updateWorkReviewStats(workId: string) {
   const allReviews = await db.query.reviews.findMany({
-    where: eq(reviews.workId, workId),
+    where: { RAW: (t, op) => op.eq(t.workId, workId) },
   });
 
   const ratings = allReviews.filter(r => r.rating != null).map(r => r.rating!);
