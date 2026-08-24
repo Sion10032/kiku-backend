@@ -10,6 +10,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "db:blob:generate": "drizzle-kit generate --config=drizzle.blob.config.ts",
+    "db:blob:migrate": "drizzle-kit migrate --config=drizzle.blob.config.ts",
+    "db:blob:push": "drizzle-kit push --config=drizzle.blob.config.ts",
     "test": "bun test",
     "lint": "eslint ."
   },
