@@ -4,6 +4,7 @@ import type { Work, Circle, Tag, Va } from '../db/main/schema.js';
 import { eq, like, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
+import { extractRJCode } from '../utils/rjcode.js';
 import { getProgressByWorks, type WorkProgressSummary } from './progress.service.js';
 
 // ---------- Upsert (used by scanner) ----------
@@ -347,10 +348,9 @@ export async function getWorksPaginated(opts: {
 }
 
 export async function searchWorks(keyword: string, username?: string) {
-  // Try to match RJ code
-  const rjMatch = keyword.match(/([Rr][Jj])(\d{6,8})/);
-  if (rjMatch && rjMatch[2]) {
-    const rjCode = `RJ${rjMatch[2].padStart(8, '0')}`;
+  // 命中 RJ 号则按精确 ID 匹配（extractRJCode 已做校验，保持原样不做规范化/补零）
+  const rjCode = extractRJCode(keyword);
+  if (rjCode) {
     const items = await db.query.works.findMany({
       where: { RAW: (t, op) => op.eq(t.id, rjCode) },
       with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },

@@ -1,5 +1,6 @@
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
+import { extractRJCode } from '../utils/rjcode.js';
 
 export interface FolderInfo {
   path: string;
@@ -7,14 +8,6 @@ export interface FolderInfo {
   dirName: string;
 }
 
-/** Extract RJ code from folder name. Returns full code like "RJ01578781" or null. */
-export function extractRJFromFolderName(name: string): string | null {
-  const match = name.match(/([Rr][Jj])(\d{6,8})/);
-  if (match && match[2]) {
-    return `RJ${match[2].padStart(8, '0')}`;
-  }
-  return null;
-}
 
 export async function getFolderList(dirPath: string, maxDepth: number, currentDepth: number = 0): Promise<FolderInfo[]> {
   if (currentDepth >= maxDepth) {
@@ -29,7 +22,7 @@ export async function getFolderList(dirPath: string, maxDepth: number, currentDe
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const fullPath = join(dirPath, entry.name);
-        const rjCode = extractRJFromFolderName(entry.name);
+        const rjCode = extractRJCode(entry.name);
 
         // If this folder has an RJ code, it's a work folder — don't recurse deeper
         if (rjCode !== null) {
