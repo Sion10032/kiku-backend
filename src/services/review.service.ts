@@ -18,10 +18,10 @@ export async function getReviewsByUsername(username: string) {
 
 export async function getReview(username: string, workId: string) {
   return db.query.reviews.findFirst({
-    where: { RAW: (t, op) => op.and(
-      op.eq(t.userName, username),
-      op.eq(t.workId, workId),
-    )! },
+    where: {
+      RAW: (t, op) =>
+        op.and(op.eq(t.userName, username), op.eq(t.workId, workId))!,
+    },
   });
 }
 
@@ -35,7 +35,8 @@ export async function upsertReview(data: {
   const existing = await getReview(data.userName, data.workId);
   const now = new Date().toISOString();
 
-  await db.insert(reviews)
+  await db
+    .insert(reviews)
     .values({
       userName: data.userName,
       workId: data.workId,
@@ -46,7 +47,7 @@ export async function upsertReview(data: {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: [ reviews.userName, reviews.workId ],
+      target: [reviews.userName, reviews.workId],
       set: {
         rating: data.rating ?? existing?.rating ?? null,
         reviewText: data.reviewText ?? existing?.reviewText ?? null,
@@ -61,10 +62,9 @@ export async function upsertReview(data: {
 }
 
 export async function deleteReview(username: string, workId: string) {
-  await db.delete(reviews).where(and(
-    eq(reviews.userName, username),
-    eq(reviews.workId, workId),
-  ));
+  await db
+    .delete(reviews)
+    .where(and(eq(reviews.userName, username), eq(reviews.workId, workId)));
 
   await updateWorkReviewStats(workId);
 }
@@ -74,19 +74,26 @@ async function updateWorkReviewStats(workId: string) {
     where: { RAW: (t, op) => op.eq(t.workId, workId) },
   });
 
-  const ratings = allReviews.filter(r => r.rating != null).map(r => r.rating!);
+  const ratings = allReviews
+    .filter((r) => r.rating != null)
+    .map((r) => r.rating!);
   const reviewCount = allReviews.length;
   const rateCount = ratings.length;
-  const rateAverage2dp = rateCount > 0
-    ? Math.round((ratings.reduce((a, b) => a + b, 0) / rateCount) * 100) / 100
-    : null;
+  const rateAverage2dp =
+    rateCount > 0
+      ? Math.round((ratings.reduce((a, b) => a + b, 0) / rateCount) * 100) / 100
+      : null;
 
-  const rateCountDetail = [ 1, 2, 3, 4, 5 ].reduce((acc, star) => {
-    acc[star] = ratings.filter(r => r === star).length;
-    return acc;
-  }, {} as Record<number, number>);
+  const rateCountDetail = [1, 2, 3, 4, 5].reduce(
+    (acc, star) => {
+      acc[star] = ratings.filter((r) => r === star).length;
+      return acc;
+    },
+    {} as Record<number, number>,
+  );
 
-  await db.update(works)
+  await db
+    .update(works)
     .set({
       reviewCount,
       rateCount,

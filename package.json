@@ -14,11 +14,12 @@
     "db:blob:migrate": "drizzle-kit migrate --config=drizzle.blob.config.ts",
     "db:blob:push": "drizzle-kit push --config=drizzle.blob.config.ts",
     "test": "bun test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "format": "biome format --write ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
     "@eslint/js": "^10.0.1",
-    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/bun": "^1.3.14",
     "drizzle-kit": "1.0.0-rc.4",
     "eslint": "^10.5.0",

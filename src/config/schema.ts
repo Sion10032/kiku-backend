@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 export const sharedConfigSchema = z.object({
-  instanceMode: z.enum([ 'private', 'public' ]).default('private'),
+  instanceMode: z.enum(['private', 'public']).default('private'),
   allowRegistration: z.boolean().default(false),
   pageSize: z.number().default(12),
-  tagLanguage: z.enum([ 'ja-jp', 'zh-tw', 'zh-cn' ]).default('zh-cn'),
+  tagLanguage: z.enum(['ja-jp', 'zh-tw', 'zh-cn']).default('zh-cn'),
   enableGzip: z.boolean().default(true),
   rewindSeekTime: z.number().default(5),
   forwardSeekTime: z.number().default(30),
@@ -19,10 +19,14 @@ export const configSchema = sharedConfigSchema.extend({
   checkUpdate: z.boolean().default(true),
   checkBetaUpdate: z.boolean().default(false),
   maxParallelism: z.number().min(1).max(64).default(16),
-  rootFolders: z.array(z.object({
-    name: z.string(),
-    path: z.string(),
-  })).default([]),
+  rootFolders: z
+    .array(
+      z.object({
+        name: z.string(),
+        path: z.string(),
+      }),
+    )
+    .default([]),
   databaseFolderDir: z.string().default('./data/sqlite'),
   md5secret: z.string(),
   jwtsecret: z.string(),

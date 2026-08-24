@@ -24,6 +24,10 @@ export function setupTestEnvironment(): void {
       jwtsecret: 'test-jwt-secret',
       databaseFolderDir: './data/sqlite',
     };
-    writeFileSync('./config.json', JSON.stringify(defaultConfig, null, 2), 'utf-8');
+    writeFileSync(
+      './config.json',
+      JSON.stringify(defaultConfig, null, 2),
+      'utf-8',
+    );
   }
 }

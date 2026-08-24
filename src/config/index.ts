@@ -7,7 +7,10 @@ const CONFIG_PATH = process.env.CONFIG_PATH || './data/config.json';
 let config: Config;
 
 function generateSecret(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return (
+    Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15)
+  );
 }
 
 function loadConfig(): Config {

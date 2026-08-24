@@ -5,36 +5,48 @@ import { getConfig, updateConfig, getSharedConfig } from '../config/index.js';
 const updateConfigSchema = configSchema.partial();
 
 export const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  fastify.get('/admin', {
-    preHandler: [ fastify.authenticateAdmin ],
-    schema: {
-      response: {
-        200: configSchema,
+  fastify.get(
+    '/admin',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        response: {
+          200: configSchema,
+        },
       },
     },
-  }, async () => {
-    return getConfig();
-  });
+    async () => {
+      return getConfig();
+    },
+  );
 
-  fastify.put('/admin', {
-    preHandler: [ fastify.authenticateAdmin ],
-    schema: {
-      body: updateConfigSchema,
-      response: {
-        200: configSchema,
+  fastify.put(
+    '/admin',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        body: updateConfigSchema,
+        response: {
+          200: configSchema,
+        },
       },
     },
-  }, async (request) => {
-    return updateConfig(request.body);
-  });
+    async (request) => {
+      return updateConfig(request.body);
+    },
+  );
 
-  fastify.get('/shared', {
-    schema: {
-      response: {
-        200: sharedConfigSchema,
+  fastify.get(
+    '/shared',
+    {
+      schema: {
+        response: {
+          200: sharedConfigSchema,
+        },
       },
     },
-  }, async () => {
-    return getSharedConfig();
-  });
+    async () => {
+      return getSharedConfig();
+    },
+  );
 };

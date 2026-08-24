@@ -4,22 +4,26 @@ import { setupTestEnvironment } from './helpers/setup';
 setupTestEnvironment();
 
 // mock retryFetch，避免真实网络
-const fakeBytes = Buffer.from([ 0xff, 0xd8, 0xff, 0xe0 ]);
-const fetchMock = mock(async (_url: string) => new Response(fakeBytes, {
-  headers: { 'content-type': 'image/jpeg' },
-}));
+const fakeBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+const fetchMock = mock(
+  async (_url: string) =>
+    new Response(fakeBytes, {
+      headers: { 'content-type': 'image/jpeg' },
+    }),
+);
 mock.module('../src/scraper/client', () => ({ retryFetch: fetchMock }));
 
 // 动态 import：ESM 静态 import 会被提升到 mock.module 之前执行，
 // 必须在 mock 生效后再加载被测模块（bun:test 官方模式）
-const { downloadCover, coverExists, getCoverData, deleteAllCovers } = await import('../src/services/cover.service');
+const { downloadCover, coverExists, getCoverData, deleteAllCovers } =
+  await import('../src/services/cover.service');
 const { deleteBlob } = await import('../src/db/blob/index');
 
 describe('cover.service（blob.db 存储）', () => {
   beforeEach(() => {
     fetchMock.mockClear();
     // 用例间隔离：清掉测试用 key
-    for (const t of [ 'main', 'sam', '240x240', '360x360' ]) {
+    for (const t of ['main', 'sam', '240x240', '360x360']) {
       deleteBlob('cover', `RJ000007_${t}`);
     }
   });
@@ -55,9 +59,12 @@ describe('cover.service（blob.db 存储）', () => {
   });
 
   it('非图片 content-type 拒绝存储', async () => {
-    fetchMock.mockImplementationOnce(async () => new Response('<html>', {
-      headers: { 'content-type': 'text/html' },
-    }));
+    fetchMock.mockImplementationOnce(
+      async () =>
+        new Response('<html>', {
+          headers: { 'content-type': 'text/html' },
+        }),
+    );
 
     expect(await downloadCover('RJ000007', 'sam')).toBe(false);
     expect(coverExists('RJ000007', 'sam')).toBe(false);

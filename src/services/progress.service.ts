@@ -25,7 +25,8 @@ export async function upsertProgress(data: {
 }) {
   const now = new Date().toISOString();
 
-  await db.insert(userProgress)
+  await db
+    .insert(userProgress)
     .values({
       userName: data.userName,
       workId: data.workId,
@@ -36,7 +37,11 @@ export async function upsertProgress(data: {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: [ userProgress.userName, userProgress.workId, userProgress.mediaIndex ],
+      target: [
+        userProgress.userName,
+        userProgress.workId,
+        userProgress.mediaIndex,
+      ],
       set: {
         position: data.position,
         // 未上报的字段保留库中原值（excluded 引用待插入行，此处引用原行）
@@ -50,10 +55,10 @@ export async function upsertProgress(data: {
 /** 某用户在某作品的全部进度行（详情页/继续播放用）。 */
 export async function getWorkProgress(userName: string, workId: string) {
   return db.query.userProgress.findMany({
-    where: { RAW: (t, op) => op.and(
-      op.eq(t.userName, userName),
-      op.eq(t.workId, workId),
-    )! },
+    where: {
+      RAW: (t, op) =>
+        op.and(op.eq(t.userName, userName), op.eq(t.workId, workId))!,
+    },
   });
 }
 
@@ -73,25 +78,26 @@ export async function getProgressByWorks(
   if (workIds.length === 0) return result;
 
   const rows = await db.query.userProgress.findMany({
-    where: { RAW: (t, op) => op.and(
-      op.eq(t.userName, userName),
-      op.inArray(t.workId, workIds),
-    )! },
+    where: {
+      RAW: (t, op) =>
+        op.and(op.eq(t.userName, userName), op.inArray(t.workId, workIds))!,
+    },
   });
 
   const byWork = new Map<string, typeof rows>();
   for (const row of rows) {
     const list = byWork.get(row.workId);
     if (list) list.push(row);
-    else byWork.set(row.workId, [ row ]);
+    else byWork.set(row.workId, [row]);
   }
 
-  for (const [ workId, list ] of byWork) {
+  for (const [workId, list] of byWork) {
     // updatedAt 最新的行 = 上次播放位置
     const latest = list.reduce((a, b) => (a.updatedAt >= b.updatedAt ? a : b));
 
     const listenedCount = list.filter(
-      r => r.duration != null && r.duration > 0 && r.position / r.duration >= 0.95,
+      (r) =>
+        r.duration != null && r.duration > 0 && r.position / r.duration >= 0.95,
     ).length;
 
     result.set(workId, {
@@ -109,10 +115,12 @@ export async function getProgressByWorks(
 
 /** 删除某用户在某作品的全部进度（作品回到未读态）。返回删除行数。 */
 export async function deleteWorkProgress(userName: string, workId: string) {
-  const deleted = await db.delete(userProgress).where(and(
-    eq(userProgress.userName, userName),
-    eq(userProgress.workId, workId),
-  )).run();
+  const deleted = await db
+    .delete(userProgress)
+    .where(
+      and(eq(userProgress.userName, userName), eq(userProgress.workId, workId)),
+    )
+    .run();
 
   return deleted.changes;
 }

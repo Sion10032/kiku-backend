@@ -29,12 +29,16 @@ function getCoverUrl(rjcode: string, type: CoverType): string {
   // 计算用于URL的ID（每1000/10000个一组）
   const codeLength = numId > 999999 ? 8 : 6;
   const groupCount = 1000;
-  const groupId = (numId % groupCount === 0) ? numId : Math.floor(numId / groupCount) * groupCount + groupCount;
+  const groupId =
+    numId % groupCount === 0
+      ? numId
+      : Math.floor(numId / groupCount) * groupCount + groupCount;
   const groupRJCode = 'RJ' + groupId.toString().padStart(codeLength, '0');
 
-  const url = type === '240x240' || type === '360x360'
-    ? `https://img.dlsite.jp/resize/images2/work/doujin/${groupRJCode}/${rjcode}_img_main_${type}.jpg`
-    : `https://img.dlsite.jp/modpub/images2/work/doujin/${groupRJCode}/${rjcode}_img_${type}.jpg`;
+  const url =
+    type === '240x240' || type === '360x360'
+      ? `https://img.dlsite.jp/resize/images2/work/doujin/${groupRJCode}/${rjcode}_img_main_${type}.jpg`
+      : `https://img.dlsite.jp/modpub/images2/work/doujin/${groupRJCode}/${rjcode}_img_${type}.jpg`;
 
   return url;
 }
@@ -81,7 +85,9 @@ export async function downloadCover(
     });
 
     if (!response.ok) {
-      console.error(`Failed to download cover: ${response.status} ${response.statusText}`);
+      console.error(
+        `Failed to download cover: ${response.status} ${response.statusText}`,
+      );
       return false;
     }
 
@@ -98,8 +104,7 @@ export async function downloadCover(
 
     console.log(`Cover saved: ${key}`);
     return true;
-  }
-  catch (error) {
+  } catch (error) {
     // 如果是取消错误，不打印错误信息
     if (error instanceof DOMException && error.name === 'AbortError') {
       return false;
@@ -120,10 +125,10 @@ export async function downloadAllCovers(
   id: string,
   signal?: AbortSignal,
 ): Promise<Record<CoverType, boolean>> {
-  const types: CoverType[] = [ 'main', 'sam', '240x240', '360x360' ];
+  const types: CoverType[] = ['main', 'sam', '240x240', '360x360'];
   const results: Record<CoverType, boolean> = {
-    'main': false,
-    'sam': false,
+    main: false,
+    sam: false,
     '240x240': false,
     '360x360': false,
   };
@@ -156,7 +161,7 @@ export function coverExists(id: string, type: CoverType = 'main'): boolean {
 export function getCoverData(
   id: string,
   type: CoverType = 'main',
-): { data: Buffer; mimeType: string | null; size: number; } | null {
+): { data: Buffer; mimeType: string | null; size: number } | null {
   return getBlob(COVER_NAMESPACE, getCoverKey(id, type));
 }
 
@@ -176,7 +181,7 @@ export function deleteCover(id: string, type: CoverType): boolean {
  * @returns 删除的封面数量
  */
 export function deleteAllCovers(id: string): number {
-  const types: CoverType[] = [ 'main', 'sam', '240x240', '360x360' ];
+  const types: CoverType[] = ['main', 'sam', '240x240', '360x360'];
   let count = 0;
 
   for (const type of types) {

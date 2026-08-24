@@ -11,10 +11,16 @@ export function hashPassword(password: string): string {
   return md5(password + config.md5secret);
 }
 
-export function verifyPassword(password: string, hashedPassword: string): boolean {
+export function verifyPassword(
+  password: string,
+  hashedPassword: string,
+): boolean {
   return hashPassword(password) === hashedPassword;
 }
 
-export function signToken(fastify: FastifyInstance, payload: { name: string; group: string; }): string {
+export function signToken(
+  fastify: FastifyInstance,
+  payload: { name: string; group: string },
+): string {
   return fastify.jwt.sign(payload);
 }

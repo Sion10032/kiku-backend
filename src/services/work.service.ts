@@ -1,11 +1,21 @@
 import { db } from '../db/main/index.js';
-import { works, circles, tags, vas, tagWork, vaWork } from '../db/main/schema.js';
+import {
+  works,
+  circles,
+  tags,
+  vas,
+  tagWork,
+  vaWork,
+} from '../db/main/schema.js';
 import type { Work, Circle, Tag, Va } from '../db/main/schema.js';
 import { eq, like, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
 import { extractRJCode } from '../utils/rjcode.js';
-import { getProgressByWorks, type WorkProgressSummary } from './progress.service.js';
+import {
+  getProgressByWorks,
+  type WorkProgressSummary,
+} from './progress.service.js';
 
 // ---------- Upsert (used by scanner) ----------
 
@@ -26,7 +36,7 @@ export interface UpsertWorkInput {
   rateCountDetail?: Record<string, number>;
   rank?: Record<string, number>;
   tags?: string[];
-  vas?: Array<{ id: string; name: string; }>;
+  vas?: Array<{ id: string; name: string }>;
   language?: string;
   sourceId?: string;
 }
@@ -43,14 +53,19 @@ export interface UpsertResult {
  * Create or update a work with all its relations (circle, tags, VAs).
  * Used by the scanner to persist DLsite metadata into the database.
  */
-export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> {
+export async function upsertWork(
+  input: UpsertWorkInput,
+): Promise<UpsertResult> {
   try {
     // 1. Find or create circle
     let circle = await db.query.circles.findFirst({
       where: { RAW: (t, op) => op.eq(t.name, input.circleName) },
     });
     if (!circle) {
-      const result = await db.insert(circles).values({ name: input.circleName }).returning();
+      const result = await db
+        .insert(circles)
+        .values({ name: input.circleName })
+        .returning();
       circle = result[0];
     }
     if (!circle) throw new Error('Failed to create circle');
@@ -62,7 +77,8 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
 
     if (existing) {
       // Update existing work
-      await db.update(works)
+      await db
+        .update(works)
         .set({
           title: input.title,
           circleId: circle.id,
@@ -88,13 +104,21 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       if (input.tags) {
         await db.delete(tagWork).where(eq(tagWork.workId, input.id));
         for (const tagName of input.tags) {
-          let tag = await db.query.tags.findFirst({ where: { RAW: (t, op) => op.eq(t.name, tagName) } });
+          let tag = await db.query.tags.findFirst({
+            where: { RAW: (t, op) => op.eq(t.name, tagName) },
+          });
           if (!tag) {
-            const result = await db.insert(tags).values({ name: tagName }).returning();
+            const result = await db
+              .insert(tags)
+              .values({ name: tagName })
+              .returning();
             tag = result[0];
           }
           if (tag) {
-            await db.insert(tagWork).values({ tagId: tag.id, workId: input.id }).onConflictDoNothing();
+            await db
+              .insert(tagWork)
+              .values({ tagId: tag.id, workId: input.id })
+              .onConflictDoNothing();
           }
         }
       }
@@ -103,20 +127,32 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       if (input.vas) {
         await db.delete(vaWork).where(eq(vaWork.workId, input.id));
         for (const va of input.vas) {
-          let existingVa = await db.query.vas.findFirst({ where: { RAW: (t, op) => op.eq(t.id, va.id) } });
+          let existingVa = await db.query.vas.findFirst({
+            where: { RAW: (t, op) => op.eq(t.id, va.id) },
+          });
           if (!existingVa) {
-            const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
+            const result = await db
+              .insert(vas)
+              .values({ id: va.id, name: va.name })
+              .returning();
             existingVa = result[0];
           }
           if (existingVa) {
-            await db.insert(vaWork).values({ vaId: existingVa.id, workId: input.id }).onConflictDoNothing();
+            await db
+              .insert(vaWork)
+              .values({ vaId: existingVa.id, workId: input.id })
+              .onConflictDoNothing();
           }
         }
       }
 
-      return { workId: input.id, title: input.title, created: false, success: true };
-    }
-    else {
+      return {
+        workId: input.id,
+        title: input.title,
+        created: false,
+        success: true,
+      };
+    } else {
       // Create new work
       await db.insert(works).values({
         id: input.id as string,
@@ -131,7 +167,9 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
         reviewCount: input.reviewCount ?? null,
         rateCount: input.rateCount ?? null,
         rateAverage2dp: input.rateAverage2dp ?? null,
-        rateCountDetail: input.rateCountDetail ? JSON.stringify(input.rateCountDetail) : '{}',
+        rateCountDetail: input.rateCountDetail
+          ? JSON.stringify(input.rateCountDetail)
+          : '{}',
         rank: input.rank ? JSON.stringify(input.rank) : null,
         language: input.language ?? null,
         sourceId: input.sourceId ?? null,
@@ -140,13 +178,21 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       // Create tags
       if (input.tags) {
         for (const tagName of input.tags) {
-          let tag = await db.query.tags.findFirst({ where: { RAW: (t, op) => op.eq(t.name, tagName) } });
+          let tag = await db.query.tags.findFirst({
+            where: { RAW: (t, op) => op.eq(t.name, tagName) },
+          });
           if (!tag) {
-            const result = await db.insert(tags).values({ name: tagName }).returning();
+            const result = await db
+              .insert(tags)
+              .values({ name: tagName })
+              .returning();
             tag = result[0];
           }
           if (tag) {
-            await db.insert(tagWork).values({ tagId: tag.id, workId: input.id }).onConflictDoNothing();
+            await db
+              .insert(tagWork)
+              .values({ tagId: tag.id, workId: input.id })
+              .onConflictDoNothing();
           }
         }
       }
@@ -154,31 +200,49 @@ export async function upsertWork(input: UpsertWorkInput): Promise<UpsertResult> 
       // Create VAs
       if (input.vas) {
         for (const va of input.vas) {
-          let existingVa = await db.query.vas.findFirst({ where: { RAW: (t, op) => op.eq(t.id, va.id) } });
+          let existingVa = await db.query.vas.findFirst({
+            where: { RAW: (t, op) => op.eq(t.id, va.id) },
+          });
           if (!existingVa) {
-            const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
+            const result = await db
+              .insert(vas)
+              .values({ id: va.id, name: va.name })
+              .returning();
             existingVa = result[0];
           }
           if (existingVa) {
-            await db.insert(vaWork).values({ vaId: existingVa.id, workId: input.id }).onConflictDoNothing();
+            await db
+              .insert(vaWork)
+              .values({ vaId: existingVa.id, workId: input.id })
+              .onConflictDoNothing();
           }
         }
       }
 
-      return { workId: input.id, title: input.title, created: true, success: true };
+      return {
+        workId: input.id,
+        title: input.title,
+        created: true,
+        success: true,
+      };
     }
-  }
-  catch (err) {
-    return { workId: input.id, title: input.title, created: false, success: false, error: String(err) };
+  } catch (err) {
+    return {
+      workId: input.id,
+      title: input.title,
+      created: false,
+      success: false,
+      error: String(err),
+    };
   }
 }
 
 // 带关联的查询结果类型
 type WorkWithRelations = Work & {
   circle: Circle;
-  tags?: Array<{ tag: Tag; }>;
-  vas?: Array<{ va: Va; }>;
-  reviews?: Array<{ rating: number | null; }>;
+  tags?: Array<{ tag: Tag }>;
+  vas?: Array<{ va: Va }>;
+  reviews?: Array<{ rating: number | null }>;
 };
 
 // 格式化后的输出类型
@@ -187,7 +251,7 @@ export interface FormattedWork {
   rootFolder: string;
   dir: string;
   title: string;
-  circle: { id: number; name: string; };
+  circle: { id: number; name: string };
   nsfw: boolean;
   release: string | null;
   dl_count: number | null;
@@ -197,8 +261,8 @@ export interface FormattedWork {
   rate_average_2dp: number | null;
   rate_count_detail: Record<string, number>;
   rank: Record<string, number> | null;
-  tags: Array<{ id: number; name: string; }>;
-  vas: Array<{ id: string; name: string; }>;
+  tags: Array<{ id: number; name: string }>;
+  vas: Array<{ id: string; name: string }>;
   userRating: number | null;
   /** 当前用户播放进度聚合（null = 未读/未登录） */
   userProgress: WorkProgressSummary | null;
@@ -222,8 +286,8 @@ function formatWork(row: WorkWithRelations): FormattedWork {
     rate_average_2dp: row.rateAverage2dp,
     rate_count_detail: JSON.parse(row.rateCountDetail ?? '{}'),
     rank: row.rank ? JSON.parse(row.rank) : null,
-    tags: row.tags?.map(tw => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
-    vas: row.vas?.map(vw => ({ id: vw.va.id, name: vw.va.name })) ?? [],
+    tags: row.tags?.map((tw) => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
+    vas: row.vas?.map((vw) => ({ id: vw.va.id, name: vw.va.name })) ?? [],
     userRating: row.reviews?.[0]?.rating ?? null,
     userProgress: null,
     language: row.language,
@@ -237,19 +301,25 @@ function formatWork(row: WorkWithRelations): FormattedWork {
  * 未登录（username 为空）时保持 null（未读态），不做任何查询。
  * 到调用点后再覆盖 formatWork 的默认值。
  */
-async function attachUserData(items: FormattedWork[], username?: string): Promise<void> {
+async function attachUserData(
+  items: FormattedWork[],
+  username?: string,
+): Promise<void> {
   if (!username || items.length === 0) return;
-  const workIds = items.map(w => w.id);
+  const workIds = items.map((w) => w.id);
 
-  const [ reviewRows, progressMap ] = await Promise.all([
+  const [reviewRows, progressMap] = await Promise.all([
     db.query.reviews.findMany({
-      where: { RAW: (t, op) => op.and(op.eq(t.userName, username), op.inArray(t.workId, workIds))! },
+      where: {
+        RAW: (t, op) =>
+          op.and(op.eq(t.userName, username), op.inArray(t.workId, workIds))!,
+      },
       columns: { workId: true, rating: true },
     }),
     getProgressByWorks(username, workIds),
   ]);
 
-  const ratingByWork = new Map(reviewRows.map(r => [ r.workId, r.rating ]));
+  const ratingByWork = new Map(reviewRows.map((r) => [r.workId, r.rating]));
   for (const item of items) {
     item.userRating = ratingByWork.get(item.id) ?? null;
     item.userProgress = progressMap.get(item.id) ?? null;
@@ -267,7 +337,7 @@ export async function getWorkById(id: string, username?: string) {
   });
   if (!row) throw new Error(`Work ${id} not found`);
   const work = formatWork(row);
-  await attachUserData([ work ], username);
+  await attachUserData([work], username);
   return work;
 }
 
@@ -279,7 +349,13 @@ export async function getWorksPaginated(opts: {
   username?: string;
   seed?: number;
 }) {
-  const { page = 1, pageSize = 12, orderBy = 'release', sortDir = 'desc', username } = opts;
+  const {
+    page = 1,
+    pageSize = 12,
+    orderBy = 'release',
+    sortDir = 'desc',
+    username,
+  } = opts;
   const offset = (page - 1) * pageSize;
 
   // 处理随机排序：先随机取 id，再用 findMany 查关联
@@ -292,7 +368,7 @@ export async function getWorksPaginated(opts: {
       .limit(pageSize)
       .offset(offset);
 
-    const [ items, countResult ] = await Promise.all([
+    const [items, countResult] = await Promise.all([
       db.query.works.findMany({
         with: {
           circle: true,
@@ -305,7 +381,7 @@ export async function getWorksPaginated(opts: {
     ]);
     const totalCount = countResult[0]?.count ?? 0;
 
-    const formatted = items.map(item => formatWork(item));
+    const formatted = items.map((item) => formatWork(item));
     await attachUserData(formatted, username);
 
     return {
@@ -314,23 +390,27 @@ export async function getWorksPaginated(opts: {
     };
   }
 
-  const orderKey = ({
-    id: 'id',
-    release: 'release',
-    dl_count: 'dlCount',
-    price: 'price',
-    rate_average_2dp: 'rateAverage2dp',
-    review_count: 'reviewCount',
-  } as const)[orderBy] ?? 'release';
+  const orderKey =
+    (
+      {
+        id: 'id',
+        release: 'release',
+        dl_count: 'dlCount',
+        price: 'price',
+        rate_average_2dp: 'rateAverage2dp',
+        review_count: 'reviewCount',
+      } as const
+    )[orderBy] ?? 'release';
 
-  const [ items, countResult ] = await Promise.all([
+  const [items, countResult] = await Promise.all([
     db.query.works.findMany({
       with: {
         circle: true,
         tags: { with: { tag: true } },
         vas: { with: { va: true } },
       },
-      orderBy: (t, { asc: ascOp, desc: descOp }) => (sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey])),
+      orderBy: (t, { asc: ascOp, desc: descOp }) =>
+        sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
       limit: pageSize,
       offset,
     }),
@@ -338,7 +418,7 @@ export async function getWorksPaginated(opts: {
   ]);
   const totalCount = countResult[0]?.count ?? 0;
 
-  const formatted = items.map(item => formatWork(item));
+  const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
 
   return {
@@ -353,33 +433,50 @@ export async function searchWorks(keyword: string, username?: string) {
   if (rjCode) {
     const items = await db.query.works.findMany({
       where: { RAW: (t, op) => op.eq(t.id, rjCode) },
-      with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
+      with: {
+        circle: true,
+        tags: { with: { tag: true } },
+        vas: { with: { va: true } },
+      },
     });
-    const formatted = items.map(item => formatWork(item));
+    const formatted = items.map((item) => formatWork(item));
     await attachUserData(formatted, username);
     return { works: formatted };
   }
 
-  const circleIds = db.select({ id: circles.id }).from(circles)
+  const circleIds = db
+    .select({ id: circles.id })
+    .from(circles)
     .where(like(circles.name, `%${keyword}%`));
-  const tagWorkIds = db.select({ workId: tagWork.workId }).from(tagWork)
+  const tagWorkIds = db
+    .select({ workId: tagWork.workId })
+    .from(tagWork)
     .innerJoin(tags, eq(tagWork.tagId, tags.id))
     .where(like(tags.name, `%${keyword}%`));
-  const vaWorkIds = db.select({ workId: vaWork.workId }).from(vaWork)
+  const vaWorkIds = db
+    .select({ workId: vaWork.workId })
+    .from(vaWork)
     .innerJoin(vas, eq(vaWork.vaId, vas.id))
     .where(like(vas.name, `%${keyword}%`));
 
   const items = await db.query.works.findMany({
-    where: { RAW: (t, op) => op.or(
-      op.like(t.title, `%${keyword}%`),
-      op.like(t.id, `%${keyword}%`),
-      op.inArray(t.circleId, circleIds),
-      op.inArray(t.id, tagWorkIds),
-      op.inArray(t.id, vaWorkIds),
-    )! },
-    with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
+    where: {
+      RAW: (t, op) =>
+        op.or(
+          op.like(t.title, `%${keyword}%`),
+          op.like(t.id, `%${keyword}%`),
+          op.inArray(t.circleId, circleIds),
+          op.inArray(t.id, tagWorkIds),
+          op.inArray(t.id, vaWorkIds),
+        )!,
+    },
+    with: {
+      circle: true,
+      tags: { with: { tag: true } },
+      vas: { with: { va: true } },
+    },
   });
-  const formatted = items.map(item => formatWork(item));
+  const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
   return { works: formatted };
 }
@@ -393,13 +490,21 @@ export async function getCircleById(id: number | string) {
   return row;
 }
 
-export async function getCircleWorks(circleId: number | string, username?: string) {
-  const numId = typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
+export async function getCircleWorks(
+  circleId: number | string,
+  username?: string,
+) {
+  const numId =
+    typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
   const items = await db.query.works.findMany({
     where: { RAW: (t, op) => op.eq(t.circleId, numId) },
-    with: { circle: true, tags: { with: { tag: true } }, vas: { with: { va: true } } },
+    with: {
+      circle: true,
+      tags: { with: { tag: true } },
+      vas: { with: { va: true } },
+    },
   });
-  const formatted = items.map(item => formatWork(item));
+  const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
   return formatted;
 }
@@ -431,7 +536,7 @@ export async function getTagWorks(tagId: number | string, username?: string) {
       },
     },
   });
-  const formatted = tagWorkItems.map(item => formatWork(item.work));
+  const formatted = tagWorkItems.map((item) => formatWork(item.work));
   await attachUserData(formatted, username);
   return formatted;
 }
@@ -461,7 +566,7 @@ export async function getVaWorks(vaId: string, username?: string) {
       },
     },
   });
-  const formatted = vaWorkItems.map(item => formatWork(item.work));
+  const formatted = vaWorkItems.map((item) => formatWork(item.work));
   await attachUserData(formatted, username);
   return formatted;
 }
@@ -491,7 +596,7 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
   }
 
   const config = getConfig();
-  const rootFolder = config.rootFolders.find(f => f.name === row.rootFolder);
+  const rootFolder = config.rootFolders.find((f) => f.name === row.rootFolder);
 
   if (!rootFolder) {
     throw new Error(`Root folder "${row.rootFolder}" not found`);

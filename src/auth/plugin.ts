@@ -5,14 +5,20 @@ import { getConfig } from '../config/index.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { name: string; group: string; };
+    payload: { name: string; group: string };
   }
 }
 
 declare module 'fastify' {
   interface FastifyInstance {
-    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    authenticateAdmin: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticate: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<void>;
+    authenticateAdmin: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<void>;
   }
 }
 
@@ -57,39 +63,43 @@ async function plugin(fastify: FastifyInstance) {
     if (getConfig().instanceMode !== 'private') return;
 
     const path = request.url.split('?')[0] ?? request.url;
-    if (PUBLIC_PATHS.some(p => path === p || path.startsWith(`${p}/`))) return;
+    if (PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`)))
+      return;
 
     const token = extractToken(request);
     if (!token) throw fastify.httpErrors.unauthorized();
 
     try {
       request.user = fastify.jwt.verify(token);
-    }
-    catch {
+    } catch {
       throw fastify.httpErrors.unauthorized();
     }
   });
 
-  fastify.decorate('authenticate', async (request: FastifyRequest, _reply: FastifyReply) => {
-    try {
-      await request.jwtVerify();
-    }
-    catch {
-      throw fastify.httpErrors.unauthorized();
-    }
-  });
-
-  fastify.decorate('authenticateAdmin', async (request: FastifyRequest, _reply: FastifyReply) => {
-    try {
-      const decoded = await request.jwtVerify<JwtPayload>();
-      if (decoded.group !== 'administrator') {
-        throw fastify.httpErrors.forbidden();
+  fastify.decorate(
+    'authenticate',
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      try {
+        await request.jwtVerify();
+      } catch {
+        throw fastify.httpErrors.unauthorized();
       }
-    }
-    catch {
-      throw fastify.httpErrors.unauthorized();
-    }
-  });
+    },
+  );
+
+  fastify.decorate(
+    'authenticateAdmin',
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      try {
+        const decoded = await request.jwtVerify<JwtPayload>();
+        if (decoded.group !== 'administrator') {
+          throw fastify.httpErrors.forbidden();
+        }
+      } catch {
+        throw fastify.httpErrors.unauthorized();
+      }
+    },
+  );
 }
 
 export const authPlugin = fp(plugin, { name: 'auth' });

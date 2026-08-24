@@ -21,7 +21,11 @@ describe('Auth Routes', () => {
     app = await buildApp();
     await app.ready();
 
-    await db.insert(users).values({ name: TEST_USER, password: hashPassword('test-password'), group: 'user' });
+    await db.insert(users).values({
+      name: TEST_USER,
+      password: hashPassword('test-password'),
+      group: 'user',
+    });
     token = app.jwt.sign({ name: TEST_USER, group: 'user' });
   });
 

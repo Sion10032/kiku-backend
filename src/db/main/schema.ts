@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  primaryKey,
+} from 'drizzle-orm/sqlite-core';
 
 export const circles = sqliteTable('t_circle', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -10,7 +16,9 @@ export const works = sqliteTable('t_work', {
   rootFolder: text('root_folder').notNull(),
   dir: text('dir').notNull(),
   title: text('title').notNull(),
-  circleId: integer('circle_id').notNull().references(() => circles.id),
+  circleId: integer('circle_id')
+    .notNull()
+    .references(() => circles.id),
   nsfw: integer('nsfw', { mode: 'boolean' }),
   release: text('release'),
   dlCount: integer('dl_count'),
@@ -34,15 +42,31 @@ export const vas = sqliteTable('t_va', {
   name: text('name').notNull(),
 });
 
-export const tagWork = sqliteTable('r_tag_work', {
-  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
-  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
-}, t => [ primaryKey({ columns: [ t.tagId, t.workId ] }) ]);
+export const tagWork = sqliteTable(
+  'r_tag_work',
+  {
+    tagId: integer('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.tagId, t.workId] })],
+);
 
-export const vaWork = sqliteTable('r_va_work', {
-  vaId: text('va_id').notNull().references(() => vas.id, { onDelete: 'cascade' }),
-  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
-}, t => [ primaryKey({ columns: [ t.vaId, t.workId ] }) ]);
+export const vaWork = sqliteTable(
+  'r_va_work',
+  {
+    vaId: text('va_id')
+      .notNull()
+      .references(() => vas.id, { onDelete: 'cascade' }),
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.vaId, t.workId] })],
+);
 
 export const users = sqliteTable('t_user', {
   name: text('name').primaryKey(),
@@ -50,30 +74,46 @@ export const users = sqliteTable('t_user', {
   group: text('group').notNull(),
 });
 
-export const reviews = sqliteTable('t_review', {
-  userName: text('user_name').notNull().references(() => users.name, { onDelete: 'cascade' }),
-  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
-  rating: integer('rating'),
-  reviewText: text('review_text'),
-  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
-  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
-  progress: text('progress'),
-}, t => [ primaryKey({ columns: [ t.userName, t.workId ] }) ]);
+export const reviews = sqliteTable(
+  't_review',
+  {
+    userName: text('user_name')
+      .notNull()
+      .references(() => users.name, { onDelete: 'cascade' }),
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+    rating: integer('rating'),
+    reviewText: text('review_text'),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+    progress: text('progress'),
+  },
+  (t) => [primaryKey({ columns: [t.userName, t.workId] })],
+);
 
 // 动态播放进度：记录用户播放到每个作品的哪个音轨的哪个时间（与 t_review.progress 手动枚举无关）
-export const userProgress = sqliteTable('t_user_progress', {
-  userName: text('user_name').notNull().references(() => users.name, { onDelete: 'cascade' }),
-  workId: text('work_id').notNull().references(() => works.id, { onDelete: 'cascade' }),
-  // 音轨标识 = 文件相对路径（media index，即前端 Track.hash）
-  mediaIndex: text('media_index').notNull(),
-  // 标题快照（列表展示时免读文件系统）
-  trackTitle: text('track_title'),
-  // 已播放到的时间（秒）
-  position: real('position').notNull().default(0),
-  // 音轨总时长（秒，未知为 null）
-  duration: real('duration'),
-  updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
-}, t => [ primaryKey({ columns: [ t.userName, t.workId, t.mediaIndex ] }) ]);
+export const userProgress = sqliteTable(
+  't_user_progress',
+  {
+    userName: text('user_name')
+      .notNull()
+      .references(() => users.name, { onDelete: 'cascade' }),
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+    // 音轨标识 = 文件相对路径（media index，即前端 Track.hash）
+    mediaIndex: text('media_index').notNull(),
+    // 标题快照（列表展示时免读文件系统）
+    trackTitle: text('track_title'),
+    // 已播放到的时间（秒）
+    position: real('position').notNull().default(0),
+    // 音轨总时长（秒，未知为 null）
+    duration: real('duration'),
+    updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
+  },
+  (t) => [primaryKey({ columns: [t.userName, t.workId, t.mediaIndex] })],
+);
 
 // Export types for all tables
 export type Circle = typeof circles.$inferSelect;

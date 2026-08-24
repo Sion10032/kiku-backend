@@ -56,14 +56,24 @@ export interface BlobRecord {
  * @param data 原始字节
  * @param mimeType 可选的 MIME 类型
  */
-export function putBlob(namespace: string, key: string, data: Buffer, mimeType?: string): void {
+export function putBlob(
+  namespace: string,
+  key: string,
+  data: Buffer,
+  mimeType?: string,
+): void {
   const mime = mimeType ?? null;
   blobDb
     .insert(blobs)
     .values({ namespace, key, data, mimeType: mime, size: data.byteLength })
     .onConflictDoUpdate({
-      target: [ blobs.namespace, blobs.key ],
-      set: { data, mimeType: mime, size: data.byteLength, createdAt: sql`(datetime('now'))` },
+      target: [blobs.namespace, blobs.key],
+      set: {
+        data,
+        mimeType: mime,
+        size: data.byteLength,
+        createdAt: sql`(datetime('now'))`,
+      },
     })
     .run();
 }

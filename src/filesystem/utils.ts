@@ -8,8 +8,11 @@ export interface FolderInfo {
   dirName: string;
 }
 
-
-export async function getFolderList(dirPath: string, maxDepth: number, currentDepth: number = 0): Promise<FolderInfo[]> {
+export async function getFolderList(
+  dirPath: string,
+  maxDepth: number,
+  currentDepth: number = 0,
+): Promise<FolderInfo[]> {
   if (currentDepth >= maxDepth) {
     return [];
   }
@@ -27,24 +30,26 @@ export async function getFolderList(dirPath: string, maxDepth: number, currentDe
         // If this folder has an RJ code, it's a work folder — don't recurse deeper
         if (rjCode !== null) {
           folders.push({ path: fullPath, rjCode, dirName: entry.name });
-        }
-        else {
+        } else {
           // No RJ code — recurse to find work folders inside
-          folders.push(...await getFolderList(fullPath, maxDepth, currentDepth + 1));
+          folders.push(
+            ...(await getFolderList(fullPath, maxDepth, currentDepth + 1)),
+          );
         }
       }
     }
-  }
-  catch {
+  } catch {
     // Ignore errors (permission denied, etc.)
   }
 
   return folders;
 }
 
-export async function getTrackList(dirPath: string): Promise<Array<{ name: string; path: string; index: number; }>> {
-  const audioExtensions = [ '.mp3', '.ogg', '.wav', '.flac', '.m4a' ];
-  const tracks: Array<{ name: string; path: string; index: number; }> = [];
+export async function getTrackList(
+  dirPath: string,
+): Promise<Array<{ name: string; path: string; index: number }>> {
+  const audioExtensions = ['.mp3', '.ogg', '.wav', '.flac', '.m4a'];
+  const tracks: Array<{ name: string; path: string; index: number }> = [];
 
   try {
     const entries = await readdir(dirPath, { withFileTypes: true });
@@ -62,8 +67,7 @@ export async function getTrackList(dirPath: string): Promise<Array<{ name: strin
         }
       }
     }
-  }
-  catch {
+  } catch {
     // Ignore errors
   }
 
@@ -77,7 +81,10 @@ export interface TreeNode {
   children?: TreeNode[];
 }
 
-export function toTree(dirPath: string, tracks: Array<{ name: string; path: string; index: number; }>): TreeNode[] {
+export function toTree(
+  dirPath: string,
+  tracks: Array<{ name: string; path: string; index: number }>,
+): TreeNode[] {
   const tree: TreeNode[] = [];
   const folderMap = new Map<string, TreeNode>();
 
@@ -91,8 +98,7 @@ export function toTree(dirPath: string, tracks: Array<{ name: string; path: stri
         name: track.name,
         index: track.index,
       });
-    }
-    else {
+    } else {
       const folderName = parts[0] ?? '';
       if (folderName && !folderMap.has(folderName)) {
         const folderNode: TreeNode = {
@@ -118,32 +124,54 @@ export function toTree(dirPath: string, tracks: Array<{ name: string; path: stri
   return tree;
 }
 
-export type TrackNode =
-  & {
-    title: string;
-  }
-  & (
-    | {
+export type TrackNode = {
+  title: string;
+} & (
+  | {
       type: 'folder';
       children: TrackNode[];
     }
-    | {
+  | {
       type: 'audio' | 'text' | 'image' | 'other';
       title: string;
       hash: string; // 相对于 work dir 的路径，如 'subfolder/track01.mp3'
     }
-  );
+);
 
 const SUPPORTED_EXTENSIONS = new Set([
-  '.mp3', '.ogg', '.opus', '.wav', '.aac', '.flac', '.webm', '.mp4', '.m4a',
-  '.txt', '.lrc', '.srt', '.ass',
+  '.mp3',
+  '.ogg',
+  '.opus',
+  '.wav',
+  '.aac',
+  '.flac',
+  '.webm',
+  '.mp4',
+  '.m4a',
+  '.txt',
+  '.lrc',
+  '.srt',
+  '.ass',
   '.pdf',
-  '.jpg', '.jpeg', '.png', '.webp',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
 ]);
 
-const AUDIO_EXTENSIONS = new Set([ '.mp3', '.ogg', '.opus', '.wav', '.aac', '.flac', '.webm', '.mp4', '.m4a' ]);
-const TEXT_EXTENSIONS = new Set([ '.txt', '.lrc', '.srt', '.ass' ]);
-const IMAGE_EXTENSIONS = new Set([ '.jpg', '.jpeg', '.png', '.webp' ]);
+const AUDIO_EXTENSIONS = new Set([
+  '.mp3',
+  '.ogg',
+  '.opus',
+  '.wav',
+  '.aac',
+  '.flac',
+  '.webm',
+  '.mp4',
+  '.m4a',
+]);
+const TEXT_EXTENSIONS = new Set(['.txt', '.lrc', '.srt', '.ass']);
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 function getTrackType(ext: string): 'audio' | 'text' | 'image' | 'other' {
   if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
@@ -157,9 +185,14 @@ function getTrackType(ext: string): 'audio' | 'text' | 'image' | 'other' {
  * @param dirPath 目录的绝对路径
  * @param basePath 相对于作品根目录的路径（用于生成 hash）
  */
-async function buildTree(dirPath: string, basePath: string): Promise<TrackNode[]> {
+async function buildTree(
+  dirPath: string,
+  basePath: string,
+): Promise<TrackNode[]> {
   const nodes: TrackNode[] = [];
-  const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(dirPath, { withFileTypes: true }).catch(
+    () => [],
+  );
 
   // 先处理文件夹，再处理文件，保持排序
   const dirs: string[] = [];
@@ -168,8 +201,10 @@ async function buildTree(dirPath: string, basePath: string): Promise<TrackNode[]
   for (const entry of entries) {
     if (entry.isDirectory()) {
       dirs.push(entry.name);
-    }
-    else if (entry.isFile() && SUPPORTED_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+    } else if (
+      entry.isFile() &&
+      SUPPORTED_EXTENSIONS.has(extname(entry.name).toLowerCase())
+    ) {
       files.push(entry.name);
     }
   }
@@ -215,7 +250,7 @@ export function nameToUUID(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     const char = name.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
   return Math.abs(hash).toString(16).padStart(8, '0');

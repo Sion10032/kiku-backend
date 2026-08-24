@@ -1,5 +1,9 @@
 import Fastify from 'fastify';
-import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from 'fastify-type-provider-zod';
 import sensible from '@fastify/sensible';
 import fastifySSE from '@fastify/sse';
 import { authPlugin } from './auth/plugin.js';
@@ -62,8 +66,7 @@ function initializeDirectories() {
       mkdirSync(dbDir, { recursive: true });
       console.log(`Created database directory: ${dbDir}`);
     }
-  }
-  catch (error) {
+  } catch (error) {
     console.error('Failed to initialize directories:', error);
   }
 }

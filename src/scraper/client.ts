@@ -30,9 +30,10 @@ export async function retryFetch(
       if (options.externalSignal) {
         if (options.externalSignal.aborted) {
           controller.abort();
-        }
-        else {
-          options.externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+        } else {
+          options.externalSignal.addEventListener('abort', onExternalAbort, {
+            once: true,
+          });
         }
       }
 
@@ -57,8 +58,7 @@ export async function retryFetch(
       }
 
       return response;
-    }
-    catch (err) {
+    } catch (err) {
       lastError = err as Error;
 
       // Don't retry if aborted
@@ -68,7 +68,7 @@ export async function retryFetch(
 
       if (i < retries) {
         const delay = config.retryDelay * (i + 1);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
@@ -76,12 +76,18 @@ export async function retryFetch(
   throw lastError || new Error('Max retries exceeded');
 }
 
-export async function fetchText(url: string, options?: FetchOptions): Promise<string> {
+export async function fetchText(
+  url: string,
+  options?: FetchOptions,
+): Promise<string> {
   const response = await retryFetch(url, options);
   return response.text();
 }
 
-export async function fetchJson<T = unknown>(url: string, options?: FetchOptions): Promise<T> {
+export async function fetchJson<T = unknown>(
+  url: string,
+  options?: FetchOptions,
+): Promise<T> {
   const response = await retryFetch(url, {
     ...options,
     headers: {
@@ -92,12 +98,16 @@ export async function fetchJson<T = unknown>(url: string, options?: FetchOptions
   return response.json() as Promise<T>;
 }
 
-export async function fetchHtml(url: string, options?: FetchOptions): Promise<string> {
+export async function fetchHtml(
+  url: string,
+  options?: FetchOptions,
+): Promise<string> {
   const response = await retryFetch(url, {
     ...options,
     headers: {
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       ...options?.headers,
     },
   });

@@ -3,7 +3,11 @@ import type { Config } from '../config/schema.js';
 import { getFolderList, getTrackList } from './utils.js';
 import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
 import { upsertWork } from '../services/work.service.js';
-import { downloadCover, coverExists, type CoverType } from '../services/cover.service.js';
+import {
+  downloadCover,
+  coverExists,
+  type CoverType,
+} from '../services/cover.service.js';
 
 interface ScanTask {
   id: number;
@@ -23,18 +27,35 @@ interface MainLog {
 }
 
 export type ScanEvent =
-  | { type: 'SCAN_TASKS'; tasks: Array<{ id: number; title: string; status: string; }>; }
-  | { type: 'SCAN_FAILED_TASKS'; failedTasks: Array<{ id: number; title: string; error: string; }>; }
-  | { type: 'SCAN_MAIN_LOGS'; mainLogs: MainLog[]; }
-  | { type: 'SCAN_RESULTS'; results: { total: number; added: number; updated: number; failed: number; }; }
-  | { type: 'SCAN_FINISHED'; message: string; }
-  | { type: 'SCAN_ERROR'; error: string; };
+  | {
+      type: 'SCAN_TASKS';
+      tasks: Array<{ id: number; title: string; status: string }>;
+    }
+  | {
+      type: 'SCAN_FAILED_TASKS';
+      failedTasks: Array<{ id: number; title: string; error: string }>;
+    }
+  | { type: 'SCAN_MAIN_LOGS'; mainLogs: MainLog[] }
+  | {
+      type: 'SCAN_RESULTS';
+      results: {
+        total: number;
+        added: number;
+        updated: number;
+        failed: number;
+      };
+    }
+  | { type: 'SCAN_FINISHED'; message: string }
+  | { type: 'SCAN_ERROR'; error: string };
 
 /**
  * Async generator that performs a scan, yielding events as it progresses.
  * Checks the abort signal between operations so the scan can be terminated.
  */
-async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator<ScanEvent> {
+async function* performScan(
+  config: Config,
+  signal: AbortSignal,
+): AsyncGenerator<ScanEvent> {
   const tasks: ScanTask[] = [];
   const failedTasks: ScanTask[] = [];
   const mainLogs: MainLog[] = [];
@@ -44,16 +65,22 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
   };
 
   log('info', 'Starting scan...');
-  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
   // Scan each root folder to build the task list
   for (const rootFolder of config.rootFolders) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
-    log('info', `Scanning root folder: ${rootFolder.name} (${rootFolder.path})`);
-    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+    log(
+      'info',
+      `Scanning root folder: ${rootFolder.name} (${rootFolder.path})`,
+    );
+    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
-    const folders = await getFolderList(rootFolder.path, config.scannerMaxRecursionDepth);
+    const folders = await getFolderList(
+      rootFolder.path,
+      config.scannerMaxRecursionDepth,
+    );
 
     for (const folder of folders) {
       if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
@@ -78,14 +105,18 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
 
         yield {
           type: 'SCAN_TASKS',
-          tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+          tasks: tasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+          })),
         };
       }
     }
   }
 
   log('info', `Found ${tasks.length} works to scan`);
-  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
   // Process each task
   let added = 0;
@@ -99,19 +130,23 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
       task.status = 'scanning';
       yield {
         type: 'SCAN_TASKS',
-        tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+        tasks: tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+        })),
       };
 
       const rjCode = task.rjCode;
 
       log('info', `Fetching metadata for ${rjCode}...`);
-      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
       // Fetch metadata from DLsite
       const metadata = await fetchDLsiteWorkInfo(rjCode, signal);
 
       log('info', `Got metadata: ${metadata.title}`);
-      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
       // Write to database
       const result = await upsertWork({
@@ -127,7 +162,10 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
         reviewCount: metadata.reviewCount || undefined,
         rateCount: metadata.rateCount || undefined,
         rateAverage2dp: metadata.rateAverage || undefined,
-        rateCountDetail: Object.keys(metadata.rateCountDetail).length > 0 ? metadata.rateCountDetail : undefined,
+        rateCountDetail:
+          Object.keys(metadata.rateCountDetail).length > 0
+            ? metadata.rateCountDetail
+            : undefined,
         rank: Object.keys(metadata.rank).length > 0 ? metadata.rank : undefined,
         tags: metadata.tags,
         vas: metadata.vas,
@@ -142,41 +180,48 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
       // 下载封面（如果不存在）
       // 使用 sourceId（未翻译版本）下载封面，如果不存在则使用当前 ID
       const coverSourceId = metadata.sourceId || rjCode;
-      const coverTypes: CoverType[] = [ 'main', 'sam', '240x240' ];
+      const coverTypes: CoverType[] = ['main', 'sam', '240x240'];
       for (const type of coverTypes) {
         if (!coverExists(rjCode, type)) {
-          log('info', `Downloading cover ${type} for ${rjCode} (source: ${coverSourceId})...`);
-          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+          log(
+            'info',
+            `Downloading cover ${type} for ${rjCode} (source: ${coverSourceId})...`,
+          );
+          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
           try {
-            const success = await downloadCover(rjCode, type, signal, coverSourceId);
+            const success = await downloadCover(
+              rjCode,
+              type,
+              signal,
+              coverSourceId,
+            );
             if (success) {
               log('info', `Cover ${type} downloaded for ${rjCode}`);
-            }
-            else {
+            } else {
               log('warning', `Failed to download cover ${type} for ${rjCode}`);
             }
-          }
-          catch (coverErr) {
-            log('warning', `Error downloading cover ${type} for ${rjCode}: ${String(coverErr)}`);
+          } catch (coverErr) {
+            log(
+              'warning',
+              `Error downloading cover ${type} for ${rjCode}: ${String(coverErr)}`,
+            );
           }
 
-          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
         }
       }
 
       if (result.created) {
         added++;
         log('info', `Added: ${rjCode} - ${metadata.title}`);
-      }
-      else {
+      } else {
         updated++;
         log('info', `Updated: ${rjCode} - ${metadata.title}`);
       }
 
       task.status = 'completed';
-    }
-    catch (err) {
+    } catch (err) {
       task.status = 'failed';
       task.error = String(err);
       failedTasks.push(task);
@@ -187,9 +232,9 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
 
     yield {
       type: 'SCAN_TASKS',
-      tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+      tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
     };
-    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [ ...mainLogs ] };
+    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
   }
 
   // Send final results
@@ -201,7 +246,11 @@ async function* performScan(config: Config, signal: AbortSignal): AsyncGenerator
   if (failedTasks.length > 0) {
     yield {
       type: 'SCAN_FAILED_TASKS',
-      failedTasks: failedTasks.map(t => ({ id: t.id, title: t.title, error: t.error || 'Unknown error' })),
+      failedTasks: failedTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        error: t.error || 'Unknown error',
+      })),
     };
   }
 }
@@ -246,17 +295,20 @@ class ScannerManager extends EventEmitter {
       for await (const event of performScan(config, signal)) {
         this.emit('scan', event);
       }
-      this.emit('scan', { type: 'SCAN_FINISHED', message: 'Scan completed successfully' });
-    }
-    catch (err) {
+      this.emit('scan', {
+        type: 'SCAN_FINISHED',
+        message: 'Scan completed successfully',
+      });
+    } catch (err) {
       if (signal.aborted) {
-        this.emit('scan', { type: 'SCAN_FINISHED', message: 'Scan was terminated' });
-      }
-      else {
+        this.emit('scan', {
+          type: 'SCAN_FINISHED',
+          message: 'Scan was terminated',
+        });
+      } else {
         this.emit('scan', { type: 'SCAN_ERROR', error: String(err) });
       }
-    }
-    finally {
+    } finally {
       this.scanning = false;
       this.currentController = null;
     }

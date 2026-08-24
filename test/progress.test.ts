@@ -2,7 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { setupTestEnvironment } from './helpers/setup';
 import { buildApp } from '../src/app';
 import { db } from '../src/db/main/index.js';
-import { users, circles, works, userProgress, reviews } from '../src/db/main/schema.js';
+import {
+  users,
+  circles,
+  works,
+  userProgress,
+  reviews,
+} from '../src/db/main/schema.js';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
@@ -22,8 +28,13 @@ describe('Progress Routes', () => {
     await app.ready();
 
     // 造数：用户 + 社团 + 作品（progress 外键依赖）
-    await db.insert(users).values({ name: TEST_USER, password: 'test-password', group: 'user' });
-    const circle = await db.insert(circles).values({ name: `测试社团_${RUN}` }).returning();
+    await db
+      .insert(users)
+      .values({ name: TEST_USER, password: 'test-password', group: 'user' });
+    const circle = await db
+      .insert(circles)
+      .values({ name: `测试社团_${RUN}` })
+      .returning();
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
@@ -41,7 +52,9 @@ describe('Progress Routes', () => {
     await db.delete(works).where(eq(works.id, WORK_ID));
     await db.delete(userProgress).where(eq(userProgress.workId, WORK_ID));
     await db.delete(reviews).where(eq(reviews.workId, WORK_ID));
-    const circle = await db.query.circles.findFirst({ where: { RAW: (t, op) => op.eq(t.name, `测试社团_${RUN}`) } });
+    const circle = await db.query.circles.findFirst({
+      where: { RAW: (t, op) => op.eq(t.name, `测试社团_${RUN}`) },
+    });
     if (circle) await db.delete(circles).where(eq(circles.id, circle.id));
     await app.close();
   });
@@ -134,13 +147,24 @@ describe('Progress Routes', () => {
         method: 'PUT',
         url: '/api/progress',
         headers: { authorization: `Bearer ${token}` },
-        payload: { work_id: WORK_ID, media_index: 'track02.mp3', track_title: '第二轨', position: 200, duration: 200 },
+        payload: {
+          work_id: WORK_ID,
+          media_index: 'track02.mp3',
+          track_title: '第二轨',
+          position: 200,
+          duration: 200,
+        },
       });
       await app.inject({
         method: 'PUT',
         url: '/api/progress',
         headers: { authorization: `Bearer ${token}` },
-        payload: { work_id: WORK_ID, media_index: 'track03.mp3', position: 96, duration: 100 },
+        payload: {
+          work_id: WORK_ID,
+          media_index: 'track03.mp3',
+          position: 96,
+          duration: 100,
+        },
       });
       await app.inject({
         method: 'PUT',
@@ -155,7 +179,9 @@ describe('Progress Routes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(res.statusCode).toBe(200);
-      const work = res.json().works.find((w: { id: string; }) => w.id === WORK_ID);
+      const work = res
+        .json()
+        .works.find((w: { id: string }) => w.id === WORK_ID);
       expect(work).toBeDefined();
       expect(work.userProgress).not.toBeNull();
       expect(work.userProgress.listenedCount).toBe(2); // track02 + track03
@@ -191,7 +217,9 @@ describe('Progress Routes', () => {
         url: '/api/works',
         headers: { authorization: `Bearer ${token}` },
       });
-      const work = res.json().works.find((w: { id: string; }) => w.id === WORK_ID);
+      const work = res
+        .json()
+        .works.find((w: { id: string }) => w.id === WORK_ID);
       expect(work.userProgress).toBeNull();
     });
   });

@@ -32,7 +32,8 @@ export async function createUser(data: {
 }
 
 export async function updateUserPassword(name: string, newPassword: string) {
-  await db.update(users)
+  await db
+    .update(users)
     .set({ password: newPassword })
     .where(eq(users.name, name));
 }

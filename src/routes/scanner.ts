@@ -27,29 +27,37 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   // Start a scan.
-  fastify.post('/scan', {
-    preHandler: [ fastify.authenticateAdmin ],
-    schema: {
-      response: {
-        200: z.object({ success: z.boolean() }),
+  fastify.post(
+    '/scan',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        response: {
+          200: z.object({ success: z.boolean() }),
+        },
       },
     },
-  }, async () => {
-    const config = getConfig();
-    scanner.startScan(config);
-    return { success: true };
-  });
+    async () => {
+      const config = getConfig();
+      scanner.startScan(config);
+      return { success: true };
+    },
+  );
 
   // Terminate the running scan.
-  fastify.post('/kill', {
-    preHandler: [ fastify.authenticateAdmin ],
-    schema: {
-      response: {
-        200: z.object({ success: z.boolean() }),
+  fastify.post(
+    '/kill',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        response: {
+          200: z.object({ success: z.boolean() }),
+        },
       },
     },
-  }, async () => {
-    scanner.killScan();
-    return { success: true };
-  });
+    async () => {
+      scanner.killScan();
+      return { success: true };
+    },
+  );
 };

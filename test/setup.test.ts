@@ -158,7 +158,10 @@ describe('Setup / Register / Private-mode', () => {
     const health = await app.inject({ method: 'GET', url: '/api/health' });
     expect(health.statusCode).toBe(200);
 
-    const shared = await app.inject({ method: 'GET', url: '/api/config/shared' });
+    const shared = await app.inject({
+      method: 'GET',
+      url: '/api/config/shared',
+    });
     expect(shared.statusCode).toBe(200);
   });
 
@@ -179,8 +182,7 @@ describe('Setup / Register / Private-mode', () => {
       await initAdminFromEnv();
       const user = await getUserByName(ENV_ADMIN);
       expect(user).toBeUndefined();
-    }
-    finally {
+    } finally {
       delete process.env.KIKU_ADMIN_USER;
       delete process.env.KIKU_ADMIN_PASSWORD;
     }
@@ -190,8 +192,7 @@ describe('Setup / Register / Private-mode', () => {
     process.env.KIKU_ADMIN_USER = ENV_ADMIN;
     try {
       await expect(initAdminFromEnv()).rejects.toThrow();
-    }
-    finally {
+    } finally {
       delete process.env.KIKU_ADMIN_USER;
     }
   });
@@ -201,8 +202,7 @@ describe('Setup / Register / Private-mode', () => {
     process.env.KIKU_ADMIN_PASSWORD = '12345';
     try {
       await expect(initAdminFromEnv()).rejects.toThrow();
-    }
-    finally {
+    } finally {
       delete process.env.KIKU_ADMIN_USER;
       delete process.env.KIKU_ADMIN_PASSWORD;
     }
@@ -220,22 +220,27 @@ describe('Setup / Register / Private-mode', () => {
       const user = await getUserByName(ENV_ADMIN);
       expect(user?.group).toBe('administrator');
       expect(verifyPassword('env-pass-123', user!.password)).toBe(true);
-    }
-    finally {
+    } finally {
       delete process.env.KIKU_ADMIN_USER;
       delete process.env.KIKU_ADMIN_PASSWORD;
       await db.delete(users).where(eq(users.name, ENV_ADMIN));
       // 恢复本文件 setup 阶段创建的用户（afterAll 清理依赖）
-      await db.insert(users).values({
-        name: ADMIN,
-        password: 'x',
-        group: 'administrator',
-      }).onConflictDoNothing();
-      await db.insert(users).values({
-        name: REG_USER,
-        password: 'x',
-        group: 'user',
-      }).onConflictDoNothing();
+      await db
+        .insert(users)
+        .values({
+          name: ADMIN,
+          password: 'x',
+          group: 'administrator',
+        })
+        .onConflictDoNothing();
+      await db
+        .insert(users)
+        .values({
+          name: REG_USER,
+          password: 'x',
+          group: 'user',
+        })
+        .onConflictDoNothing();
     }
   });
 });

@@ -1,5 +1,12 @@
 import { db } from '../db/main/index.js';
-import { works, circles, tags, vas, tagWork, vaWork } from '../db/main/schema.js';
+import {
+  works,
+  circles,
+  tags,
+  vas,
+  tagWork,
+  vaWork,
+} from '../db/main/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Config } from '../config/schema.js';
 
@@ -16,7 +23,7 @@ export async function updateWorkMetadata(
     title?: string;
     circleName?: string;
     tags?: string[];
-    vas?: Array<{ id: string; name: string; }>;
+    vas?: Array<{ id: string; name: string }>;
     nsfw?: boolean;
     release?: string;
     dlCount?: number;
@@ -45,12 +52,16 @@ export async function updateWorkMetadata(
       });
 
       if (!circle) {
-        const result = await db.insert(circles).values({ name: metadata.circleName }).returning();
+        const result = await db
+          .insert(circles)
+          .values({ name: metadata.circleName })
+          .returning();
         circle = result[0];
       }
 
       if (circle) {
-        await db.update(works)
+        await db
+          .update(works)
           .set({ circleId: circle.id })
           .where(eq(works.id, workId));
       }
@@ -63,14 +74,19 @@ export async function updateWorkMetadata(
     if (metadata.release) updateData.release = metadata.release;
     if (metadata.dlCount !== undefined) updateData.dlCount = metadata.dlCount;
     if (metadata.price !== undefined) updateData.price = metadata.price;
-    if (metadata.reviewCount !== undefined) updateData.reviewCount = metadata.reviewCount;
-    if (metadata.rateCount !== undefined) updateData.rateCount = metadata.rateCount;
-    if (metadata.rateAverage2dp !== undefined) updateData.rateAverage2dp = metadata.rateAverage2dp;
-    if (metadata.rateCountDetail) updateData.rateCountDetail = JSON.stringify(metadata.rateCountDetail);
+    if (metadata.reviewCount !== undefined)
+      updateData.reviewCount = metadata.reviewCount;
+    if (metadata.rateCount !== undefined)
+      updateData.rateCount = metadata.rateCount;
+    if (metadata.rateAverage2dp !== undefined)
+      updateData.rateAverage2dp = metadata.rateAverage2dp;
+    if (metadata.rateCountDetail)
+      updateData.rateCountDetail = JSON.stringify(metadata.rateCountDetail);
     if (metadata.rank) updateData.rank = JSON.stringify(metadata.rank);
 
     if (Object.keys(updateData).length > 0) {
-      await db.update(works)
+      await db
+        .update(works)
         .set(updateData)
         .where(eq(works.id, workId as string));
     }
@@ -87,7 +103,10 @@ export async function updateWorkMetadata(
         });
 
         if (!tag) {
-          const result = await db.insert(tags).values({ name: tagName }).returning();
+          const result = await db
+            .insert(tags)
+            .values({ name: tagName })
+            .returning();
           tag = result[0];
         }
 
@@ -112,7 +131,10 @@ export async function updateWorkMetadata(
         });
 
         if (!existingVa) {
-          const result = await db.insert(vas).values({ id: va.id, name: va.name }).returning();
+          const result = await db
+            .insert(vas)
+            .values({ id: va.id, name: va.name })
+            .returning();
           existingVa = result[0];
         }
 
@@ -126,13 +148,14 @@ export async function updateWorkMetadata(
     }
 
     return { workId, title: metadata.title || work.title, success: true };
-  }
-  catch (err) {
+  } catch (err) {
     return { workId, title: '', success: false, error: String(err) };
   }
 }
 
-export async function updateAllWorksMetadata(_config: Config): Promise<UpdateResult[]> {
+export async function updateAllWorksMetadata(
+  _config: Config,
+): Promise<UpdateResult[]> {
   const results: UpdateResult[] = [];
   const allWorks = await db.query.works.findMany();
 

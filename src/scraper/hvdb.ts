@@ -7,11 +7,13 @@ export interface HVDBWorkInfo {
   circle: string;
   releaseDate: string;
   tags: string[];
-  vas: Array<{ id: string; name: string; }>;
+  vas: Array<{ id: string; name: string }>;
   description: string;
 }
 
-export async function fetchHVDBWorkInfo(rjId: string): Promise<HVDBWorkInfo | null> {
+export async function fetchHVDBWorkInfo(
+  rjId: string,
+): Promise<HVDBWorkInfo | null> {
   const url = `https://hvdb.me/Dashboard/WorkDetails/${rjId}`;
 
   try {
@@ -35,7 +37,7 @@ export async function fetchHVDBWorkInfo(rjId: string): Promise<HVDBWorkInfo | nu
     });
 
     // Extract VAs
-    const vas: Array<{ id: string; name: string; }> = [];
+    const vas: Array<{ id: string; name: string }> = [];
     $('a[href*="VA"]').each((_, el) => {
       const name = $(el).text().trim();
       const href = $(el).attr('href') || '';
@@ -46,7 +48,10 @@ export async function fetchHVDBWorkInfo(rjId: string): Promise<HVDBWorkInfo | nu
     });
 
     // Extract release date
-    const releaseDateText = $('td:contains("Release Date")').next('td').text().trim();
+    const releaseDateText = $('td:contains("Release Date")')
+      .next('td')
+      .text()
+      .trim();
     const releaseDate = releaseDateText || '';
 
     return {
@@ -58,8 +63,7 @@ export async function fetchHVDBWorkInfo(rjId: string): Promise<HVDBWorkInfo | nu
       vas,
       description,
     };
-  }
-  catch {
+  } catch {
     // HVDB might not have this work
     return null;
   }
@@ -98,8 +102,7 @@ export async function searchHVDB(keyword: string): Promise<HVDBWorkInfo[]> {
     });
 
     return works;
-  }
-  catch {
+  } catch {
     return [];
   }
 }
