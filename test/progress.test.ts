@@ -21,9 +21,9 @@ describe('Progress Routes', () => {
     app = await buildApp();
     await app.ready();
 
-    // 造数：用户 + 圈子 + 作品（progress 外键依赖）
+    // 造数：用户 + 社团 + 作品（progress 外键依赖）
     await db.insert(users).values({ name: TEST_USER, password: 'test-password', group: 'user' });
-    const circle = await db.insert(circles).values({ name: `测试圈子_${RUN}` }).returning();
+    const circle = await db.insert(circles).values({ name: `测试社团_${RUN}` }).returning();
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
@@ -36,12 +36,12 @@ describe('Progress Routes', () => {
   });
 
   afterAll(async () => {
-    // 清理（progress/review 级联删除，仅清用户与作品、圈子）
+    // 清理（progress/review 级联删除，仅清用户与作品、社团）
     await db.delete(users).where(eq(users.name, TEST_USER));
     await db.delete(works).where(eq(works.id, WORK_ID));
     await db.delete(userProgress).where(eq(userProgress.workId, WORK_ID));
     await db.delete(reviews).where(eq(reviews.workId, WORK_ID));
-    const circle = await db.query.circles.findFirst({ where: eq(circles.name, `测试圈子_${RUN}`) });
+    const circle = await db.query.circles.findFirst({ where: eq(circles.name, `测试社团_${RUN}`) });
     if (circle) await db.delete(circles).where(eq(circles.id, circle.id));
     await app.close();
   });
