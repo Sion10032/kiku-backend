@@ -1,8 +1,12 @@
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getConfig } from '../config/index.js';
+import { openWorkSource, type WorkSource } from '../filesystem/source/index.js';
+import {
+  readAllFromSource,
+  sanitizeMediaIndex,
+} from '../filesystem/source/types.js';
 import { getWorkById } from '../services/work.service.js';
 
 // 通配参数（路由形如 /stream/:id/*）：媒体相对路径可含子文件夹（"早期特典/mp3/x.mp3"）
@@ -10,6 +14,19 @@ const mediaParamsSchema = z.object({
   id: z.string(),
   '*': z.string().min(1),
 });
+
+/** 解析 media index 路径 → WorkSource；失败返回 null（调用方应 404）。 */
+async function resolveSource(
+  id: string,
+  index: string,
+): Promise<WorkSource | null> {
+  if (!sanitizeMediaIndex(index)) return null;
+  const config = getConfig();
+  const work = await getWorkById(id);
+  const rootFolder = config.rootFolders.find((f) => f.name === work.rootFolder);
+  if (!rootFolder) return null;
+  return openWorkSource(rootFolder.path, work.dir);
+}
 
 const mimeTypes: Record<string, string> = {
   '.mp3': 'audio/mpeg',
@@ -51,52 +68,44 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id, '*': index } = request.params;
-      const config = getConfig();
 
       try {
-        const work = await getWorkById(id);
-        const rootFolder = config.rootFolders.find(
-          (f) => f.name === work.rootFolder,
-        );
-
-        if (!rootFolder) {
-          return reply.status(404).send({ error: 'Root folder not found' });
-        }
-
-        const filePath = join(rootFolder.path, work.dir, index);
-        if (!existsSync(filePath)) {
+        const source = await resolveSource(id, index);
+        if (!source || !(await source.has(index))) {
           return reply.status(404).send({ error: 'File not found' });
         }
 
-        const stat = statSync(filePath);
-        const ext = extname(filePath).toLowerCase();
+        const size = await source.size(index);
+        const ext = extname(index).toLowerCase();
         const contentType = mimeTypes[ext] || 'application/octet-stream';
 
-        const range = parseRange(request.headers.range, stat.size);
+        const range = parseRange(request.headers.range, size);
         if (range === null) {
           return reply
             .status(416)
-            .header('Content-Range', `bytes */${stat.size}`)
+            .header('Content-Range', `bytes */${size}`)
             .send();
         }
         if (range) {
+          const stream = await source.readRange(index, range.start, range.end);
           return reply
             .status(206)
             .header('Content-Type', contentType)
             .header('Accept-Ranges', 'bytes')
             .header(
               'Content-Range',
-              `bytes ${range.start}-${range.end}/${stat.size}`,
+              `bytes ${range.start}-${range.end}/${size}`,
             )
             .header('Content-Length', range.end - range.start + 1)
-            .send(createReadStream(filePath, range));
+            .send(stream);
         }
 
+        const stream = await source.readRange(index, 0, size - 1);
         return reply
           .header('Content-Type', contentType)
           .header('Accept-Ranges', 'bytes')
-          .header('Content-Length', stat.size)
-          .send(createReadStream(filePath));
+          .header('Content-Length', size)
+          .send(stream);
       } catch {
         return reply.status(404).send({ error: 'Work not found' });
       }
@@ -112,32 +121,23 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id, '*': index } = request.params;
-      const config = getConfig();
 
       try {
-        const work = await getWorkById(id);
-        const rootFolder = config.rootFolders.find(
-          (f) => f.name === work.rootFolder,
-        );
-
-        if (!rootFolder) {
-          return reply.status(404).send({ error: 'Root folder not found' });
-        }
-
-        const filePath = join(rootFolder.path, work.dir, index);
-        if (!existsSync(filePath)) {
+        const source = await resolveSource(id, index);
+        if (!source || !(await source.has(index))) {
           return reply.status(404).send({ error: 'File not found' });
         }
 
-        const stat = statSync(filePath);
-        const ext = extname(filePath).toLowerCase();
+        const size = await source.size(index);
+        const ext = extname(index).toLowerCase();
         const contentType = mimeTypes[ext] || 'application/octet-stream';
+        const stream = await source.readRange(index, 0, size - 1);
 
         return reply
           .header('Content-Type', contentType)
-          .header('Content-Length', stat.size)
+          .header('Content-Length', size)
           .header('Content-Disposition', `attachment; filename="${index}"`)
-          .send(createReadStream(filePath));
+          .send(stream);
       } catch {
         return reply.status(404).send({ error: 'Work not found' });
       }
@@ -163,40 +163,39 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id, '*': index } = request.params;
-      const config = getConfig();
 
       try {
-        const work = await getWorkById(id);
-        const rootFolder = config.rootFolders.find(
-          (f) => f.name === work.rootFolder,
-        );
-
-        if (!rootFolder) {
-          return reply.status(404).send({ error: 'Root folder not found' });
+        const source = await resolveSource(id, index);
+        if (!source) {
+          return reply.status(404).send({ error: 'File not found' });
         }
 
         // 音轨文件名去扩展名（目录前缀保留）："sub/x.wav" → "sub/x"
         const stem = join(dirname(index), basename(index, extname(index)));
 
-        // 歌词候选（按优先级）：stem.lrc（库内实际规则）→ index.lrc（旧规则）
-        // → index.vtt（VTT 实际规则）→ stem.vtt（兼容）
+        // 歌词候选（按优先级）：同目录 stem/index → lyrics/ 子目录 stem/index → VTT 变体
+        const stemDir = dirname(stem);
+        const stemBase = basename(stem);
         const candidates: Array<{ type: 'lrc' | 'vtt'; file: string }> = [
           { type: 'lrc', file: `${stem}.lrc` },
           { type: 'lrc', file: `${index}.lrc` },
           { type: 'vtt', file: `${index}.vtt` },
           { type: 'vtt', file: `${stem}.vtt` },
+          { type: 'lrc', file: join(stemDir, 'lyrics', `${stemBase}.lrc`) },
+          { type: 'vtt', file: join(stemDir, 'lyrics', `${stemBase}.vtt`) },
         ];
 
         for (const candidate of candidates) {
-          const filePath = join(rootFolder.path, work.dir, candidate.file);
-          // 命中即返回歌词全文与格式，前端无需二次请求
-          if (existsSync(filePath)) {
+          if (await source.has(candidate.file)) {
+            const text = (
+              await readAllFromSource(source, candidate.file)
+            ).toString('utf-8');
             return {
               id,
               index,
               hasLrc: true,
               type: candidate.type,
-              text: readFileSync(filePath, 'utf-8'),
+              text,
             };
           }
         }

@@ -55,3 +55,8 @@ export function getSharedConfig() {
   const cfg = getConfig();
   return sharedConfigSchema.parse(cfg);
 }
+
+/** 测试专用：注入配置；省略时清空缓存（下次 getConfig 重新读盘）。 */
+export function setConfigForTesting(cfg?: Config): void {
+  config = cfg as Config;
+}

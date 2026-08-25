@@ -10,7 +10,8 @@ import {
   vaWork,
   works,
 } from '../db/main/schema.js';
-import { buildTrackTree, type TrackNode } from '../filesystem/utils.js';
+import { openWorkSource } from '../filesystem/source/index.js';
+import type { TrackNode } from '../filesystem/utils.js';
 import { extractRJCode } from '../utils/rjcode.js';
 import {
   getProgressByWorks,
@@ -604,8 +605,6 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
     throw new Error(`Root folder "${row.rootFolder}" not found`);
   }
 
-  const { join } = await import('node:path');
-  const dirPath = join(rootFolder.path, row.dir);
-
-  return buildTrackTree(dirPath);
+  const source = await openWorkSource(rootFolder.path, row.dir);
+  return source.buildTree();
 }
