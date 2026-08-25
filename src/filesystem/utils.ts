@@ -1,13 +1,16 @@
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { extractRJCode } from '../utils/rjcode.js';
+import { entriesToTrackTree, isSupportedFile } from './source/tree.js';
 
+/** @deprecated Task 6 移除 */
 export interface FolderInfo {
   path: string;
   rjCode: string | null; // Full RJ code like "RJ01578781"
   dirName: string;
 }
 
+/** @deprecated Task 6 移除 */
 export async function getFolderList(
   dirPath: string,
   maxDepth: number,
@@ -45,6 +48,7 @@ export async function getFolderList(
   return folders;
 }
 
+/** @deprecated Task 6 移除 */
 export async function getTrackList(
   dirPath: string,
 ): Promise<Array<{ name: string; path: string; index: number }>> {
@@ -81,6 +85,7 @@ export interface TreeNode {
   children?: TreeNode[];
 }
 
+/** @deprecated Task 6 移除 */
 export function toTree(
   dirPath: string,
   tracks: Array<{ name: string; path: string; index: number }>,
@@ -124,114 +129,38 @@ export function toTree(
   return tree;
 }
 
-export type TrackNode = {
-  title: string;
-} & (
+export type TrackNode =
   | {
       type: 'folder';
+      title: string;
       children: TrackNode[];
     }
   | {
       type: 'audio' | 'text' | 'image' | 'other';
       title: string;
       hash: string; // 相对于 work dir 的路径，如 'subfolder/track01.mp3'
-    }
-);
-
-const SUPPORTED_EXTENSIONS = new Set([
-  '.mp3',
-  '.ogg',
-  '.opus',
-  '.wav',
-  '.aac',
-  '.flac',
-  '.webm',
-  '.mp4',
-  '.m4a',
-  '.txt',
-  '.lrc',
-  '.srt',
-  '.ass',
-  '.pdf',
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.webp',
-]);
-
-const AUDIO_EXTENSIONS = new Set([
-  '.mp3',
-  '.ogg',
-  '.opus',
-  '.wav',
-  '.aac',
-  '.flac',
-  '.webm',
-  '.mp4',
-  '.m4a',
-]);
-const TEXT_EXTENSIONS = new Set(['.txt', '.lrc', '.srt', '.ass']);
-const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
-
-function getTrackType(ext: string): 'audio' | 'text' | 'image' | 'other' {
-  if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
-  if (TEXT_EXTENSIONS.has(ext)) return 'text';
-  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
-  return 'other';
-}
+    };
 
 /**
- * 递归构建文件树结构
- * @param dirPath 目录的绝对路径
- * @param basePath 相对于作品根目录的路径（用于生成 hash）
+ * 递归收集目录下支持扩展名文件的相对路径（'/' 分隔）。
  */
-async function buildTree(
+async function collectPaths(
   dirPath: string,
   basePath: string,
-): Promise<TrackNode[]> {
-  const nodes: TrackNode[] = [];
+): Promise<string[]> {
+  const paths: string[] = [];
   const entries = await readdir(dirPath, { withFileTypes: true }).catch(
     () => [],
   );
-
-  // 先处理文件夹，再处理文件，保持排序
-  const dirs: string[] = [];
-  const files: string[] = [];
-
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      dirs.push(entry.name);
-    } else if (
-      entry.isFile() &&
-      SUPPORTED_EXTENSIONS.has(extname(entry.name).toLowerCase())
-    ) {
-      files.push(entry.name);
+      const childBase = basePath ? `${basePath}/${entry.name}` : entry.name;
+      paths.push(...(await collectPaths(join(dirPath, entry.name), childBase)));
+    } else if (entry.isFile() && isSupportedFile(entry.name)) {
+      paths.push(basePath ? `${basePath}/${entry.name}` : entry.name);
     }
   }
-
-  dirs.sort();
-  files.sort();
-
-  // 递归处理子目录
-  for (const dirName of dirs) {
-    const childPath = join(dirPath, dirName);
-    const childBase = basePath ? `${basePath}/${dirName}` : dirName;
-    const children = await buildTree(childPath, childBase);
-
-    // 跳过空目录
-    if (children.length > 0) {
-      nodes.push({ type: 'folder', title: dirName, children });
-    }
-  }
-
-  // 处理文件
-  for (const fileName of files) {
-    const ext = extname(fileName).toLowerCase();
-    const hash = basePath ? `${basePath}/${fileName}` : fileName;
-    nodes.push({ type: getTrackType(ext), title: fileName, hash });
-  }
-
-  return nodes;
+  return paths;
 }
 
 /**
@@ -239,7 +168,7 @@ async function buildTree(
  * @param dirPath 作品目录的绝对路径
  */
 export async function buildTrackTree(dirPath: string): Promise<TrackNode[]> {
-  return buildTree(dirPath, '');
+  return entriesToTrackTree(await collectPaths(dirPath, ''));
 }
 
 export function hasLetter(str: string): boolean {
