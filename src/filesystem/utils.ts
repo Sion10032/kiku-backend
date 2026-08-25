@@ -1,7 +1,8 @@
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { extractRJCode } from '../utils/rjcode.js';
-import { entriesToTrackTree, isSupportedFile } from './source/tree.js';
+import { collectDirPaths } from './source/folder.js';
+import { entriesToTrackTree } from './source/tree.js';
 
 /** @deprecated Task 6 移除 */
 export interface FolderInfo {
@@ -142,33 +143,11 @@ export type TrackNode =
     };
 
 /**
- * 递归收集目录下支持扩展名文件的相对路径（'/' 分隔）。
- */
-async function collectPaths(
-  dirPath: string,
-  basePath: string,
-): Promise<string[]> {
-  const paths: string[] = [];
-  const entries = await readdir(dirPath, { withFileTypes: true }).catch(
-    () => [],
-  );
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const childBase = basePath ? `${basePath}/${entry.name}` : entry.name;
-      paths.push(...(await collectPaths(join(dirPath, entry.name), childBase)));
-    } else if (entry.isFile() && isSupportedFile(entry.name)) {
-      paths.push(basePath ? `${basePath}/${entry.name}` : entry.name);
-    }
-  }
-  return paths;
-}
-
-/**
  * 构建文件树结构
  * @param dirPath 作品目录的绝对路径
  */
 export async function buildTrackTree(dirPath: string): Promise<TrackNode[]> {
-  return entriesToTrackTree(await collectPaths(dirPath, ''));
+  return entriesToTrackTree(await collectDirPaths(dirPath));
 }
 
 export function hasLetter(str: string): boolean {
