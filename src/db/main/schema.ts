@@ -30,6 +30,8 @@ export const works = sqliteTable('t_work', {
   rank: text('rank'),
   language: text('language'),
   sourceId: text('source_id'),
+  /** 软删除标记（ISO 时间串，null = 正常）。源文件缺失时置位，超过宽限期后物理清理。 */
+  deletedAt: text('deleted_at'),
 });
 
 export const tags = sqliteTable('t_tag', {

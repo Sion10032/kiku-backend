@@ -22,6 +22,7 @@ mock.module('../src/scraper/dlsite.js', () => ({
 mock.module('../src/services/cover.service.js', () => ({
   coverExists: () => true,
   downloadCover: async () => true,
+  deleteAllCovers: () => 0,
 }));
 
 const { performScan } = await import('../src/filesystem/scanner.js');

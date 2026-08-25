@@ -13,6 +13,7 @@ import {
 import { openWorkSource } from '../filesystem/source/index.js';
 import type { TrackNode } from '../filesystem/utils.js';
 import { extractRJCode } from '../utils/rjcode.js';
+import { deleteAllCovers } from './cover.service.js';
 import {
   getProgressByWorks,
   type WorkProgressSummary,
@@ -77,7 +78,7 @@ export async function upsertWork(
     });
 
     if (existing) {
-      // Update existing work
+      // Update existing work（源恢复时清除软删标记）
       await db
         .update(works)
         .set({
@@ -85,6 +86,7 @@ export async function upsertWork(
           circleId: circle.id,
           rootFolder: input.rootFolder,
           dir: input.dir,
+          deletedAt: null,
           nsfw: input.nsfw ?? existing.nsfw,
           release: input.release ?? existing.release,
           dlCount: input.dlCount ?? existing.dlCount,
@@ -238,6 +240,33 @@ export async function upsertWork(
   }
 }
 
+// ---------- 软删除 / 物理删除（scanner prune 使用） ----------
+
+/** 取某 rootFolder 下的全部作品记录（含软删标记），供 scanner 做源缺失差集。 */
+export async function getWorksByRootFolder(rootFolder: string) {
+  return db.query.works.findMany({
+    where: { RAW: (t, op) => op.eq(t.rootFolder, rootFolder) },
+    columns: { id: true, deletedAt: true },
+  });
+}
+
+/** 软删除：置 deletedAt 标记（ISO 时间串）。源缺失时的第一动作，宽限期内可恢复。 */
+export async function softDeleteWork(id: string): Promise<void> {
+  await db
+    .update(works)
+    .set({ deletedAt: new Date().toISOString() })
+    .where(eq(works.id, id));
+}
+
+/**
+ * 物理删除：删除作品记录（级联清 tagWork/vaWork/reviews/userProgress，
+ * SQLite 外键已开启）并清理封面 blob。
+ */
+export async function hardDeleteWork(id: string): Promise<void> {
+  await db.delete(works).where(eq(works.id, id));
+  deleteAllCovers(id);
+}
+
 // 带关联的查询结果类型
 type WorkWithRelations = Work & {
   circle: Circle;
@@ -330,7 +359,11 @@ async function attachUserData(
 
 export async function getWorkById(id: string, username?: string) {
   const row = await db.query.works.findFirst({
-    where: { RAW: (t, op) => op.eq(t.id, id) },
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(op.eq(t.id, id), op.isNull(t.deletedAt))!,
+    },
     with: {
       circle: true,
       tags: { with: { tag: true } },
@@ -362,10 +395,11 @@ export async function getWorksPaginated(opts: {
 
   // 处理随机排序：先随机取 id，再用 findMany 查关联
   if (orderBy === 'random' || orderBy === 'betterRandom') {
-    // 子查询：随机排序取一页 id
+    // 子查询：随机排序取一页 id（排除软删）
     const randomIds = db
       .select({ id: works.id })
       .from(works)
+      .where(sql`${works.deletedAt} IS NULL`)
       .orderBy(sql`RANDOM()`)
       .limit(pageSize)
       .offset(offset);
@@ -377,9 +411,16 @@ export async function getWorksPaginated(opts: {
           tags: { with: { tag: true } },
           vas: { with: { va: true } },
         },
-        where: { RAW: (t, op) => op.inArray(t.id, randomIds) },
+        where: {
+          RAW: (t, op) =>
+            // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+            op.and(op.inArray(t.id, randomIds), op.isNull(t.deletedAt))!,
+        },
       }),
-      db.select({ count: sql<number>`count(*)` }).from(works),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(works)
+        .where(sql`${works.deletedAt} IS NULL`),
     ]);
     const totalCount = countResult[0]?.count ?? 0;
 
@@ -411,12 +452,20 @@ export async function getWorksPaginated(opts: {
         tags: { with: { tag: true } },
         vas: { with: { va: true } },
       },
+      where: {
+        RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 isNull() 返回 SQL | undefined
+          op.isNull(t.deletedAt)!,
+      },
       orderBy: (t, { asc: ascOp, desc: descOp }) =>
         sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
       limit: pageSize,
       offset,
     }),
-    db.select({ count: sql<number>`count(*)` }).from(works),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(works)
+      .where(sql`${works.deletedAt} IS NULL`),
   ]);
   const totalCount = countResult[0]?.count ?? 0;
 
@@ -434,7 +483,11 @@ export async function searchWorks(keyword: string, username?: string) {
   const rjCode = extractRJCode(keyword);
   if (rjCode) {
     const items = await db.query.works.findMany({
-      where: { RAW: (t, op) => op.eq(t.id, rjCode) },
+      where: {
+        RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+          op.and(op.eq(t.id, rjCode), op.isNull(t.deletedAt))!,
+      },
       with: {
         circle: true,
         tags: { with: { tag: true } },
@@ -464,13 +517,17 @@ export async function searchWorks(keyword: string, username?: string) {
   const items = await db.query.works.findMany({
     where: {
       RAW: (t, op) =>
-        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
-        op.or(
-          op.like(t.title, `%${keyword}%`),
-          op.like(t.id, `%${keyword}%`),
-          op.inArray(t.circleId, circleIds),
-          op.inArray(t.id, tagWorkIds),
-          op.inArray(t.id, vaWorkIds),
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
+          op.or(
+            op.like(t.title, `%${keyword}%`),
+            op.like(t.id, `%${keyword}%`),
+            op.inArray(t.circleId, circleIds),
+            op.inArray(t.id, tagWorkIds),
+            op.inArray(t.id, vaWorkIds),
+          )!,
+          op.isNull(t.deletedAt),
         )!,
     },
     with: {
@@ -500,7 +557,11 @@ export async function getCircleWorks(
   const numId =
     typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
   const items = await db.query.works.findMany({
-    where: { RAW: (t, op) => op.eq(t.circleId, numId) },
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(op.eq(t.circleId, numId), op.isNull(t.deletedAt))!,
+    },
     with: {
       circle: true,
       tags: { with: { tag: true } },
@@ -527,19 +588,23 @@ export async function getTagById(id: number | string) {
 
 export async function getTagWorks(tagId: number | string, username?: string) {
   const numId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
-  const tagWorkItems = await db.query.tagWork.findMany({
-    where: { RAW: (t, op) => op.eq(t.tagId, numId) },
+  const workIds = db
+    .select({ workId: tagWork.workId })
+    .from(tagWork)
+    .where(eq(tagWork.tagId, numId));
+  const items = await db.query.works.findMany({
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(op.inArray(t.id, workIds), op.isNull(t.deletedAt))!,
+    },
     with: {
-      work: {
-        with: {
-          circle: true,
-          tags: { with: { tag: true } },
-          vas: { with: { va: true } },
-        },
-      },
+      circle: true,
+      tags: { with: { tag: true } },
+      vas: { with: { va: true } },
     },
   });
-  const formatted = tagWorkItems.map((item) => formatWork(item.work));
+  const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
   return formatted;
 }
@@ -557,19 +622,23 @@ export async function getVaById(id: string) {
 }
 
 export async function getVaWorks(vaId: string, username?: string) {
-  const vaWorkItems = await db.query.vaWork.findMany({
-    where: { RAW: (t, op) => op.eq(t.vaId, vaId) },
+  const workIds = db
+    .select({ workId: vaWork.workId })
+    .from(vaWork)
+    .where(eq(vaWork.vaId, vaId));
+  const items = await db.query.works.findMany({
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(op.inArray(t.id, workIds), op.isNull(t.deletedAt))!,
+    },
     with: {
-      work: {
-        with: {
-          circle: true,
-          tags: { with: { tag: true } },
-          vas: { with: { va: true } },
-        },
-      },
+      circle: true,
+      tags: { with: { tag: true } },
+      vas: { with: { va: true } },
     },
   });
-  const formatted = vaWorkItems.map((item) => formatWork(item.work));
+  const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
   return formatted;
 }
@@ -585,7 +654,11 @@ export async function getVas() {
  */
 export async function getWorkTracks(id: string): Promise<TrackNode[]> {
   const row = await db.query.works.findFirst({
-    where: { RAW: (t, op) => op.eq(t.id, id) },
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(op.eq(t.id, id), op.isNull(t.deletedAt))!,
+    },
     columns: {
       id: true,
       rootFolder: true,

@@ -6,7 +6,13 @@ import {
   coverExists,
   downloadCover,
 } from '../services/cover.service.js';
-import { upsertWork } from '../services/work.service.js';
+import {
+  getWorksByRootFolder,
+  hardDeleteWork,
+  softDeleteWork,
+  upsertWork,
+} from '../services/work.service.js';
+import { classifyMissingWorks } from './prune.js';
 import { openWorkSource } from './source/index.js';
 import { treeHasAudio } from './source/tree.js';
 import { UnsupportedArchiveError } from './source/types.js';
@@ -29,6 +35,9 @@ interface MainLog {
   timestamp: string;
 }
 
+/** 软删作品超过该天数仍缺失 → 物理清理（级联 + 封面） */
+const SCAN_PURGE_DAYS = 30;
+
 export type ScanEvent =
   | {
       type: 'SCAN_TASKS';
@@ -46,6 +55,10 @@ export type ScanEvent =
         added: number;
         updated: number;
         failed: number;
+        /** 源缺失被软删的作品数 */
+        removed: number;
+        /** 软删超期被物理清理的作品数 */
+        purged: number;
       };
     }
   | { type: 'SCAN_FINISHED'; message: string }
@@ -62,6 +75,8 @@ export async function* performScan(
   const tasks: ScanTask[] = [];
   const failedTasks: ScanTask[] = [];
   const mainLogs: MainLog[] = [];
+  /** 本次扫描在磁盘上发现的全部 RJ 码（含 unsupported-archive：源还在就不算缺失） */
+  const onDiskRjCodes = new Set<string>();
 
   const log = (level: string, message: string): void => {
     mainLogs.push({ level, message, timestamp: new Date().toISOString() });
@@ -93,6 +108,9 @@ export async function* performScan(
 
     for (const entry of entries) {
       if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+      // 源文件在磁盘上即计入集合（差集清理的依据），与能否解析/是否有音频无关
+      onDiskRjCodes.add(entry.rjCode);
 
       // unsupported-archive: 明确失败而非静默跳过
       if (entry.kind === 'unsupported-archive') {
@@ -294,10 +312,56 @@ export async function* performScan(
     yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
   }
 
+  // ---------- Prune：清理源文件已消失的作品（软删 + 超期物理删） ----------
+  let removed = 0;
+  let purged = 0;
+
+  for (const rootFolder of config.rootFolders) {
+    if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+    const inDb = await getWorksByRootFolder(rootFolder.name);
+    if (inDb.length === 0) continue;
+
+    const decision = classifyMissingWorks(
+      inDb,
+      onDiskRjCodes,
+      new Date(),
+      SCAN_PURGE_DAYS,
+    );
+
+    for (const id of decision.toSoftDelete) {
+      if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+      try {
+        await softDeleteWork(id);
+        removed++;
+        log('info', `Removed (source missing): ${id}`);
+      } catch (err) {
+        log('error', `Failed to soft-delete ${id}: ${String(err)}`);
+      }
+      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
+    }
+
+    for (const id of decision.toHardDelete) {
+      if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+      try {
+        await hardDeleteWork(id);
+        purged++;
+        log('info', `Purged (source missing beyond grace): ${id}`);
+      } catch (err) {
+        log('error', `Failed to purge ${id}: ${String(err)}`);
+      }
+      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
+    }
+  }
+
+  if (removed > 0 || purged > 0) {
+    log('info', `Pruned: ${removed} removed, ${purged} purged`);
+  }
+
   // Send final results
   yield {
     type: 'SCAN_RESULTS',
-    results: { total: tasks.length, added, updated, failed },
+    results: { total: tasks.length, added, updated, failed, removed, purged },
   };
 
   if (failedTasks.length > 0) {
