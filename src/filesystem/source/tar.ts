@@ -2,7 +2,11 @@
 // readRange = createReadStream(archive, { start: dataOffset + start, end: dataOffset + end })。
 import { closeSync, createReadStream, openSync, readSync } from 'node:fs';
 import type { TrackNode } from '../utils.js';
-import { entriesToTrackTree, isSupportedFile } from './tree.js';
+import {
+  entriesToTrackTree,
+  isSupportedFile,
+  rekeyStrippedTopDir,
+} from './tree.js';
 import { sanitizeMediaIndex, type WorkSource } from './types.js';
 
 interface TarEntry {
@@ -93,7 +97,7 @@ function buildIndex(archivePath: string): Map<string, TarEntry> {
   } finally {
     closeSync(fd);
   }
-  return index;
+  return rekeyStrippedTopDir(index);
 }
 
 export async function createTarSource(

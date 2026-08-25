@@ -36,17 +36,33 @@ describe('tar source', () => {
     );
     const src = await createTarSource(tar);
     expect(src.kind).toBe('tar');
-    expect(await src.has('RJ000001/01.mp3')).toBe(true);
+    // 顶层包装目录 RJ000001 已剥离，hash 不再带前缀
+    expect(await src.has('01.mp3')).toBe(true);
+    expect(await src.has('RJ000001/01.mp3')).toBe(false);
     expect(await src.has('RJ000001/nope.mp3')).toBe(false);
-    expect(await src.size('RJ000001/01.mp3')).toBe(audio.length);
-    const mid = await collect(
-      await src.readRange('RJ000001/01.mp3', 1000, 1003),
-    );
+    expect(await src.size('01.mp3')).toBe(audio.length);
+    const mid = await collect(await src.readRange('01.mp3', 1000, 1003));
     expect(mid.equals(audio.subarray(1000, 1004))).toBe(true);
     const tree = await src.buildTree();
-    // 全部包在一个顶层 folder（RJ000001）下，且 dir 条目不产生空节点
-    expect(tree.length).toBe(1);
-    expect(tree[0]?.type === 'folder' && tree[0].children?.length).toBe(3);
+    // dir 条目不产生空节点；剥离后根级为 おまけ/ + 01.mp3 + readme.txt（folder 在前）
+    expect(tree.map((n) => n.type)).toEqual(['folder', 'audio', 'text']);
+    expect(tree[0]?.type === 'folder' && tree[0].title).toBe('おまけ');
+  });
+
+  it('顶层多个目录时不剥离', async () => {
+    const tar = await makeTar(
+      buildTar([
+        { path: 'a/01.mp3', data: 'x' },
+        { path: 'b/02.mp3', data: 'y' },
+      ]),
+    );
+    const src = await createTarSource(tar);
+    expect(await src.has('a/01.mp3')).toBe(true);
+    expect(await src.has('b/02.mp3')).toBe(true);
+    expect((await src.buildTree()).map((n) => n.type)).toEqual([
+      'folder',
+      'folder',
+    ]);
   });
 
   it('ustar prefix 拼接完整路径', async () => {
@@ -60,7 +76,7 @@ describe('tar source', () => {
       ]),
     );
     const src = await createTarSource(tar);
-    expect(await src.has('prefix dir/RJ000002/a.mp3')).toBe(true);
+    expect(await src.has('a.mp3')).toBe(true);
   });
 
   it('穿越与非法 hash 一律不存在', async () => {

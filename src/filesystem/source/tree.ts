@@ -91,3 +91,52 @@ export function treeHasAudio(nodes: TrackNode[]): boolean {
   }
   return false;
 }
+
+/**
+ * 去掉压缩包中无意义的顶层包装目录：若所有受支持文件共享同一顶层目录
+ * （且该层下没有根级文件），递归剥掉该层，直到顶层不再唯一或出现根级文件。
+ * 仅以支持扩展名的条目决定剥离（根级不支持文件如 .DS_Store 不阻塞）；
+ * 未共享该前缀的条目（如 __MACOSX 垃圾）保持原路径。
+ * 仅用于 tar/zip 索引；folder 源不剥离（用户实际目录结构有意义）。
+ */
+export function stripCommonTopDir(paths: string[]): string[] {
+  let result = [...paths];
+  for (;;) {
+    const considered = result.filter(isSupportedFile);
+    const topSet = new Set<string>();
+    let hasRootFile = false;
+    for (const p of considered) {
+      const slash = p.indexOf('/');
+      if (slash === -1) hasRootFile = true;
+      else topSet.add(p.slice(0, slash));
+    }
+    if (hasRootFile || topSet.size !== 1) return result;
+    const top = [...topSet][0] as string;
+    result = result.map((p) =>
+      p.startsWith(`${top}/`) ? p.slice(top.length + 1) : p,
+    );
+  }
+}
+
+/**
+ * 重建索引 Map：key 应用 stripCommonTopDir 后重新映射（zip/tar 共用）。
+ * 无需剥离时返回原 Map 引用（避免无谓拷贝）。
+ */
+export function rekeyStrippedTopDir<T>(index: Map<string, T>): Map<string, T> {
+  const keys = [...index.keys()];
+  const stripped = stripCommonTopDir(keys);
+  let changed = false;
+  for (let i = 0; i < keys.length; i++) {
+    if (stripped[i] !== keys[i]) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return index;
+  const out = new Map<string, T>();
+  for (let i = 0; i < keys.length; i++) {
+    const value = index.get(keys[i] as string);
+    if (value !== undefined) out.set(stripped[i] as string, value);
+  }
+  return out;
+}

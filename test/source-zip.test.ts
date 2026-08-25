@@ -37,15 +37,32 @@ describe('zip source（stored）', () => {
     );
     const src = await createZipSource(zip);
     expect(src.kind).toBe('zip');
-    expect(await src.has('RJ000003/01.mp3')).toBe(true);
-    expect(await src.size('RJ000003/01.mp3')).toBe(audio.length);
-    const range = await collect(
-      await src.readRange('RJ000003/01.mp3', 2000, 2999),
-    );
+    // 顶层包装目录 RJ000003 已剥离，hash 不再带前缀
+    expect(await src.has('01.mp3')).toBe(true);
+    expect(await src.has('RJ000003/01.mp3')).toBe(false);
+    expect(await src.size('01.mp3')).toBe(audio.length);
+    const range = await collect(await src.readRange('01.mp3', 2000, 2999));
     expect(range.equals(audio.subarray(2000))).toBe(true);
     const tree = await src.buildTree();
-    expect(tree.length).toBe(1);
-    expect(tree[0]?.type === 'folder' && tree[0].children?.length).toBe(3);
+    // 剥离后根级为 sub/ + 01.mp3 + lyric.lrc（folder 在前）
+    expect(tree.map((n) => n.type)).toEqual(['folder', 'audio', 'text']);
+    expect(tree[0]?.type === 'folder' && tree[0].title).toBe('sub');
+  });
+
+  it('顶层多个目录时不剥离', async () => {
+    const zip = await makeZip(
+      buildZip([
+        { path: 'a/01.mp3', data: 'x' },
+        { path: 'b/02.mp3', data: 'y' },
+      ]),
+    );
+    const src = await createZipSource(zip);
+    expect(await src.has('a/01.mp3')).toBe(true);
+    expect(await src.has('b/02.mp3')).toBe(true);
+    expect((await src.buildTree()).map((n) => n.type)).toEqual([
+      'folder',
+      'folder',
+    ]);
   });
 
   it('EFS 位置 1 的 UTF-8 文件名直接解码', async () => {
@@ -53,7 +70,7 @@ describe('zip source（stored）', () => {
       buildZip([{ path: 'RJ000004/おまけ.wav', data: 'x', efs: true }]),
     );
     const src = await createZipSource(zip);
-    expect(await src.has('RJ000004/おまけ.wav')).toBe(true);
+    expect(await src.has('おまけ.wav')).toBe(true);
   });
 
   it('非 EFS 的 Shift-JIS 文件名回退解码', async () => {
@@ -86,7 +103,7 @@ describe('zip source（stored）', () => {
       ]),
     );
     const src = await createZipSource(zip);
-    expect(await src.has('RJ000005/a.mp3')).toBe(true);
+    expect(await src.has('a.mp3')).toBe(true);
   });
 
   it('穿越 hash 拒绝', async () => {

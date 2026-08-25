@@ -4,7 +4,11 @@
 import { createReadStream } from 'node:fs';
 import { open } from 'node:fs/promises';
 import type { TrackNode } from '../utils.js';
-import { entriesToTrackTree, isSupportedFile } from './tree.js';
+import {
+  entriesToTrackTree,
+  isSupportedFile,
+  rekeyStrippedTopDir,
+} from './tree.js';
 import {
   sanitizeMediaIndex,
   UnsupportedArchiveError,
@@ -154,7 +158,7 @@ async function buildIndex(archivePath: string): Promise<Map<string, ZipEntry>> {
 
       index.set(name, { size: uncompSize, dataOffset });
     }
-    return index;
+    return rekeyStrippedTopDir(index);
   } finally {
     await fh.close();
   }

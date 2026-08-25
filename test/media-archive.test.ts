@@ -84,7 +84,7 @@ describe('media 流式（tar/zip 作品）', () => {
   it('无 Range：200 + 完整字节', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/media/stream/${TAR_ID}/${TAR_ID}/01.mp3`,
+      url: `/api/media/stream/${TAR_ID}/01.mp3`,
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['accept-ranges']).toBe('bytes');
@@ -94,7 +94,7 @@ describe('media 流式（tar/zip 作品）', () => {
   it('Range：206 + 精确分片（zip）', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/media/stream/${ZIP_ID}/${ZIP_ID}/02.ogg`,
+      url: `/api/media/stream/${ZIP_ID}/02.ogg`,
       headers: { range: 'bytes=100-199' },
     });
     expect(res.statusCode).toBe(206);
@@ -105,7 +105,7 @@ describe('media 流式（tar/zip 作品）', () => {
   it('非法 Range → 416', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/media/stream/${TAR_ID}/${TAR_ID}/01.mp3`,
+      url: `/api/media/stream/${TAR_ID}/01.mp3`,
       headers: { range: `bytes=${audio.length + 10}-` },
     });
     expect(res.statusCode).toBe(416);
@@ -122,7 +122,7 @@ describe('media 流式（tar/zip 作品）', () => {
   it('check-lrc 读取包内歌词', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/media/check-lrc/${TAR_ID}/${TAR_ID}/01.mp3`,
+      url: `/api/media/check-lrc/${TAR_ID}/01.mp3`,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -134,20 +134,24 @@ describe('media 流式（tar/zip 作品）', () => {
   it('download：200 + attachment + 完整字节', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/media/download/${ZIP_ID}/${ZIP_ID}/02.ogg`,
+      url: `/api/media/download/${ZIP_ID}/02.ogg`,
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-disposition']).toContain('attachment');
     expect(res.rawPayload.equals(audio)).toBe(true);
   });
 
-  it('tracks：返回包内树', async () => {
+  it('tracks：返回包内树（顶层包装目录已剥离）', async () => {
     const res = await app.inject({
       method: 'GET',
       url: `/api/tracks/${ZIP_ID}`,
     });
     expect(res.statusCode).toBe(200);
     const tree = res.json();
-    expect(tree[0]?.type).toBe('folder');
+    expect(tree.map((n: { type: string }) => n.type)).toEqual([
+      'folder',
+      'audio',
+    ]);
+    expect(tree[0]?.title).toBe('lyrics');
   });
 });
