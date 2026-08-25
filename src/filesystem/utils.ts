@@ -4,130 +4,89 @@ import { extractRJCode } from '../utils/rjcode.js';
 import { collectDirPaths } from './source/folder.js';
 import { entriesToTrackTree } from './source/tree.js';
 
-/** @deprecated Task 6 移除 */
-export interface FolderInfo {
-  path: string;
-  rjCode: string | null; // Full RJ code like "RJ01578781"
-  dirName: string;
-}
+// ---------- collectWorkEntries（替代已删除的 getFolderList） ----------
 
-/** @deprecated Task 6 移除 */
-export async function getFolderList(
-  dirPath: string,
-  maxDepth: number,
-  currentDepth: number = 0,
-): Promise<FolderInfo[]> {
-  if (currentDepth >= maxDepth) {
-    return [];
-  }
+const ARCHIVE_EXTS = new Set(['.tar', '.zip']);
+const UNSUPPORTED_ARCHIVE_EXTS = new Set([
+  '.7z',
+  '.rar',
+  '.tgz',
+  '.gz',
+  '.xz',
+  '.bz2',
+  '.zst',
+  '.lz4',
+  '.lzma',
+]);
 
-  const folders: FolderInfo[] = [];
-
-  try {
-    const entries = await readdir(dirPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const fullPath = join(dirPath, entry.name);
-        const rjCode = extractRJCode(entry.name);
-
-        // If this folder has an RJ code, it's a work folder — don't recurse deeper
-        if (rjCode !== null) {
-          folders.push({ path: fullPath, rjCode, dirName: entry.name });
-        } else {
-          // No RJ code — recurse to find work folders inside
-          folders.push(
-            ...(await getFolderList(fullPath, maxDepth, currentDepth + 1)),
-          );
-        }
-      }
-    }
-  } catch {
-    // Ignore errors (permission denied, etc.)
-  }
-
-  return folders;
-}
-
-/** @deprecated Task 6 移除 */
-export async function getTrackList(
-  dirPath: string,
-): Promise<Array<{ name: string; path: string; index: number }>> {
-  const audioExtensions = ['.mp3', '.ogg', '.wav', '.flac', '.m4a'];
-  const tracks: Array<{ name: string; path: string; index: number }> = [];
-
-  try {
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    let index = 1;
-
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        const ext = extname(entry.name).toLowerCase();
-        if (audioExtensions.includes(ext)) {
-          tracks.push({
-            name: entry.name,
-            path: join(dirPath, entry.name),
-            index: index++,
-          });
-        }
-      }
-    }
-  } catch {
-    // Ignore errors
-  }
-
-  return tracks.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-export interface TreeNode {
-  type: 'file' | 'folder';
+export interface WorkEntry {
+  kind: 'folder' | 'archive' | 'unsupported-archive';
+  /** 相对 root folder 的路径，'/' 分隔（文件夹不含尾部斜杠）。 */
+  relativePath: string;
+  rjCode: string;
+  /** 展示名：文件夹名或压缩包完整文件名。 */
   name: string;
-  index?: number;
-  children?: TreeNode[];
 }
 
-/** @deprecated Task 6 移除 */
-export function toTree(
-  dirPath: string,
-  tracks: Array<{ name: string; path: string; index: number }>,
-): TreeNode[] {
-  const tree: TreeNode[] = [];
-  const folderMap = new Map<string, TreeNode>();
-
-  for (const track of tracks) {
-    const relativePath = track.path.replace(dirPath, '').replace(/^\//, '');
-    const parts = relativePath.split('/');
-
-    if (parts.length === 1) {
-      tree.push({
-        type: 'file',
-        name: track.name,
-        index: track.index,
-      });
-    } else {
-      const folderName = parts[0] ?? '';
-      if (folderName && !folderMap.has(folderName)) {
-        const folderNode: TreeNode = {
-          type: 'folder',
-          name: folderName,
-          children: [],
-        };
-        folderMap.set(folderName, folderNode);
-        tree.push(folderNode);
+/**
+ * 递归收集 root 下的 RJ 作品条目。
+ * 规则：RJ 目录不深入、非 RJ 目录下探一层直至 maxDepth。
+ * RJ 命名文件按扩展名分类：tar/zip → archive，其余 → unsupported-archive。
+ */
+export async function collectWorkEntries(
+  rootPath: string,
+  maxDepth: number,
+  currentDepth = 0,
+): Promise<WorkEntry[]> {
+  if (currentDepth >= maxDepth) return [];
+  const out: WorkEntry[] = [];
+  const entries = await readdir(rootPath, { withFileTypes: true }).catch(
+    () => [],
+  );
+  for (const entry of entries) {
+    const rj = extractRJCode(entry.name);
+    if (entry.isDirectory()) {
+      if (rj) {
+        out.push({
+          kind: 'folder',
+          relativePath: entry.name,
+          rjCode: rj,
+          name: entry.name,
+        });
+      } else {
+        const nested = await collectWorkEntries(
+          join(rootPath, entry.name),
+          maxDepth,
+          currentDepth + 1,
+        );
+        out.push(
+          ...nested.map((n) => ({
+            ...n,
+            relativePath: `${entry.name}/${n.relativePath}`,
+          })),
+        );
       }
-
-      const folder = folderMap.get(folderName);
-      if (folder?.children) {
-        folder.children.push({
-          type: 'file',
-          name: track.name,
-          index: track.index,
+    } else if (entry.isFile() && rj) {
+      const ext = extname(entry.name).toLowerCase();
+      if (ARCHIVE_EXTS.has(ext)) {
+        out.push({
+          kind: 'archive',
+          relativePath: entry.name,
+          rjCode: rj,
+          name: entry.name,
+        });
+      } else if (UNSUPPORTED_ARCHIVE_EXTS.has(ext)) {
+        out.push({
+          kind: 'unsupported-archive',
+          relativePath: entry.name,
+          rjCode: rj,
+          name: entry.name,
         });
       }
+      // 其他扩展名（RJ123.jpg 等）忽略
     }
   }
-
-  return tree;
+  return out;
 }
 
 export type TrackNode =

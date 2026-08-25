@@ -7,12 +7,15 @@ import {
   downloadCover,
 } from '../services/cover.service.js';
 import { upsertWork } from '../services/work.service.js';
-import { getFolderList, getTrackList } from './utils.js';
+import { openWorkSource } from './source/index.js';
+import { treeHasAudio } from './source/tree.js';
+import { UnsupportedArchiveError } from './source/types.js';
+import { collectWorkEntries } from './utils.js';
 
 interface ScanTask {
   id: number;
   title: string;
-  folderPath: string;
+  relativePath: string;
   rootFolder: string;
   rjCode: string; // Full RJ code like "RJ01578781"
   dirName: string;
@@ -52,7 +55,7 @@ export type ScanEvent =
  * Async generator that performs a scan, yielding events as it progresses.
  * Checks the abort signal between operations so the scan can be terminated.
  */
-async function* performScan(
+export async function* performScan(
   config: Config,
   signal: AbortSignal,
 ): AsyncGenerator<ScanEvent> {
@@ -63,6 +66,12 @@ async function* performScan(
   const log = (level: string, message: string): void => {
     mainLogs.push({ level, message, timestamp: new Date().toISOString() });
   };
+
+  const strip = (t: ScanTask) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+  });
 
   log('info', 'Starting scan...');
   yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
@@ -77,41 +86,92 @@ async function* performScan(
     );
     yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
-    const folders = await getFolderList(
+    const entries = await collectWorkEntries(
       rootFolder.path,
       config.scannerMaxRecursionDepth,
     );
 
-    for (const folder of folders) {
+    for (const entry of entries) {
       if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
-      // Skip folders without RJ code
-      if (folder.rjCode === null) continue;
-
-      const tracks = await getTrackList(folder.path);
-
-      if (tracks.length > 0) {
+      // unsupported-archive: 明确失败而非静默跳过
+      if (entry.kind === 'unsupported-archive') {
         const task: ScanTask = {
-          id: tasks.length + 1,
-          title: `${folder.rjCode} ${folder.dirName}`,
-          folderPath: folder.path,
+          id: tasks.length + failedTasks.length + 1,
+          title: `${entry.rjCode} ${entry.name}`,
+          relativePath: entry.relativePath,
           rootFolder: rootFolder.name,
-          rjCode: folder.rjCode,
-          dirName: folder.dirName,
-          status: 'pending',
+          rjCode: entry.rjCode,
+          dirName: entry.name,
+          status: 'failed',
+          error: String(
+            new UnsupportedArchiveError(
+              entry.name,
+              '不是 tar / stored zip 格式',
+            ),
+          ),
         };
-
-        tasks.push(task);
-
+        failedTasks.push(task);
+        log('error', `Unsupported archive: ${task.title}`);
         yield {
           type: 'SCAN_TASKS',
-          tasks: tasks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            status: t.status,
-          })),
+          tasks: [...tasks, ...failedTasks].map(strip),
         };
+        continue;
       }
+
+      // folder/archive：打开 source，校验含音频才建任务
+      let hasAudio = false;
+      try {
+        const source = await openWorkSource(
+          rootFolder.path,
+          entry.relativePath,
+        );
+        hasAudio = treeHasAudio(await source.buildTree());
+      } catch (err) {
+        // 打不开/不支持的包：作为失败任务上报
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const task: ScanTask = {
+          id: tasks.length + failedTasks.length + 1,
+          title: `${entry.rjCode} ${entry.name}`,
+          relativePath: entry.relativePath,
+          rootFolder: rootFolder.name,
+          rjCode: entry.rjCode,
+          dirName: entry.name,
+          status: 'failed',
+          error: errMsg,
+        };
+        failedTasks.push(task);
+        log(
+          'error',
+          `Failed to open: ${entry.rjCode} ${entry.name} - ${errMsg}`,
+        );
+        yield {
+          type: 'SCAN_TASKS',
+          tasks: [...tasks, ...failedTasks].map(strip),
+        };
+        continue;
+      }
+
+      if (!hasAudio) {
+        log('info', `Skipped (no audio): ${entry.rjCode} ${entry.name}`);
+        continue;
+      }
+
+      tasks.push({
+        id: tasks.length + 1,
+        title: `${entry.rjCode} ${entry.name}`,
+        relativePath: entry.relativePath,
+        rootFolder: rootFolder.name,
+        rjCode: entry.rjCode,
+        dirName: entry.name,
+        status: 'pending',
+      });
+
+      yield {
+        type: 'SCAN_TASKS',
+        tasks: [...tasks, ...failedTasks].map(strip),
+      };
     }
   }
 
@@ -130,11 +190,7 @@ async function* performScan(
       task.status = 'scanning';
       yield {
         type: 'SCAN_TASKS',
-        tasks: tasks.map((t) => ({
-          id: t.id,
-          title: t.title,
-          status: t.status,
-        })),
+        tasks: tasks.map(strip),
       };
 
       const rjCode = task.rjCode;
@@ -148,11 +204,11 @@ async function* performScan(
       log('info', `Got metadata: ${metadata.title}`);
       yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
-      // Write to database
+      // Write to database (dir = relativePath, not dirName)
       const result = await upsertWork({
         id: rjCode,
         rootFolder: task.rootFolder,
-        dir: task.dirName,
+        dir: task.relativePath,
         title: metadata.title,
         circleName: metadata.circle || 'Unknown',
         nsfw: metadata.nsfw,
@@ -223,16 +279,17 @@ async function* performScan(
       task.status = 'completed';
     } catch (err) {
       task.status = 'failed';
-      task.error = String(err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      task.error = errMsg;
       failedTasks.push(task);
       failed++;
 
-      log('error', `Failed: ${task.title} - ${String(err)}`);
+      log('error', `Failed: ${task.title} - ${errMsg}`);
     }
 
     yield {
       type: 'SCAN_TASKS',
-      tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
+      tasks: tasks.map(strip),
     };
     yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
   }
