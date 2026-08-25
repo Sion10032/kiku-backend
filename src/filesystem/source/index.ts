@@ -2,7 +2,9 @@
 import { statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { createFolderSource } from './folder.js';
+import { createTarSource } from './tar.js';
 import { UnsupportedArchiveError, type WorkSource } from './types.js';
+import { createZipSource } from './zip.js';
 
 export async function openWorkSource(
   rootFolderPath: string,
@@ -18,16 +20,8 @@ export async function openWorkSource(
   if (isDir) return createFolderSource(fullPath);
 
   const ext = extname(fullPath).toLowerCase();
-  if (ext === '.tar') {
-    const { createTarSource } = await import('./tar.js');
-    return await createTarSource(fullPath);
-  }
-  if (ext === '.zip') {
-    // TODO: Task 5 实现后恢复
-    // const { createZipSource } = await import('./zip.js');
-    // return await createZipSource(fullPath);
-    throw new UnsupportedArchiveError(workDir, 'zip 支持尚未实现');
-  }
+  if (ext === '.tar') return await createTarSource(fullPath);
+  if (ext === '.zip') return await createZipSource(fullPath);
   throw new UnsupportedArchiveError(
     workDir,
     '不是 tar / stored zip 格式的作品包',

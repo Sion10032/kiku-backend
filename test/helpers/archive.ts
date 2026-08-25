@@ -56,3 +56,68 @@ export function buildTar(
   parts.push(Buffer.alloc(1024)); // 结尾双零块
   return Buffer.concat(parts);
 }
+
+/** 拼一个最小合法 zip（无 zip64）。method=8 用于测「deflate 拒绝」。 */
+export function buildZip(
+  entries: Array<{
+    path: string | Buffer;
+    data?: Buffer | string;
+    method?: 0 | 8;
+    efs?: boolean;
+    flags?: number;
+  }>,
+): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  const crc32 = (buf: Buffer): number => {
+    let c = 0xffffffff;
+    for (const b of buf) {
+      c ^= b;
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  for (const e of entries) {
+    const data = Buffer.from(e.data ?? '');
+    const name = Buffer.isBuffer(e.path) ? e.path : Buffer.from(e.path, 'utf8');
+    const method = e.method ?? 0;
+    const flags = (e.efs ? 0x800 : 0) | (e.flags ?? 0);
+    const crcVal = crc32(data);
+    // local header
+    const local = Buffer.alloc(30 + name.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(flags, 6);
+    local.writeUInt16LE(method, 8);
+    local.writeUInt32LE(crcVal, 14);
+    local.writeUInt32LE(data.length, 18); // compSize
+    local.writeUInt32LE(data.length, 22); // uncompSize
+    local.writeUInt16LE(name.length, 26);
+    name.copy(local, 30);
+    locals.push(local, data);
+    // central directory entry
+    const central = Buffer.alloc(46 + name.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(flags, 8);
+    central.writeUInt16LE(method, 10);
+    central.writeUInt32LE(crcVal, 16);
+    central.writeUInt32LE(data.length, 20); // compSize
+    central.writeUInt32LE(data.length, 24); // uncompSize
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30); // extraLen
+    central.writeUInt16LE(0, 32); // commentLen
+    central.writeUInt32LE(offset, 42); // localHeaderOffset
+    name.copy(central, 46);
+    centrals.push(central);
+    offset += local.length + data.length;
+  }
+  const cd = Buffer.concat(centrals);
+  // EOCD (22 bytes)
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(Buffer.concat(locals).length, 16); // cdOffset
+  return Buffer.concat([...locals, cd, eocd]);
+}
