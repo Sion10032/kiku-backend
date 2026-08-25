@@ -4,8 +4,9 @@ import { extname, join } from 'node:path';
 import { createFolderSource } from './folder.js';
 import { createTarSource } from './tar.js';
 import { UnsupportedArchiveError, type WorkSource } from './types.js';
-export type { WorkSource } from './types.js';
 import { createZipSource } from './zip.js';
+
+export type { WorkSource } from './types.js';
 
 export async function openWorkSource(
   rootFolderPath: string,

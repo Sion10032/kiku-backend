@@ -52,7 +52,7 @@ beforeAll(async () => {
     .insert(circles)
     .values({ name: `媒体测试社团_${base}` })
     .returning();
-  circleId = circle[0]!.id;
+  circleId = circle[0]?.id ?? 0;
   await db.insert(works).values([
     {
       id: TAR_ID,
