@@ -19,10 +19,8 @@ export async function openWorkSource(
 
   const ext = extname(fullPath).toLowerCase();
   if (ext === '.tar') {
-    // TODO: Task 4 实现后恢复
-    // const { createTarSource } = await import('./tar.js');
-    // return await createTarSource(fullPath);
-    throw new UnsupportedArchiveError(workDir, 'tar 支持尚未实现');
+    const { createTarSource } = await import('./tar.js');
+    return await createTarSource(fullPath);
   }
   if (ext === '.zip') {
     // TODO: Task 5 实现后恢复
