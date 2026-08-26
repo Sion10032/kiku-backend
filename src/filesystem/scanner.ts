@@ -266,10 +266,8 @@ export async function* performScan(
           }
         }
         skipped++;
-        yield* log(
-          'info',
-          `Skipped (already scanned): ${entry.rjCode} ${entry.name}`,
-        );
+        // 不逐条推送跳过日志（大库时刷屏），仅在汇总处报告总数；
+        // 无音频的跳过（no audio）数量通常极少，保留逐条日志便于排查
         continue;
       }
 
