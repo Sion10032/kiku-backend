@@ -30,6 +30,7 @@ mock.module('../src/services/cover.service.js', () => ({
 const { performScan } = await import('../src/filesystem/scanner.js');
 const { db } = await import('../src/db/main/index.js');
 const { works } = await import('../src/db/main/schema.js');
+const { softDeleteWork } = await import('../src/services/work.service.js');
 
 let root: string;
 const base = 400000 + Math.floor(Math.random() * 500000);
@@ -63,7 +64,12 @@ function resultsOf(events: unknown[]) {
       e,
     ): e is {
       type: 'SCAN_RESULTS';
-      results: { removed: number; purged: number };
+      results: {
+        total: number;
+        skipped: number;
+        removed: number;
+        purged: number;
+      };
     } => (e as { type: string }).type === 'SCAN_RESULTS',
   )?.results;
 }
@@ -140,5 +146,76 @@ describe('performScan 源缺失清理', () => {
       await db.select().from(works).where(eq(works.id, id)).limit(1)
     )[0];
     expect(row).toBeUndefined();
+  });
+});
+
+describe('performScan（已扫描作品过滤）', () => {
+  const id2 = `RJ${base + 100}`;
+
+  beforeAll(() => {
+    writeFileSync(
+      join(root, `${id2}.zip`),
+      buildZip([{ path: `${id2}/01.mp3`, data: 'audio' }]),
+    );
+  });
+
+  afterAll(async () => {
+    await db.delete(works).where(eq(works.id, id2));
+  });
+
+  function taskEvents(events: unknown[]) {
+    return events.filter(
+      (e): e is { type: string; task: { status: string } } =>
+        (e as { type: string }).type === 'SCAN_TASK',
+    );
+  }
+
+  it('首次扫描建任务；重扫描（路径未变、未软删）无任何任务事件且计入 skipped', async () => {
+    // 注：前面的既有用例结束时已删除 id 的源文件并物理清理其 DB 行，
+    // 故本 describe 运行时盘上只有 id2.zip
+    const first = await runScan();
+    expect(taskEvents(first).length).toBeGreaterThan(0);
+
+    const second = await runScan();
+    expect(
+      taskEvents(second).filter(
+        (e) =>
+          JSON.stringify(e).includes(id2) || JSON.stringify(e).includes(id),
+      ),
+    ).toHaveLength(0);
+    expect(resultsOf(second)?.skipped).toBe(1);
+    expect(resultsOf(second)?.total).toBe(0);
+
+    // 作品仍在库且未被误软删/清理
+    const row = (
+      await db.select().from(works).where(eq(works.id, id2)).limit(1)
+    )[0];
+    expect(row).toBeDefined();
+    expect(row?.deletedAt).toBeNull();
+  });
+
+  it('软删后源恢复 → 重新建任务并清除软删标记', async () => {
+    await softDeleteWork(id2);
+    const events = await runScan();
+    const statuses = taskEvents(events)
+      .filter((e) => JSON.stringify(e).includes(id2))
+      .map((e) => (e as { task: { status: string } }).task.status);
+    expect(statuses).toEqual(['pending', 'scanning', 'completed']);
+    const row = (
+      await db.select().from(works).where(eq(works.id, id2)).limit(1)
+    )[0];
+    expect(row?.deletedAt).toBeNull();
+  });
+
+  it('dir 漂移（路径变化）→ 重新建任务并修正 dir', async () => {
+    await db.update(works).set({ dir: 'wrong/path' }).where(eq(works.id, id2));
+    const events = await runScan();
+    expect(
+      taskEvents(events).some((e) => JSON.stringify(e).includes(id2)),
+    ).toBe(true);
+    const row = (
+      await db.select().from(works).where(eq(works.id, id2)).limit(1)
+    )[0];
+    expect(row?.dir).toBe(`${id2}.zip`);
   });
 });

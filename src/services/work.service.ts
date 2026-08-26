@@ -246,7 +246,7 @@ export async function upsertWork(
 export async function getWorksByRootFolder(rootFolder: string) {
   return db.query.works.findMany({
     where: { RAW: (t, op) => op.eq(t.rootFolder, rootFolder) },
-    columns: { id: true, deletedAt: true },
+    columns: { id: true, deletedAt: true, dir: true, sourceId: true },
   });
 }
 

@@ -32,6 +32,9 @@ interface ScanTask {
 /** 软删作品超过该天数仍缺失 → 物理清理（级联 + 封面） */
 const SCAN_PURGE_DAYS = 30;
 
+/** 扫描时确保存在的封面类型 */
+const SCAN_COVER_TYPES: CoverType[] = ['main', 'sam', '240x240'];
+
 /** 单个任务快照（增量推送，避免整表传输） */
 export interface ScanTaskPayload {
   id: number;
@@ -136,6 +139,8 @@ export async function* performScan(
   const failedTasks: ScanTask[] = [];
   /** 本次扫描在磁盘上发现的全部 RJ 码（含 unsupported-archive：源还在就不算缺失） */
   const onDiskRjCodes = new Set<string>();
+  /** 本次因已扫描（路径未变、未软删）而跳过的作品数 */
+  let skipped = 0;
 
   // 每条日志即产出一条事件（增量推送，替代原全量日志数组下发）
   const log = function* (
@@ -169,6 +174,11 @@ export async function* performScan(
     const entries = await collectWorkEntries(
       rootFolder.path,
       config.scannerMaxRecursionDepth,
+    );
+
+    // 已扫描作品索引：存在且路径未变、未软删的在下方直接跳过
+    const knownWorks = new Map(
+      (await getWorksByRootFolder(rootFolder.name)).map((w) => [w.id, w]),
     );
 
     for (const entry of entries) {
@@ -237,6 +247,32 @@ export async function* performScan(
         continue;
       }
 
+      // 已完成元数据抓取的作品：路径未变且未被软删 → 不建任务、不抓取、不推送，
+      // 仅静默补下缺失封面（本地 blob 检查 + 按需下载；sam 等 404 快速失败）
+      const known = knownWorks.get(entry.rjCode);
+      if (
+        known &&
+        known.deletedAt === null &&
+        known.dir === entry.relativePath
+      ) {
+        for (const type of SCAN_COVER_TYPES) {
+          if (!coverExists(entry.rjCode, type)) {
+            await downloadCover(
+              entry.rjCode,
+              type,
+              signal,
+              known.sourceId ?? undefined,
+            );
+          }
+        }
+        skipped++;
+        yield* log(
+          'info',
+          `Skipped (already scanned): ${entry.rjCode} ${entry.name}`,
+        );
+        continue;
+      }
+
       const task: ScanTask = {
         id: tasks.length + 1,
         title: `${entry.rjCode} ${entry.name}`,
@@ -252,6 +288,10 @@ export async function* performScan(
   }
 
   yield* log('info', `Found ${tasks.length} works to scan`);
+
+  if (skipped > 0) {
+    yield* log('info', `Skipped ${skipped} already-scanned works`);
+  }
 
   // Process each task
   let added = 0;
@@ -306,8 +346,7 @@ export async function* performScan(
       // 下载封面（如果不存在）
       // 使用 sourceId（未翻译版本）下载封面，如果不存在则使用当前 ID
       const coverSourceId = metadata.sourceId || rjCode;
-      const coverTypes: CoverType[] = ['main', 'sam', '240x240'];
-      for (const type of coverTypes) {
+      for (const type of SCAN_COVER_TYPES) {
         if (!coverExists(rjCode, type)) {
           yield* log(
             'info',
@@ -405,7 +444,6 @@ export async function* performScan(
   }
 
   // Send final results
-  // skipped：已扫描作品跳过计数由后续任务接入，先恒为 0
   yield {
     type: 'SCAN_RESULTS',
     results: {
@@ -413,7 +451,7 @@ export async function* performScan(
       added,
       updated,
       failed,
-      skipped: 0,
+      skipped,
       removed,
       purged,
     },
