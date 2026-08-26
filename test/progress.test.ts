@@ -35,12 +35,14 @@ describe('Progress Routes', () => {
       .insert(circles)
       .values({ name: `测试社团_${RUN}` })
       .returning();
+    const circleRow = circle[0];
+    if (!circleRow) throw new Error('circle insert failed');
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
       dir: `test/${WORK_ID}`,
       title: '进度测试作品',
-      circleId: circle[0].id,
+      circleId: circleRow.id,
     });
 
     token = app.jwt.sign({ name: TEST_USER, group: 'user' });
@@ -101,7 +103,8 @@ describe('Progress Routes', () => {
         },
       });
       expect(put1.statusCode).toBe(200);
-      expect(put1.json()).toEqual({ success: true });
+      const body1 = put1.json() as { success: boolean };
+      expect(body1).toEqual({ success: true });
 
       // 同 track 再次上报：覆盖 position
       const put2 = await app.inject({

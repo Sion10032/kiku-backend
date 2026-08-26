@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { expectNotNull } from './helpers/assert';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
 
-// mock retryFetch，避免真实网络；同时透传真实的 HttpError（cover.service
-// 会用 instanceof 判断 404）。用 query 后缀绕开可能被其他文件 mock 的注册表。
+// 拦截 globalThis.fetch 避免真实网络：cover.service 走真实的 retryFetch
+// （顺带覆盖 retryFetch 与 cover.service 的集成）。不使用 mock.module：
+// 模块注册表污染会波及同进程其他测试文件（如 client-retry.test.ts）。
 const fakeBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
 const fetchMock = mock(
   async (_url: string) =>
@@ -13,25 +14,25 @@ const fetchMock = mock(
       headers: { 'content-type': 'image/jpeg' },
     }),
 );
-const { HttpError } = await import('../src/scraper/client.js?real');
-mock.module('../src/scraper/client', () => ({
-  retryFetch: fetchMock,
-  HttpError,
-}));
+const realFetch = globalThis.fetch;
 
-// 动态 import：ESM 静态 import 会被提升到 mock.module 之前执行，
-// 必须在 mock 生效后再加载被测模块（bun:test 官方模式）
+// 动态 import：确保 setupTestEnvironment（CONFIG_PATH）先生效
 const { downloadCover, coverExists, getCoverData, deleteAllCovers } =
   await import('../src/services/cover.service');
 const { deleteBlob } = await import('../src/db/blob/index');
 
 describe('cover.service（blob.db 存储）', () => {
   beforeEach(() => {
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
     fetchMock.mockClear();
     // 用例间隔离：清掉测试用 key
     for (const t of ['main', 'sam', '240x240', '360x360']) {
       deleteBlob('cover', `RJ000007_${t}`);
     }
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
   });
 
   it('下载后存入 blob 库，key 直接使用作品ID', async () => {

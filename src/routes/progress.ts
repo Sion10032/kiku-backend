@@ -44,6 +44,8 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: progressBodySchema,
         response: {
           200: z.object({ success: z.boolean() }),
+          401: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
         },
       },
     },

@@ -74,7 +74,9 @@ describe('GET /api/history', () => {
       .insert(circles)
       .values({ name: `历史测试社团_${RUN}` })
       .returning();
-    const circleId = circle[0].id;
+    const circleRow = circle[0];
+    if (!circleRow) throw new Error('circle insert failed');
+    const circleId = circleRow.id;
 
     // 造 4 个作品（A/B/C 用于核心场景，D 用于分页/软删）
     await insertWork(WORK_A, '作品A', circleId);

@@ -19,9 +19,7 @@ describe('retryFetch 对 4xx 的重试策略', () => {
   });
 
   it('404 是永久错误：只请求一次，立即失败', async () => {
-    // 用 query 后缀导入真实的 client 模块，
-    // 避免被其他测试文件的 mock.module 污染
-    const { retryFetch } = await import('../src/scraper/client.js?real');
+    const { retryFetch } = await import('../src/scraper/client');
 
     let err: (Error & { status?: number }) | null = null;
     try {
@@ -44,7 +42,7 @@ describe('retryFetch 对 4xx 的重试策略', () => {
       async () => new Response('ok', { status: 200, statusText: 'OK' }),
     );
 
-    const { retryFetch } = await import('../src/scraper/client.js?real');
+    const { retryFetch } = await import('../src/scraper/client');
     const res = await retryFetch('https://example.com/retry-me');
 
     expect(res.ok).toBe(true);
