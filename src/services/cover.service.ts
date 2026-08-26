@@ -1,5 +1,5 @@
 import { blobExists, deleteBlob, getBlob, putBlob } from '../db/blob/index.js';
-import { retryFetch } from '../scraper/client.js';
+import { HttpError, retryFetch } from '../scraper/client.js';
 
 /**
  * 封面图片类型
@@ -107,6 +107,14 @@ export async function downloadCover(
   } catch (error) {
     // 如果是取消错误，不打印错误信息
     if (error instanceof DOMException && error.name === 'AbortError') {
+      return false;
+    }
+
+    // 404 是常见情况（部分作品没有 sam/resize 等衍生封面），简洁提示即可
+    if (error instanceof HttpError && error.status === 404) {
+      console.warn(
+        `Cover not available (404): ${getCoverUrl(sourceId || id, type)}`,
+      );
       return false;
     }
 

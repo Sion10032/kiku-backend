@@ -20,10 +20,15 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     };
     scanner.on('scan', handler);
 
-    // Clean up on disconnect.
-    reply.sse.onClose(() => {
+    // Cleanup on disconnect.
+    // 同时监听 raw close：若初始 send 期间客户端已断开，
+    // @fastify/sse 的 cleanup 先于 onClose 注册执行，
+    // 之后注册的回调永不触发，会造成 EventEmitter listener 泄漏。
+    const cleanup = (): void => {
       scanner.off('scan', handler);
-    });
+    };
+    reply.sse.onClose(cleanup);
+    reply.raw.on('close', cleanup);
   });
 
   // Start a scan.
