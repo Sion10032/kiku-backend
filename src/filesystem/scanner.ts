@@ -29,25 +29,27 @@ interface ScanTask {
   error?: string;
 }
 
-interface MainLog {
+/** 软删作品超过该天数仍缺失 → 物理清理（级联 + 封面） */
+const SCAN_PURGE_DAYS = 30;
+
+/** 单个任务快照（增量推送，避免整表传输） */
+export interface ScanTaskPayload {
+  id: number;
+  title: string;
+  status: 'pending' | 'scanning' | 'completed' | 'failed';
+  error?: string;
+}
+
+/** 单条扫描日志 */
+export interface ScanLogPayload {
   level: string;
   message: string;
   timestamp: string;
 }
 
-/** 软删作品超过该天数仍缺失 → 物理清理（级联 + 封面） */
-const SCAN_PURGE_DAYS = 30;
-
 export type ScanEvent =
-  | {
-      type: 'SCAN_TASKS';
-      tasks: Array<{ id: number; title: string; status: string }>;
-    }
-  | {
-      type: 'SCAN_FAILED_TASKS';
-      failedTasks: Array<{ id: number; title: string; error: string }>;
-    }
-  | { type: 'SCAN_MAIN_LOGS'; mainLogs: MainLog[] }
+  | { type: 'SCAN_TASK'; task: ScanTaskPayload }
+  | { type: 'SCAN_LOG'; log: ScanLogPayload }
   | {
       type: 'SCAN_RESULTS';
       results: {
@@ -55,6 +57,8 @@ export type ScanEvent =
         added: number;
         updated: number;
         failed: number;
+        /** 本次因已扫描完成而跳过的作品数 */
+        skipped: number;
         /** 源缺失被软删的作品数 */
         removed: number;
         /** 软删超期被物理清理的作品数 */
@@ -63,6 +67,62 @@ export type ScanEvent =
     }
   | { type: 'SCAN_FINISHED'; message: string }
   | { type: 'SCAN_ERROR'; error: string };
+
+/** 重连时通过 SCAN_INIT_STATE 下发的状态快照 */
+export interface ScanSnapshot {
+  /** 非终态任务（pending/scanning） */
+  tasks: ScanTaskPayload[];
+  failedTasks: ScanTaskPayload[];
+  completed: number;
+  /** 最近 SCAN_LOG_CAP 条日志 */
+  logs: ScanLogPayload[];
+}
+
+/** 日志快照保留条数上限 */
+export const SCAN_LOG_CAP = 500;
+
+export function emptySnapshot(): ScanSnapshot {
+  return { tasks: [], failedTasks: [], completed: 0, logs: [] };
+}
+
+/** 将事件应用到快照（ScannerManager 维护重连补播用；纯函数便于测试） */
+export function applyScanEvent(
+  snapshot: ScanSnapshot,
+  event: ScanEvent,
+): ScanSnapshot {
+  switch (event.type) {
+    case 'SCAN_TASK': {
+      const { task } = event;
+      // completed/failed 的任务可能仍在非终态列表中，先按 id 移除
+      const tasks = snapshot.tasks.filter((t) => t.id !== task.id);
+      if (task.status === 'completed') {
+        return { ...snapshot, tasks, completed: snapshot.completed + 1 };
+      }
+      if (task.status === 'failed') {
+        return {
+          ...snapshot,
+          tasks,
+          failedTasks: [...snapshot.failedTasks, task],
+        };
+      }
+      // pending / scanning：upsert，保持发现顺序
+      const idx = tasks.findIndex((t) => t.id === task.id);
+      if (idx === -1) return { ...snapshot, tasks: [...tasks, task] };
+      const next = [...tasks];
+      next[idx] = task;
+      return { ...snapshot, tasks: next };
+    }
+    case 'SCAN_LOG': {
+      const logs = [...snapshot.logs, event.log];
+      return {
+        ...snapshot,
+        logs: logs.length > SCAN_LOG_CAP ? logs.slice(-SCAN_LOG_CAP) : logs,
+      };
+    }
+    default:
+      return snapshot;
+  }
+}
 
 /**
  * Async generator that performs a scan, yielding events as it progresses.
@@ -74,32 +134,37 @@ export async function* performScan(
 ): AsyncGenerator<ScanEvent> {
   const tasks: ScanTask[] = [];
   const failedTasks: ScanTask[] = [];
-  const mainLogs: MainLog[] = [];
   /** 本次扫描在磁盘上发现的全部 RJ 码（含 unsupported-archive：源还在就不算缺失） */
   const onDiskRjCodes = new Set<string>();
 
-  const log = (level: string, message: string): void => {
-    mainLogs.push({ level, message, timestamp: new Date().toISOString() });
+  // 每条日志即产出一条事件（增量推送，替代原全量日志数组下发）
+  const log = function* (
+    level: string,
+    message: string,
+  ): Generator<ScanEvent, void, unknown> {
+    yield {
+      type: 'SCAN_LOG',
+      log: { level, message, timestamp: new Date().toISOString() },
+    };
   };
 
-  const strip = (t: ScanTask) => ({
+  const stripTask = (t: ScanTask): ScanTaskPayload => ({
     id: t.id,
     title: t.title,
     status: t.status,
+    error: t.error,
   });
 
-  log('info', 'Starting scan...');
-  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
+  yield* log('info', 'Starting scan...');
 
   // Scan each root folder to build the task list
   for (const rootFolder of config.rootFolders) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
-    log(
+    yield* log(
       'info',
       `Scanning root folder: ${rootFolder.name} (${rootFolder.path})`,
     );
-    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
     const entries = await collectWorkEntries(
       rootFolder.path,
@@ -130,11 +195,9 @@ export async function* performScan(
           ),
         };
         failedTasks.push(task);
-        log('error', `Unsupported archive: ${task.title}`);
-        yield {
-          type: 'SCAN_TASKS',
-          tasks: [...tasks, ...failedTasks].map(strip),
-        };
+        yield* log('error', `Unsupported archive: ${task.title}`);
+        // 收集期失败即时下发，替代原全量任务表推送
+        yield { type: 'SCAN_TASK', task: stripTask(task) };
         continue;
       }
 
@@ -160,23 +223,21 @@ export async function* performScan(
           error: errMsg,
         };
         failedTasks.push(task);
-        log(
+        yield* log(
           'error',
           `Failed to open: ${entry.rjCode} ${entry.name} - ${errMsg}`,
         );
-        yield {
-          type: 'SCAN_TASKS',
-          tasks: [...tasks, ...failedTasks].map(strip),
-        };
+        yield { type: 'SCAN_TASK', task: stripTask(task) };
         continue;
       }
 
       if (!hasAudio) {
-        log('info', `Skipped (no audio): ${entry.rjCode} ${entry.name}`);
+        // 无音频只记日志，不产生任务事件
+        yield* log('info', `Skipped (no audio): ${entry.rjCode} ${entry.name}`);
         continue;
       }
 
-      tasks.push({
+      const task: ScanTask = {
         id: tasks.length + 1,
         title: `${entry.rjCode} ${entry.name}`,
         relativePath: entry.relativePath,
@@ -184,17 +245,13 @@ export async function* performScan(
         rjCode: entry.rjCode,
         dirName: entry.name,
         status: 'pending',
-      });
-
-      yield {
-        type: 'SCAN_TASKS',
-        tasks: [...tasks, ...failedTasks].map(strip),
       };
+      tasks.push(task);
+      yield { type: 'SCAN_TASK', task: stripTask(task) };
     }
   }
 
-  log('info', `Found ${tasks.length} works to scan`);
-  yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
+  yield* log('info', `Found ${tasks.length} works to scan`);
 
   // Process each task
   let added = 0;
@@ -206,21 +263,16 @@ export async function* performScan(
 
     try {
       task.status = 'scanning';
-      yield {
-        type: 'SCAN_TASKS',
-        tasks: tasks.map(strip),
-      };
+      yield { type: 'SCAN_TASK', task: stripTask(task) };
 
       const rjCode = task.rjCode;
 
-      log('info', `Fetching metadata for ${rjCode}...`);
-      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
+      yield* log('info', `Fetching metadata for ${rjCode}...`);
 
       // Fetch metadata from DLsite
       const metadata = await fetchDLsiteWorkInfo(rjCode, signal);
 
-      log('info', `Got metadata: ${metadata.title}`);
-      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
+      yield* log('info', `Got metadata: ${metadata.title}`);
 
       // Write to database (dir = relativePath, not dirName)
       const result = await upsertWork({
@@ -257,11 +309,10 @@ export async function* performScan(
       const coverTypes: CoverType[] = ['main', 'sam', '240x240'];
       for (const type of coverTypes) {
         if (!coverExists(rjCode, type)) {
-          log(
+          yield* log(
             'info',
             `Downloading cover ${type} for ${rjCode} (source: ${coverSourceId})...`,
           );
-          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
 
           try {
             const success = await downloadCover(
@@ -271,30 +322,32 @@ export async function* performScan(
               coverSourceId,
             );
             if (success) {
-              log('info', `Cover ${type} downloaded for ${rjCode}`);
+              yield* log('info', `Cover ${type} downloaded for ${rjCode}`);
             } else {
-              log('warning', `Failed to download cover ${type} for ${rjCode}`);
+              yield* log(
+                'warning',
+                `Failed to download cover ${type} for ${rjCode}`,
+              );
             }
           } catch (coverErr) {
-            log(
+            yield* log(
               'warning',
               `Error downloading cover ${type} for ${rjCode}: ${String(coverErr)}`,
             );
           }
-
-          yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
         }
       }
 
       if (result.created) {
         added++;
-        log('info', `Added: ${rjCode} - ${metadata.title}`);
+        yield* log('info', `Added: ${rjCode} - ${metadata.title}`);
       } else {
         updated++;
-        log('info', `Updated: ${rjCode} - ${metadata.title}`);
+        yield* log('info', `Updated: ${rjCode} - ${metadata.title}`);
       }
 
       task.status = 'completed';
+      yield { type: 'SCAN_TASK', task: stripTask(task) };
     } catch (err) {
       task.status = 'failed';
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -302,14 +355,9 @@ export async function* performScan(
       failedTasks.push(task);
       failed++;
 
-      log('error', `Failed: ${task.title} - ${errMsg}`);
+      yield* log('error', `Failed: ${task.title} - ${errMsg}`);
+      yield { type: 'SCAN_TASK', task: stripTask(task) };
     }
-
-    yield {
-      type: 'SCAN_TASKS',
-      tasks: tasks.map(strip),
-    };
-    yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
   }
 
   // ---------- Prune：清理源文件已消失的作品（软删 + 超期物理删） ----------
@@ -334,11 +382,10 @@ export async function* performScan(
       try {
         await softDeleteWork(id);
         removed++;
-        log('info', `Removed (source missing): ${id}`);
+        yield* log('info', `Removed (source missing): ${id}`);
       } catch (err) {
-        log('error', `Failed to soft-delete ${id}: ${String(err)}`);
+        yield* log('error', `Failed to soft-delete ${id}: ${String(err)}`);
       }
-      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
     }
 
     for (const id of decision.toHardDelete) {
@@ -346,34 +393,31 @@ export async function* performScan(
       try {
         await hardDeleteWork(id);
         purged++;
-        log('info', `Purged (source missing beyond grace): ${id}`);
+        yield* log('info', `Purged (source missing beyond grace): ${id}`);
       } catch (err) {
-        log('error', `Failed to purge ${id}: ${String(err)}`);
+        yield* log('error', `Failed to purge ${id}: ${String(err)}`);
       }
-      yield { type: 'SCAN_MAIN_LOGS', mainLogs: [...mainLogs] };
     }
   }
 
   if (removed > 0 || purged > 0) {
-    log('info', `Pruned: ${removed} removed, ${purged} purged`);
+    yield* log('info', `Pruned: ${removed} removed, ${purged} purged`);
   }
 
   // Send final results
+  // skipped：已扫描作品跳过计数由后续任务接入，先恒为 0
   yield {
     type: 'SCAN_RESULTS',
-    results: { total: tasks.length, added, updated, failed, removed, purged },
+    results: {
+      total: tasks.length,
+      added,
+      updated,
+      failed,
+      skipped: 0,
+      removed,
+      purged,
+    },
   };
-
-  if (failedTasks.length > 0) {
-    yield {
-      type: 'SCAN_FAILED_TASKS',
-      failedTasks: failedTasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        error: t.error || 'Unknown error',
-      })),
-    };
-  }
 }
 
 /**
@@ -383,9 +427,15 @@ export async function* performScan(
 class ScannerManager extends EventEmitter {
   private currentController: AbortController | null = null;
   private scanning = false;
+  private snapshot: ScanSnapshot | null = null;
 
   get isScanning(): boolean {
     return this.scanning;
+  }
+
+  /** 当前扫描状态快照（SSE 重连补播用）；从未扫描过为 null */
+  getSnapshot(): ScanSnapshot | null {
+    return this.snapshot;
   }
 
   /** Start a scan in the background. Throws if a scan is already running. */
@@ -393,6 +443,9 @@ class ScannerManager extends EventEmitter {
     if (this.scanning) {
       throw new Error('Scan is already in progress');
     }
+
+    // 新扫描开始时重置快照
+    this.snapshot = emptySnapshot();
 
     // Run async — fire and forget. Errors are handled inside runScan.
     this.runScan(config).catch((err) => {
@@ -414,6 +467,10 @@ class ScannerManager extends EventEmitter {
 
     try {
       for await (const event of performScan(config, signal)) {
+        // 维护快照供断线重连补播（SCAN_FINISHED/SCAN_ERROR 不改快照）
+        if (this.snapshot) {
+          this.snapshot = applyScanEvent(this.snapshot, event);
+        }
         this.emit('scan', event);
       }
       this.emit('scan', {

@@ -97,20 +97,30 @@ async function runScan() {
 describe('performScan（压缩包作品）', () => {
   it('文件夹/tar/zip 入库，deflate 与 7z 进失败列表且提示重打包', async () => {
     const events = await runScan();
-    const failed = events
+    const failedTasks = events
       .filter(
         (
           e,
         ): e is {
-          type: 'SCAN_FAILED_TASKS';
-          failedTasks: Array<{ title: string; error: string }>;
-        } => (e as { type: string }).type === 'SCAN_FAILED_TASKS',
+          type: 'SCAN_TASK';
+          task: { title: string; status: string; error?: string };
+        } =>
+          (e as { type: string }).type === 'SCAN_TASK' &&
+          (e as { task?: { status?: string } }).task?.status === 'failed',
       )
-      .at(-1);
-    expect(failed?.failedTasks.length).toBe(2);
-    expect(failed?.failedTasks[0]?.error).toContain('7z a -mx=0');
-    expect(failed?.failedTasks.map((t) => t.title).join()).toContain(ids[3]);
-    expect(failed?.failedTasks.map((t) => t.title).join()).toContain(ids[4]);
+      .map((e) => e.task);
+    expect(failedTasks.length).toBe(2);
+    expect(failedTasks[0]?.error).toContain('7z a -mx=0');
+    expect(failedTasks.map((t) => t.title).join()).toContain(ids[3]);
+    expect(failedTasks.map((t) => t.title).join()).toContain(ids[4]);
+
+    // 无音频作品只记日志，不产生任何任务事件
+    const noAudioEvents = events.filter(
+      (e) =>
+        (e as { type: string }).type === 'SCAN_TASK' &&
+        JSON.stringify(e).includes(ids[5]),
+    );
+    expect(noAudioEvents).toHaveLength(0);
 
     const w1 = (
       await db.select().from(works).where(eq(works.id, ids[0])).limit(1)

@@ -11,7 +11,7 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     // Send initial scan state on connect / reconnect.
     await reply.sse.send({
       event: 'SCAN_INIT_STATE',
-      data: { isScanning: scanner.isScanning },
+      data: { isScanning: scanner.isScanning, snapshot: scanner.getSnapshot() },
     });
 
     // Forward scan events to this client.

@@ -106,6 +106,15 @@ describe('performScan 源缺失清理', () => {
     // 源在盘，不产生 removed
     expect(resultsOf(events)?.removed).toBe(0);
 
+    // 唯一作品的全量状态转移序列：pending → scanning → completed
+    const statuses = events
+      .filter(
+        (e): e is { type: 'SCAN_TASK'; task: { status: string } } =>
+          (e as { type: string }).type === 'SCAN_TASK',
+      )
+      .map((e) => e.task.status);
+    expect(statuses).toEqual(['pending', 'scanning', 'completed']);
+
     const row = (
       await db.select().from(works).where(eq(works.id, id)).limit(1)
     )[0];
