@@ -390,12 +390,16 @@ const ORDER_KEY_MAP = {
  * 筛选查询通用分页参数（默认与 getWorksPaginated 一致）。
  * random/betterRandom 在筛选场景退化为 release。
  */
-function filteredPageOpts(opts?: {
+
+/** 作品列表通用分页/排序参数（筛选类查询与各列表端点共用）。 */
+export type WorksListOpts = {
   page?: number;
   pageSize?: number;
   orderBy?: string;
   sortDir?: 'asc' | 'desc';
-}) {
+};
+
+function filteredPageOpts(opts?: WorksListOpts) {
   const {
     page = 1,
     pageSize = 20,
@@ -412,14 +416,9 @@ function filteredPageOpts(opts?: {
   };
 }
 
-export async function getWorksPaginated(opts: {
-  page?: number;
-  pageSize?: number;
-  orderBy?: string;
-  sortDir?: 'asc' | 'desc';
-  username?: string;
-  seed?: number;
-}) {
+export async function getWorksPaginated(
+  opts: WorksListOpts & { username?: string; seed?: number },
+) {
   const {
     page = 1,
     pageSize = 20,
@@ -508,12 +507,7 @@ export async function getWorksPaginated(opts: {
 export async function searchWorks(
   keyword: string,
   username?: string,
-  opts?: {
-    page?: number;
-    pageSize?: number;
-    orderBy?: string;
-    sortDir?: 'asc' | 'desc';
-  },
+  opts?: WorksListOpts,
 ) {
   const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
   // 命中 RJ 号则按精确 ID 匹配（extractRJCode 已做校验，保持原样不做规范化/补零）
@@ -621,12 +615,7 @@ export async function getCircleById(id: number | string) {
 export async function getCircleWorks(
   circleId: number | string,
   username?: string,
-  opts?: {
-    page?: number;
-    pageSize?: number;
-    orderBy?: string;
-    sortDir?: 'asc' | 'desc';
-  },
+  opts?: WorksListOpts,
 ) {
   const numId =
     typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
@@ -682,12 +671,7 @@ export async function getTagById(id: number | string) {
 export async function getTagWorks(
   tagId: number | string,
   username?: string,
-  opts?: {
-    page?: number;
-    pageSize?: number;
-    orderBy?: string;
-    sortDir?: 'asc' | 'desc';
-  },
+  opts?: WorksListOpts,
 ) {
   const numId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
   const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
@@ -745,12 +729,7 @@ export async function getVaById(id: string) {
 export async function getVaWorks(
   vaId: string,
   username?: string,
-  opts?: {
-    page?: number;
-    pageSize?: number;
-    orderBy?: string;
-    sortDir?: 'asc' | 'desc';
-  },
+  opts?: WorksListOpts,
 ) {
   const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
   const workIds = db

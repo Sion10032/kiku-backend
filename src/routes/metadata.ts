@@ -510,7 +510,7 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { page, order, sort } = request.query;
       const user = (request.user as { name?: string })?.name;
       try {
-        return await getVaWorks(String(id), user, {
+        return await getVaWorks(id, user, {
           page,
           orderBy: order,
           sortDir: sort,
