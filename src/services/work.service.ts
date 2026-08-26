@@ -1,4 +1,4 @@
-import { eq, like, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { db } from '../db/main/index.js';
 import type { Circle, Tag, Va, Work } from '../db/main/schema.js';
@@ -376,6 +376,42 @@ export async function getWorkById(id: string, username?: string) {
   return work;
 }
 
+/** 排序字段映射（getWorksPaginated 与筛选查询共用）。 */
+const ORDER_KEY_MAP = {
+  id: 'id',
+  release: 'release',
+  dl_count: 'dlCount',
+  price: 'price',
+  rate_average_2dp: 'rateAverage2dp',
+  review_count: 'reviewCount',
+} as const;
+
+/**
+ * 筛选查询通用分页参数（默认与 getWorksPaginated 一致）。
+ * random/betterRandom 在筛选场景退化为 release。
+ */
+function filteredPageOpts(opts?: {
+  page?: number;
+  pageSize?: number;
+  orderBy?: string;
+  sortDir?: 'asc' | 'desc';
+}) {
+  const {
+    page = 1,
+    pageSize = 20,
+    orderBy = 'release',
+    sortDir = 'desc',
+  } = opts ?? {};
+  const key = ORDER_KEY_MAP[orderBy as keyof typeof ORDER_KEY_MAP] ?? 'release';
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize,
+    orderKey: key,
+    sortDir,
+  };
+}
+
 export async function getWorksPaginated(opts: {
   page?: number;
   pageSize?: number;
@@ -386,7 +422,7 @@ export async function getWorksPaginated(opts: {
 }) {
   const {
     page = 1,
-    pageSize = 12,
+    pageSize = 20,
     orderBy = 'release',
     sortDir = 'desc',
     username,
@@ -434,16 +470,7 @@ export async function getWorksPaginated(opts: {
   }
 
   const orderKey =
-    (
-      {
-        id: 'id',
-        release: 'release',
-        dl_count: 'dlCount',
-        price: 'price',
-        rate_average_2dp: 'rateAverage2dp',
-        review_count: 'reviewCount',
-      } as const
-    )[orderBy] ?? 'release';
+    ORDER_KEY_MAP[orderBy as keyof typeof ORDER_KEY_MAP] ?? 'release';
 
   const [items, countResult] = await Promise.all([
     db.query.works.findMany({
@@ -478,7 +505,17 @@ export async function getWorksPaginated(opts: {
   };
 }
 
-export async function searchWorks(keyword: string, username?: string) {
+export async function searchWorks(
+  keyword: string,
+  username?: string,
+  opts?: {
+    page?: number;
+    pageSize?: number;
+    orderBy?: string;
+    sortDir?: 'asc' | 'desc';
+  },
+) {
+  const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
   // 命中 RJ 号则按精确 ID 匹配（extractRJCode 已做校验，保持原样不做规范化/补零）
   const rjCode = extractRJCode(keyword);
   if (rjCode) {
@@ -496,7 +533,10 @@ export async function searchWorks(keyword: string, username?: string) {
     });
     const formatted = items.map((item) => formatWork(item));
     await attachUserData(formatted, username);
-    return { works: formatted };
+    return {
+      works: formatted,
+      pagination: { currentPage: page, pageSize, totalCount: formatted.length },
+    };
   }
 
   const circleIds = db
@@ -514,31 +554,59 @@ export async function searchWorks(keyword: string, username?: string) {
     .innerJoin(vas, eq(vaWork.vaId, vas.id))
     .where(like(vas.name, `%${keyword}%`));
 
-  const items = await db.query.works.findMany({
-    where: {
-      RAW: (t, op) =>
-        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
-        op.and(
-          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
-          op.or(
-            op.like(t.title, `%${keyword}%`),
-            op.like(t.id, `%${keyword}%`),
-            op.inArray(t.circleId, circleIds),
-            op.inArray(t.id, tagWorkIds),
-            op.inArray(t.id, vaWorkIds),
+  const [items, countResult] = await Promise.all([
+    db.query.works.findMany({
+      where: {
+        RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+          op.and(
+            // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
+            op.or(
+              op.like(t.title, `%${keyword}%`),
+              op.like(t.id, `%${keyword}%`),
+              op.inArray(t.circleId, circleIds),
+              op.inArray(t.id, tagWorkIds),
+              op.inArray(t.id, vaWorkIds),
+            )!,
+            op.isNull(t.deletedAt),
           )!,
-          op.isNull(t.deletedAt),
-        )!,
-    },
-    with: {
-      circle: true,
-      tags: { with: { tag: true } },
-      vas: { with: { va: true } },
-    },
-  });
+      },
+      with: {
+        circle: true,
+        tags: { with: { tag: true } },
+        vas: { with: { va: true } },
+      },
+      orderBy: (t, { asc: ascOp, desc: descOp }) =>
+        sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
+      limit: pageSize,
+      offset,
+    }),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(works)
+      .where(
+        and(
+          or(
+            like(works.title, `%${keyword}%`),
+            like(works.id, `%${keyword}%`),
+            inArray(works.circleId, circleIds),
+            inArray(works.id, tagWorkIds),
+            inArray(works.id, vaWorkIds),
+          ),
+          isNull(works.deletedAt),
+        ),
+      ),
+  ]);
   const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
-  return { works: formatted };
+  return {
+    works: formatted,
+    pagination: {
+      currentPage: page,
+      pageSize,
+      totalCount: countResult[0]?.count ?? 0,
+    },
+  };
 }
 
 export async function getCircleById(id: number | string) {
@@ -553,24 +621,49 @@ export async function getCircleById(id: number | string) {
 export async function getCircleWorks(
   circleId: number | string,
   username?: string,
+  opts?: {
+    page?: number;
+    pageSize?: number;
+    orderBy?: string;
+    sortDir?: 'asc' | 'desc';
+  },
 ) {
   const numId =
     typeof circleId === 'string' ? parseInt(circleId, 10) : circleId;
-  const items = await db.query.works.findMany({
-    where: {
-      RAW: (t, op) =>
-        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
-        op.and(op.eq(t.circleId, numId), op.isNull(t.deletedAt))!,
-    },
-    with: {
-      circle: true,
-      tags: { with: { tag: true } },
-      vas: { with: { va: true } },
-    },
-  });
+  const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
+  const [items, countResult] = await Promise.all([
+    db.query.works.findMany({
+      where: {
+        RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+          op.and(op.eq(t.circleId, numId), op.isNull(t.deletedAt))!,
+      },
+      with: {
+        circle: true,
+        tags: { with: { tag: true } },
+        vas: { with: { va: true } },
+      },
+      orderBy: (t, { asc: ascOp, desc: descOp }) =>
+        sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
+      limit: pageSize,
+      offset,
+    }),
+    // count 查询无法复用 RAW where（其面向 findMany 的回调形态），按列引用重写等价条件
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(works)
+      .where(and(eq(works.circleId, numId), isNull(works.deletedAt))),
+  ]);
   const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
-  return formatted;
+  return {
+    works: formatted,
+    pagination: {
+      currentPage: page,
+      pageSize,
+      totalCount: countResult[0]?.count ?? 0,
+    },
+  };
 }
 
 export async function getCircles() {
@@ -586,27 +679,55 @@ export async function getTagById(id: number | string) {
   return row;
 }
 
-export async function getTagWorks(tagId: number | string, username?: string) {
+export async function getTagWorks(
+  tagId: number | string,
+  username?: string,
+  opts?: {
+    page?: number;
+    pageSize?: number;
+    orderBy?: string;
+    sortDir?: 'asc' | 'desc';
+  },
+) {
   const numId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
+  const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
   const workIds = db
     .select({ workId: tagWork.workId })
     .from(tagWork)
     .where(eq(tagWork.tagId, numId));
-  const items = await db.query.works.findMany({
-    where: {
-      RAW: (t, op) =>
-        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
-        op.and(op.inArray(t.id, workIds), op.isNull(t.deletedAt))!,
-    },
-    with: {
-      circle: true,
-      tags: { with: { tag: true } },
-      vas: { with: { va: true } },
-    },
-  });
+  const [items, countResult] = await Promise.all([
+    db.query.works.findMany({
+      where: {
+        RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+          op.and(op.inArray(t.id, workIds), op.isNull(t.deletedAt))!,
+      },
+      with: {
+        circle: true,
+        tags: { with: { tag: true } },
+        vas: { with: { va: true } },
+      },
+      orderBy: (t, { asc: ascOp, desc: descOp }) =>
+        sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
+      limit: pageSize,
+      offset,
+    }),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(works)
+      .innerJoin(tagWork, eq(tagWork.workId, works.id))
+      .where(and(eq(tagWork.tagId, numId), isNull(works.deletedAt))),
+  ]);
   const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
-  return formatted;
+  return {
+    works: formatted,
+    pagination: {
+      currentPage: page,
+      pageSize,
+      totalCount: countResult[0]?.count ?? 0,
+    },
+  };
 }
 
 export async function getTags() {
@@ -621,26 +742,54 @@ export async function getVaById(id: string) {
   return row;
 }
 
-export async function getVaWorks(vaId: string, username?: string) {
+export async function getVaWorks(
+  vaId: string,
+  username?: string,
+  opts?: {
+    page?: number;
+    pageSize?: number;
+    orderBy?: string;
+    sortDir?: 'asc' | 'desc';
+  },
+) {
+  const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
   const workIds = db
     .select({ workId: vaWork.workId })
     .from(vaWork)
     .where(eq(vaWork.vaId, vaId));
-  const items = await db.query.works.findMany({
-    where: {
-      RAW: (t, op) =>
-        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
-        op.and(op.inArray(t.id, workIds), op.isNull(t.deletedAt))!,
-    },
-    with: {
-      circle: true,
-      tags: { with: { tag: true } },
-      vas: { with: { va: true } },
-    },
-  });
+  const [items, countResult] = await Promise.all([
+    db.query.works.findMany({
+      where: {
+        RAW: (t, op) =>
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+          op.and(op.inArray(t.id, workIds), op.isNull(t.deletedAt))!,
+      },
+      with: {
+        circle: true,
+        tags: { with: { tag: true } },
+        vas: { with: { va: true } },
+      },
+      orderBy: (t, { asc: ascOp, desc: descOp }) =>
+        sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
+      limit: pageSize,
+      offset,
+    }),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(works)
+      .innerJoin(vaWork, eq(vaWork.workId, works.id))
+      .where(and(eq(vaWork.vaId, vaId), isNull(works.deletedAt))),
+  ]);
   const formatted = items.map((item) => formatWork(item));
   await attachUserData(formatted, username);
-  return formatted;
+  return {
+    works: formatted,
+    pagination: {
+      currentPage: page,
+      pageSize,
+      totalCount: countResult[0]?.count ?? 0,
+    },
+  };
 }
 
 export async function getVas() {
