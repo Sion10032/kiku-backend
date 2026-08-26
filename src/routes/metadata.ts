@@ -85,7 +85,7 @@ const userProgressSchema = z.object({
   updatedAt: z.string(),
 });
 
-const formattedWorkSchema = z.object({
+export const formattedWorkSchema = z.object({
   id: z.string(),
   rootFolder: z.string(),
   dir: z.string(),
@@ -108,7 +108,7 @@ const formattedWorkSchema = z.object({
   sourceId: z.string().nullable(),
 });
 
-const paginationSchema = z.object({
+export const paginationSchema = z.object({
   currentPage: z.number(),
   pageSize: z.number(),
   totalCount: z.number(),

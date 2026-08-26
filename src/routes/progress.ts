@@ -2,11 +2,13 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   deleteWorkProgress,
+  getUserHistoryIds,
   getWorkProgress,
   upsertProgress,
 } from '../services/progress.service.js';
 import { getUserByName } from '../services/user.service.js';
-import { getWorkById } from '../services/work.service.js';
+import { getWorkById, getWorksByIdsOrdered } from '../services/work.service.js';
+import { formattedWorkSchema, paginationSchema } from './metadata.js';
 
 // 请求体 snake_case 对齐 review.ts（work_id/review_text）风格
 const progressBodySchema = z.object({
@@ -74,6 +76,40 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return { success: true };
+    },
+  );
+
+  // 用户收听历史（按作品去重，最近收听时间倒序）：
+  // progress.service 聚合出有序 workId，work.service 保序格式化，
+  // 响应结构与 /works 列表同构（前端复用 WorksPage 类型与卡片组件）
+  const historyQuerySchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  });
+
+  fastify.get(
+    '/history',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        querystring: historyQuerySchema,
+        response: {
+          200: z.object({
+            works: z.array(formattedWorkSchema),
+            pagination: paginationSchema,
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const user = request.user as { name: string; group: string };
+      const { page, pageSize } = request.query;
+      const { workIds, totalCount } = await getUserHistoryIds(user.name, {
+        page,
+        pageSize,
+      });
+      const works = await getWorksByIdsOrdered(workIds, user.name);
+      return { works, pagination: { currentPage: page, pageSize, totalCount } };
     },
   );
 
