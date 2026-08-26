@@ -4,7 +4,8 @@ import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
 
-// mock retryFetch，避免真实网络
+// mock retryFetch，避免真实网络；同时透传真实的 HttpError（cover.service
+// 会用 instanceof 判断 404）。用 query 后缀绕开可能被其他文件 mock 的注册表。
 const fakeBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
 const fetchMock = mock(
   async (_url: string) =>
@@ -12,7 +13,11 @@ const fetchMock = mock(
       headers: { 'content-type': 'image/jpeg' },
     }),
 );
-mock.module('../src/scraper/client', () => ({ retryFetch: fetchMock }));
+const { HttpError } = await import('../src/scraper/client.js?real');
+mock.module('../src/scraper/client', () => ({
+  retryFetch: fetchMock,
+  HttpError,
+}));
 
 // 动态 import：ESM 静态 import 会被提升到 mock.module 之前执行，
 // 必须在 mock 生效后再加载被测模块（bun:test 官方模式）

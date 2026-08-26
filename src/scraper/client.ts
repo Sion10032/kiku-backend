@@ -1,5 +1,25 @@
 import { getConfig } from '../config/index.js';
 
+/**
+ * 带 HTTP 状态码的抓取错误。
+ *
+ * 4xx（除 429 限流）是永久性错误：资源不存在（404）、无权限（403）等，
+ * 重试不会改变结果，只会白白等待 retryDelay 递增的退避时间
+ * （默认配置下一次 404 要耗 30s+，扫描大量缺失封面的作品时被严重拖慢）。
+ */
+export class HttpError extends Error {
+  readonly status: number;
+  /** false 表示重试无意义（4xx 非 429），应立即抛出 */
+  readonly retryable: boolean;
+
+  constructor(status: number, statusText: string) {
+    super(`HTTP ${status}: ${statusText}`);
+    this.name = 'HttpError';
+    this.status = status;
+    this.retryable = !(status >= 400 && status < 500 && status !== 429);
+  }
+}
+
 export interface FetchOptions extends BunFetchRequestInit {
   timeout?: number;
   /** External abort signal (e.g., from scanner). Combined with timeout. */
@@ -54,7 +74,7 @@ export async function retryFetch(
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new HttpError(response.status, response.statusText);
       }
 
       return response;
@@ -63,6 +83,11 @@ export async function retryFetch(
 
       // Don't retry if aborted
       if (lastError.name === 'AbortError') {
+        throw lastError;
+      }
+
+      // 4xx（除 429）为永久错误，立即失败，不进入退避重试
+      if (lastError instanceof HttpError && !lastError.retryable) {
         throw lastError;
       }
 
