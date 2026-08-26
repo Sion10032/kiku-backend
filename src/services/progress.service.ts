@@ -1,6 +1,6 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
-import { userProgress } from '../db/main/schema.js';
+import { userProgress, works } from '../db/main/schema.js';
 
 /** 单作品的进度聚合（列表注入用，camelCase 对齐前端 Review 响应风格）。 */
 export interface WorkProgressSummary {
@@ -125,4 +125,47 @@ export async function deleteWorkProgress(userName: string, workId: string) {
     .run();
 
   return deleted.changes;
+}
+
+/**
+ * 用户收听历史（按作品去重）：max(updatedAt) 倒序分页取 workId。
+ *
+ * - join works 过滤软删（deletedAt 非空的作品不出现在历史）
+ * - updatedAt 为 ISO 8601 文本，字典序即时间序（见计划 D3）
+ * - 仅返回 id 与总数；works 格式化由 work.service.getWorksByIdsOrdered
+ *   完成（避免 progress.service → work.service 反向依赖，见计划 D2）
+ */
+export async function getUserHistoryIds(
+  userName: string,
+  opts: { page?: number; pageSize?: number } = {},
+): Promise<{ workIds: string[]; totalCount: number }> {
+  const { page = 1, pageSize = 20 } = opts;
+  const offset = (page - 1) * pageSize;
+
+  const where = and(
+    eq(userProgress.userName, userName),
+    isNull(works.deletedAt),
+  );
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({ workId: userProgress.workId })
+      .from(userProgress)
+      .innerJoin(works, eq(userProgress.workId, works.id))
+      .where(where)
+      .groupBy(userProgress.workId)
+      .orderBy(desc(sql`max(${userProgress.updatedAt})`))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(distinct ${userProgress.workId})` })
+      .from(userProgress)
+      .innerJoin(works, eq(userProgress.workId, works.id))
+      .where(where),
+  ]);
+
+  return {
+    workIds: rows.map((r) => r.workId),
+    totalCount: countRows[0]?.count ?? 0,
+  };
 }

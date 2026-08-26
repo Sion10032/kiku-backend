@@ -376,6 +376,42 @@ export async function getWorkById(id: string, username?: string) {
   return work;
 }
 
+/**
+ * 按 id 批量取作品并保持传入顺序（收听历史等「顺序由外部决定」的场景）。
+ *
+ * - inArray 批量查询（避免 N+1），结果按 ids 重排（findMany 不保证顺序）
+ * - 过滤软删：ids 中已软删的作品静默跳过（不出现在结果里）
+ * - attachUserData 注入 userRating/userProgress（同其他列表端点）
+ */
+export async function getWorksByIdsOrdered(
+  ids: string[],
+  username?: string,
+): Promise<FormattedWork[]> {
+  if (ids.length === 0) return [];
+
+  const rows = await db.query.works.findMany({
+    with: {
+      circle: true,
+      tags: { with: { tag: true } },
+      vas: { with: { va: true } },
+    },
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
+        op.and(op.inArray(t.id, ids), op.isNull(t.deletedAt))!,
+    },
+  });
+
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const items = ids
+    .map((id) => byId.get(id))
+    .filter((r) => r != null)
+    .map((r) => formatWork(r));
+
+  await attachUserData(items, username);
+  return items;
+}
+
 /** 排序字段映射（getWorksPaginated 与筛选查询共用）。 */
 const ORDER_KEY_MAP = {
   id: 'id',
