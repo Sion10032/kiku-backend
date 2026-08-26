@@ -312,7 +312,11 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { id } = request.params;
       const { type } = request.query as { type: CoverType };
 
-      const cover = getCoverData(id, type);
+      // 部分作品没有 sam/240x240 等衍生封面（下载 404），
+      // 此时回退到 main，避免前端列表缩略图整片占位
+      const cover =
+        getCoverData(id, type) ??
+        (type !== 'main' ? getCoverData(id, 'main') : null);
       if (!cover) {
         return reply
           .status(404)
