@@ -845,3 +845,15 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
   const source = await openWorkSource(rootFolder.path, row.dir);
   return source.buildTree();
 }
+
+// ---------- Scanner update mode ----------
+
+/** 所有未软删作品的最小引用（供扫描器 update 模式遍历，不 join 关联）。 */
+export async function getAllWorkRefs(): Promise<
+  Array<{ id: string; rootFolder: string; dir: string }>
+> {
+  return db
+    .select({ id: works.id, rootFolder: works.rootFolder, dir: works.dir })
+    .from(works)
+    .where(isNull(works.deletedAt));
+}

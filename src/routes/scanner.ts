@@ -32,19 +32,26 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   // Start a scan.
+  // body 缺省（{} 或无 body）时 mode 默认 scan，旧调用方行为不变。
   fastify.post(
     '/scan',
     {
       preHandler: [fastify.authenticateAdmin],
       schema: {
+        body: z
+          .object({
+            mode: z.enum(['scan', 'update']).default('scan'),
+          })
+          // 无 body 时走默认值（zod v4 的 .default() 实参需匹配输出类型）
+          .default({ mode: 'scan' }),
         response: {
           200: z.object({ success: z.boolean() }),
         },
       },
     },
-    async () => {
+    async (request) => {
       const config = getConfig();
-      scanner.startScan(config);
+      scanner.startScan(config, request.body.mode);
       return { success: true };
     },
   );
