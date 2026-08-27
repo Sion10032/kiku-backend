@@ -83,13 +83,15 @@ export interface ScanSnapshot {
   completed: number;
   /** 最近 SCAN_LOG_CAP 条日志 */
   logs: ScanLogPayload[];
+  /** 产出该快照的运行模式；缺省视为 'scan' */
+  mode?: ScanMode;
 }
 
 /** 日志快照保留条数上限 */
 export const SCAN_LOG_CAP = 500;
 
-export function emptySnapshot(): ScanSnapshot {
-  return { tasks: [], failedTasks: [], completed: 0, logs: [] };
+export function emptySnapshot(mode: ScanMode = 'scan'): ScanSnapshot {
+  return { tasks: [], failedTasks: [], completed: 0, logs: [], mode };
 }
 
 /** 将事件应用到快照（ScannerManager 维护重连补播用；纯函数便于测试） */
@@ -587,8 +589,8 @@ class ScannerManager extends EventEmitter {
       throw new Error('Scan is already in progress');
     }
 
-    // 新扫描开始时重置快照（mode 无关）
-    this.snapshot = emptySnapshot();
+    // 新扫描开始时重置快照（携带当前 mode，供重连后区分文案与语义）
+    this.snapshot = emptySnapshot(mode);
 
     // Run async — fire and forget. Errors are handled inside runScan.
     this.runScan(config, mode).catch((err) => {
