@@ -6,45 +6,23 @@ import {
   downloadCover,
   getCoverData,
 } from '../services/cover.service.js';
+import { QueryParseError } from '../services/query/parser.js';
 import {
-  getCircleById,
   getCircles,
-  getCircleWorks,
-  getTagById,
   getTags,
-  getTagWorks,
-  getVaById,
   getVas,
-  getVaWorks,
   getWorkById,
-  getWorksPaginated,
   getWorkTracks,
-  searchWorks,
+  queryWorks,
 } from '../services/work.service.js';
 
 const idParamsSchema = z.object({
   id: z.string(),
 });
 
-// VA 的 id 是 string（如 v1），与 number 类型的 circle/tag 区分（见 vaSchema）
-const vaIdParamsSchema = z.object({
-  id: z.string().min(1),
-});
-
-const keywordParamsSchema = z.object({
-  keyword: z.string().min(1),
-});
-
 const worksQuerySchema = z.object({
-  page: z.coerce.number().default(1),
-  order: z.enum(['id', 'release', 'random', 'betterRandom']).default('release'),
-  sort: z.enum(['asc', 'desc']).default('desc'),
-  seed: z.coerce.number().optional(),
-});
-
-// 筛选类作品列表（circle/tag/VA/搜索）共用 querystring：
-// random/betterRandom 由服务端退化为 release，故无 seed
-const filteredWorksQuerySchema = z.object({
+  /** LQL 查询文本（空/省略 = 全量）。语法：tag:催眠 -tag:百合 circle:"xx" va:x 裸词 */
+  q: z.string().optional(),
   page: z.coerce.number().default(1),
   order: z
     .enum([
@@ -59,6 +37,7 @@ const filteredWorksQuerySchema = z.object({
     ])
     .default('release'),
   sort: z.enum(['asc', 'desc']).default('desc'),
+  seed: z.coerce.number().optional(),
 });
 
 const circleSchema = z.object({
@@ -132,20 +111,25 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
             works: z.array(formattedWorkSchema),
             pagination: paginationSchema,
           }),
+          400: z.object({ error: z.string() }),
         },
       },
     },
-    async (request) => {
-      const { page, order, sort, seed } = request.query;
+    async (request, reply) => {
+      const { q, page, order, sort } = request.query;
       const user = (request.user as { name?: string })?.name;
-
-      return getWorksPaginated({
-        page,
-        orderBy: order,
-        sortDir: sort,
-        username: user,
-        seed,
-      });
+      try {
+        return await queryWorks(q, user, {
+          page,
+          orderBy: order,
+          sortDir: sort,
+        });
+      } catch (err) {
+        if (err instanceof QueryParseError) {
+          return reply.status(400).send({ error: err.message });
+        }
+        throw err;
+      }
     },
   );
 
@@ -212,32 +196,6 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.status(500).send({ error: 'Failed to get track list' });
       }
-    },
-  );
-
-  fastify.get(
-    '/search/:keyword',
-    {
-      schema: {
-        params: keywordParamsSchema,
-        querystring: filteredWorksQuerySchema,
-        response: {
-          200: z.object({
-            works: z.array(formattedWorkSchema),
-            pagination: paginationSchema,
-          }),
-        },
-      },
-    },
-    async (request) => {
-      const { keyword } = request.params;
-      const { page, order, sort } = request.query;
-      const user = (request.user as { name?: string })?.name;
-      return searchWorks(keyword, user, {
-        page,
-        orderBy: order,
-        sortDir: sort,
-      });
     },
   );
 
@@ -342,58 +300,6 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    '/circles/:id',
-    {
-      schema: {
-        params: idParamsSchema,
-        response: {
-          200: circleSchema,
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      try {
-        return await getCircleById(id);
-      } catch {
-        return reply.status(404).send({ error: `Circle ${id} not found` });
-      }
-    },
-  );
-
-  fastify.get(
-    '/circles/:id/works',
-    {
-      schema: {
-        params: idParamsSchema,
-        querystring: filteredWorksQuerySchema,
-        response: {
-          200: z.object({
-            works: z.array(formattedWorkSchema),
-            pagination: paginationSchema,
-          }),
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      const { page, order, sort } = request.query;
-      const user = (request.user as { name?: string })?.name;
-      try {
-        return await getCircleWorks(id, user, {
-          page,
-          orderBy: order,
-          sortDir: sort,
-        });
-      } catch {
-        return reply.status(404).send({ error: `Circle ${id} not found` });
-      }
-    },
-  );
-
-  fastify.get(
     '/tags/',
     {
       schema: {
@@ -408,58 +314,6 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    '/tags/:id',
-    {
-      schema: {
-        params: idParamsSchema,
-        response: {
-          200: tagSchema,
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      try {
-        return await getTagById(id);
-      } catch {
-        return reply.status(404).send({ error: `Tag ${id} not found` });
-      }
-    },
-  );
-
-  fastify.get(
-    '/tags/:id/works',
-    {
-      schema: {
-        params: idParamsSchema,
-        querystring: filteredWorksQuerySchema,
-        response: {
-          200: z.object({
-            works: z.array(formattedWorkSchema),
-            pagination: paginationSchema,
-          }),
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      const { page, order, sort } = request.query;
-      const user = (request.user as { name?: string })?.name;
-      try {
-        return await getTagWorks(id, user, {
-          page,
-          orderBy: order,
-          sortDir: sort,
-        });
-      } catch {
-        return reply.status(404).send({ error: `Tag ${id} not found` });
-      }
-    },
-  );
-
-  fastify.get(
     '/vas/',
     {
       schema: {
@@ -470,58 +324,6 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async () => {
       return getVas();
-    },
-  );
-
-  fastify.get(
-    '/vas/:id',
-    {
-      schema: {
-        params: vaIdParamsSchema,
-        response: {
-          200: vaSchema,
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      try {
-        return await getVaById(String(id));
-      } catch {
-        return reply.status(404).send({ error: `VA ${id} not found` });
-      }
-    },
-  );
-
-  fastify.get(
-    '/vas/:id/works',
-    {
-      schema: {
-        params: vaIdParamsSchema,
-        querystring: filteredWorksQuerySchema,
-        response: {
-          200: z.object({
-            works: z.array(formattedWorkSchema),
-            pagination: paginationSchema,
-          }),
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      const { page, order, sort } = request.query;
-      const user = (request.user as { name?: string })?.name;
-      try {
-        return await getVaWorks(id, user, {
-          page,
-          orderBy: order,
-          sortDir: sort,
-        });
-      } catch {
-        return reply.status(404).send({ error: `VA ${id} not found` });
-      }
     },
   );
 };

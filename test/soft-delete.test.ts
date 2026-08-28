@@ -4,9 +4,8 @@ import { db } from '../src/db/main/index.js';
 import { tags, tagWork, works } from '../src/db/main/schema.js';
 import {
   getWorkById,
-  getWorksPaginated,
   hardDeleteWork,
-  searchWorks,
+  queryWorks,
   softDeleteWork,
   upsertWork,
 } from '../src/services/work.service.js';
@@ -50,18 +49,18 @@ describe('软删除 / 恢复 / 物理删除', () => {
     await insertFixture();
     const w = await getWorkById(ID);
     expect(w.id).toBe(ID);
-    const page = await getWorksPaginated({ pageSize: 100 });
+    const page = await queryWorks(undefined, undefined, { pageSize: 100 });
     expect(page.works.some((x) => x.id === ID)).toBe(true);
-    const s = await searchWorks(ID);
+    const s = await queryWorks(ID, undefined, { pageSize: 100 });
     expect(s.works.some((x) => x.id === ID)).toBe(true);
   });
 
   it('softDeleteWork 后：查询全部不可见，记录仍在库中（仅置标记）', async () => {
     await softDeleteWork(ID);
     await expect(getWorkById(ID)).rejects.toThrow('not found');
-    const page = await getWorksPaginated({ pageSize: 100 });
+    const page = await queryWorks(undefined, undefined, { pageSize: 100 });
     expect(page.works.some((x) => x.id === ID)).toBe(false);
-    const s = await searchWorks(ID);
+    const s = await queryWorks(ID, undefined, { pageSize: 100 });
     expect(s.works.some((x) => x.id === ID)).toBe(false);
     const row = (
       await db.select().from(works).where(eq(works.id, ID)).limit(1)
