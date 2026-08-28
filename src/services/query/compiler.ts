@@ -19,25 +19,32 @@ type FieldName = (typeof FIELD_WHITELIST)[number];
  * liqe AST → drizzle SQL（纯函数，不触库执行；子查询仅构建不运行）。
  * 语义见计划 D2/D3：默认精确、通配符模糊、裸词五字段 LIKE、白名单外 400。
  * 返回 undefined = 查询无实质条件（如空括号）。
+ *
+ * worksTable：外层 t_work 表引用。默认用 schema 的 works（渲染 "t_work"），
+ * 适用于普通 select/count；db.query.*.findMany 的 RAW where 回调中主表被
+ * drizzle 别名化（"d0"），此时须传入回调的 t 参数，否则列引用无法解析。
  */
-export function compileQuery(ast: LiqeQuery): SQL | undefined {
-  return compileNode(ast);
+export function compileQuery(
+  ast: LiqeQuery,
+  worksTable: typeof works = works,
+): SQL | undefined {
+  return compileNode(ast, worksTable);
 }
 
-function compileNode(node: LiqeQuery): SQL | undefined {
+function compileNode(node: LiqeQuery, t: typeof works): SQL | undefined {
   switch (node.type) {
     case 'EmptyExpression':
       return undefined;
     case 'ParenthesizedExpression':
-      return compileNode(node.expression);
+      return compileNode(node.expression, t);
     case 'UnaryOperator': {
-      const inner = compileNode(node.operand);
+      const inner = compileNode(node.operand, t);
       if (!inner) return undefined;
       return sql`NOT (${inner})`;
     }
     case 'LogicalExpression': {
-      const left = compileNode(node.left);
-      const right = compileNode(node.right);
+      const left = compileNode(node.left, t);
+      const right = compileNode(node.right, t);
       const op = node.operator.operator; // 'AND' | 'OR'（隐式 AND 同 'AND'）
       if (!left && !right) return undefined;
       if (!left) return right;
@@ -47,11 +54,11 @@ function compileNode(node: LiqeQuery): SQL | undefined {
         : sql`${left} OR ${right}`;
     }
     case 'Tag':
-      return compileTag(node);
+      return compileTag(node, t);
   }
 }
 
-function compileTag(node: TagToken): SQL | undefined {
+function compileTag(node: TagToken, t: typeof works): SQL | undefined {
   const { field, expression, operator } = node;
 
   if (field.type === 'Field') {
@@ -82,7 +89,7 @@ function compileTag(node: TagToken): SQL | undefined {
     throw new QueryParseError('暂不支持正则查询');
   }
   // 裸词（ImplicitField）运行时省略 operator，且语义上恒为 ':'，先于运算符检查处理
-  if (field.type === 'ImplicitField') return compileBareTerm(expression);
+  if (field.type === 'ImplicitField') return compileBareTerm(expression, t);
 
   if (operator.operator !== ':' && operator.operator !== ':=') {
     throw new QueryParseError(
@@ -94,14 +101,14 @@ function compileTag(node: TagToken): SQL | undefined {
     case 'circle':
       return nameCondition(expression, 'circle', (nameCond) =>
         inArray(
-          works.circleId,
+          t.circleId,
           db.select({ id: circles.id }).from(circles).where(nameCond),
         ),
       );
     case 'tag':
       return nameCondition(expression, 'tag', (nameCond) =>
         inArray(
-          works.id,
+          t.id,
           db
             .select({ workId: tagWork.workId })
             .from(tagWork)
@@ -112,7 +119,7 @@ function compileTag(node: TagToken): SQL | undefined {
     case 'va':
       return nameCondition(expression, 'va', (nameCond) =>
         inArray(
-          works.id,
+          t.id,
           db
             .select({ workId: vaWork.workId })
             .from(vaWork)
@@ -121,7 +128,7 @@ function compileTag(node: TagToken): SQL | undefined {
         ),
       );
     case 'nsfw':
-      return nsfwCondition(expression);
+      return nsfwCondition(expression, t);
   }
 }
 
@@ -165,17 +172,19 @@ function nameColumn(fieldName: string) {
 
 function nsfwCondition(
   expression: TagToken['expression'] & { type: 'LiteralExpression' },
+  t: typeof works,
 ): SQL {
   if (typeof expression.value !== 'boolean') {
     throw new QueryParseError('字段 "nsfw" 需要布尔值（true/false）');
   }
-  return eq(works.nsfw, expression.value);
+  return eq(t.nsfw, expression.value);
 }
 
 // ---------- 裸词（自由文本） ----------
 
 function compileBareTerm(
   expression: TagToken['expression'] & { type: 'LiteralExpression' },
+  t: typeof works,
 ): SQL {
   const { value } = expression;
   if (value === null) throw new QueryParseError('查询词不能为空');
@@ -184,7 +193,7 @@ function compileBareTerm(
   }
   const text = String(value);
   const rj = extractRJCode(text);
-  if (rj) return eq(works.id, rj);
+  if (rj) return eq(t.id, rj);
 
   const pattern = `%${escapeLike(text)}%`;
   const circleIds = db
@@ -203,11 +212,11 @@ function compileBareTerm(
     .where(likeSql(vas.name, pattern));
 
   const combined = or(
-    likeSql(works.title, pattern),
-    likeSql(works.id, pattern),
-    inArray(works.circleId, circleIds),
-    inArray(works.id, tagWorkIds),
-    inArray(works.id, vaWorkIds),
+    likeSql(t.title, pattern),
+    likeSql(t.id, pattern),
+    inArray(t.circleId, circleIds),
+    inArray(t.id, tagWorkIds),
+    inArray(t.id, vaWorkIds),
   );
   // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
   return combined!;

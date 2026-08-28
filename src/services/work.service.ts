@@ -18,6 +18,8 @@ import {
   getProgressByWorks,
   type WorkProgressSummary,
 } from './progress.service.js';
+import { compileQuery } from './query/compiler.js';
+import { parseQuery } from './query/parser.js';
 
 // ---------- Upsert (used by scanner) ----------
 
@@ -537,6 +539,104 @@ export async function getWorksPaginated(
   return {
     works: formatted,
     pagination: { currentPage: page, pageSize, totalCount },
+  };
+}
+
+/**
+ * 统一查询入口：LQL 查询文本 → 分页作品列表。
+ *
+ * - q 为空/空白 → 全量（行为对齐原 getWorksPaginated，含随机排序路径）
+ * - 有筛选时 random/betterRandom 退化为 release（filteredPageOpts 已做映射）
+ * - where 同时用于 findMany 与 count，消除旧代码「count 无法复用 RAW where」的重复
+ * - 语法/语义错误抛 QueryParseError，由路由层映射 400
+ */
+export async function queryWorks(
+  q: string | undefined,
+  username?: string,
+  opts?: WorksListOpts,
+) {
+  const ast = q?.trim() ? parseQuery(q) : undefined;
+  const { page, pageSize, offset, orderKey, sortDir } = filteredPageOpts(opts);
+  const orderBy = opts?.orderBy ?? 'release';
+
+  // 无筛选 + 随机排序：沿用 getWorksPaginated 的随机 id 子查询路径
+  if (!ast && (orderBy === 'random' || orderBy === 'betterRandom')) {
+    const randomIds = db
+      .select({ id: works.id })
+      .from(works)
+      .where(sql`${works.deletedAt} IS NULL`)
+      .orderBy(sql`RANDOM()`)
+      .limit(pageSize)
+      .offset(offset);
+
+    const [items, countResult] = await Promise.all([
+      db.query.works.findMany({
+        with: {
+          circle: true,
+          tags: { with: { tag: true } },
+          vas: { with: { va: true } },
+        },
+        where: {
+          RAW: (t, op) =>
+            // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
+            op.and(op.inArray(t.id, randomIds), op.isNull(t.deletedAt))!,
+        },
+      }),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(works)
+        .where(sql`${works.deletedAt} IS NULL`),
+    ]);
+    const formatted = items.map((item) => formatWork(item));
+    await attachUserData(formatted, username);
+    return {
+      works: formatted,
+      pagination: {
+        currentPage: page,
+        pageSize,
+        totalCount: countResult[0]?.count ?? 0,
+      },
+    };
+  }
+
+  // 常规路径（有筛选 or 非随机排序）。
+  // count 查询未别名化，用默认 works 表编译即可；
+  // findMany 的 RAW 回调中主表被 drizzle 别名化（"d0"），须用回调的 t 重新编译，
+  // 否则 "t_work"."col" 列引用无法解析（SQLiteError: no such column）。
+  const countWhere = ast
+    ? and(compileQuery(ast), isNull(works.deletedAt))
+    : isNull(works.deletedAt);
+
+  const [items, countResult] = await Promise.all([
+    db.query.works.findMany({
+      with: {
+        circle: true,
+        tags: { with: { tag: true } },
+        vas: { with: { va: true } },
+      },
+      where: {
+        RAW: (t, op) => {
+          const filter = ast ? compileQuery(ast, t) : undefined;
+          // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
+          return op.and(filter, op.isNull(t.deletedAt))!;
+        },
+      },
+      orderBy: (t, { asc: ascOp, desc: descOp }) =>
+        sortDir === 'asc' ? ascOp(t[orderKey]) : descOp(t[orderKey]),
+      limit: pageSize,
+      offset,
+    }),
+    db.select({ count: sql<number>`count(*)` }).from(works).where(countWhere),
+  ]);
+  const formatted = items.map((item) => formatWork(item));
+  await attachUserData(formatted, username);
+  return {
+    works: formatted,
+    pagination: {
+      currentPage: page,
+      pageSize,
+      totalCount: countResult[0]?.count ?? 0,
+    },
   };
 }
 

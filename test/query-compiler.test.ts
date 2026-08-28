@@ -48,6 +48,13 @@ describe('compileQuery：字段条件', () => {
     expect(s?.sql).toContain('=');
     expect(s?.params).toContain(1);
   });
+
+  it('quoted 值含通配符仍走精确 eq（引号内不解析通配）', () => {
+    const s = compile('tag:"标*签"');
+    expect(s?.sql).toContain('=');
+    expect(s?.sql).not.toContain('LIKE');
+    expect(s?.params).toContain('标*签');
+  });
 });
 
 describe('compileQuery：布尔组合', () => {
