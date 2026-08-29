@@ -39,9 +39,16 @@ function classify(name: string): Exclude<TrackNode['type'], 'folder'> {
 }
 
 /**
+ * 自然排序：数字段按数值比较（01 < 2 < 10），其余按 ja locale 序
+ * （五十音优先，适用于日文文件名；同权重时小写在前）。
+ * numeric: true 使「第2話 < 第10話」这类编号正确排列。
+ */
+const naturalCollator = new Intl.Collator('ja', { numeric: true });
+
+/**
  * 相对路径列表 → TrackNode 树。
  * 入参为「/」分隔的相对路径；跳过不支持扩展名的路径。
- * 排序：文件夹在前、文件在后，同级字节序（.sort()），与文件夹版行为一致。
+ * 排序：文件夹在前、文件在后，同级自然序（数字编号按数值），与文件夹版行为一致。
  */
 export function entriesToTrackTree(paths: string[]): TrackNode[] {
   type Dir = { dirs: Map<string, Dir>; files: Map<string, TrackNode> };
@@ -66,14 +73,14 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
   const build = (dir: Dir): TrackNode[] => {
     const nodes: TrackNode[] = [];
     for (const [name, child] of [...dir.dirs.entries()].sort(([a], [b]) =>
-      a < b ? -1 : 1,
+      naturalCollator.compare(a, b),
     )) {
       const children = build(child);
       if (children.length > 0)
         nodes.push({ type: 'folder', title: name, children });
     }
     for (const [_name, file] of [...dir.files.entries()].sort(([a], [b]) =>
-      a < b ? -1 : 1,
+      naturalCollator.compare(a, b),
     )) {
       nodes.push(file);
     }

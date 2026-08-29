@@ -48,10 +48,27 @@ describe('entriesToTrackTree', () => {
     expect(node?.type === 'audio' && node.hash === 'a/b/c/d.mp3').toBe(true);
   });
 
-  it('排序：文件夹在前、文件在后，同级按字节序 .sort()', () => {
+  it('排序：文件夹在前、文件在后，同级按自然序（数字段按数值）', () => {
+    const tree = entriesToTrackTree([
+      '10.mp3',
+      '2.mp3',
+      '01.mp3',
+      'b 10/a.mp3',
+      'b 2/x.mp3',
+    ]);
+    // 文件夹排前且自然序：b 2 < b 10；文件自然序：01 < 2 < 10
+    expect(tree.map((n) => n.title)).toEqual([
+      'b 2',
+      'b 10',
+      '01.mp3',
+      '2.mp3',
+      '10.mp3',
+    ]);
+  });
+
+  it('排序：非数字部分按 locale 序（ja：小写在前），数字段不受影响', () => {
     const tree = entriesToTrackTree(['z.mp3', 'Z.mp3', 'a/x.mp3']);
-    // 文件夹 a 排前；文件按字节序：'Z'(0x5A) < 'z'(0x7A)
-    expect(tree.map((n) => n.title)).toEqual(['a', 'Z.mp3', 'z.mp3']);
+    expect(tree.map((n) => n.title)).toEqual(['a', 'z.mp3', 'Z.mp3']);
   });
 
   it('treeHasAudio 递归发现任意层音频', () => {
