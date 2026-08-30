@@ -3,6 +3,7 @@ import type { LiqeQuery, TagToken } from 'liqe';
 import { db } from '../../db/main/index.js';
 import {
   circles,
+  series,
   tags,
   tagWork,
   vas,
@@ -12,7 +13,7 @@ import {
 import { extractRJCode } from '../../utils/rjcode.js';
 import { QueryParseError } from './parser.js';
 
-const FIELD_WHITELIST = ['circle', 'tag', 'va', 'nsfw'] as const;
+const FIELD_WHITELIST = ['circle', 'tag', 'va', 'series', 'nsfw'] as const;
 type FieldName = (typeof FIELD_WHITELIST)[number];
 
 /**
@@ -127,6 +128,13 @@ function compileTag(node: TagToken, t: typeof works): SQL | undefined {
             .where(nameCond),
         ),
       );
+    case 'series':
+      return nameCondition(expression, 'series', (nameCond) =>
+        inArray(
+          t.seriesId,
+          db.select({ id: series.id }).from(series).where(nameCond),
+        ),
+      );
     case 'nsfw':
       return nsfwCondition(expression, t);
   }
@@ -167,6 +175,7 @@ function nameCondition(
 function nameColumn(fieldName: string) {
   if (fieldName === 'circle') return circles.name;
   if (fieldName === 'tag') return tags.name;
+  if (fieldName === 'series') return series.name;
   return vas.name;
 }
 

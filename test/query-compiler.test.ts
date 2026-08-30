@@ -33,6 +33,20 @@ describe('compileQuery：字段条件', () => {
     expect(s?.params).toContain('花澤');
   });
 
+  it('series 精确（引号含空格）→ series_id IN t_series 子查询', () => {
+    const s = compile('series:"○○シリーズ 第2章"');
+    expect(s?.sql).toContain('series_id');
+    expect(s?.sql).toContain('t_series');
+    expect(s?.sql).not.toContain('r_series_work');
+    expect(s?.params).toContain('○○シリーズ 第2章');
+  });
+
+  it('series 通配符 → LIKE 模糊', () => {
+    const s = compile('series:ワイルド*');
+    expect(s?.sql).toContain('LIKE');
+    expect(s?.params[0]).toBe('ワイルド%');
+  });
+
   it('通配符 * ? 翻译为 LIKE % _，字面 _ 被转义', () => {
     // 注：liqe 文法 unquoted 值不允许 % 与 \（见 grammar.ne unquoted_value 字符类），
     // 通配路径下唯一可能出现的字面通配字符是 _，此处覆盖

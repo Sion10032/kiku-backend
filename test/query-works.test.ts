@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'bun:test';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../src/db/main/index.js';
-import { circles, tags, vas, works } from '../src/db/main/schema.js';
+import { circles, series, tags, vas, works } from '../src/db/main/schema.js';
 import {
   queryWorks,
   softDeleteWork,
@@ -20,9 +20,12 @@ const TAG_X = `查询测试X${base}`;
 const TAG_Y = `查询测试Y${base}`;
 const VA_1 = `va-${base}-1`;
 const VA_1_NAME = `查询声优${base}`; // compiler 的 va 筛选按姓名匹配（vas.name）
-const W1 = `RJ${base}1`; // circleA + tagX + tagY + va1，标题含「催眠音声」
-const W2 = `RJ${base}2`; // circleA + tagX
-const W3 = `RJ${base}3`; // circleB + tagY
+// 系列名含空格：验证引号字面值语义（unquoted 值不允许空格，须引号）
+const SERIES_X = `SRIT${base}X`;
+const SERIES_X_NAME = `查询测试系列 ${base}`;
+const W1 = `RJ${base}1`; // circleA + tagX + tagY + va1 + seriesX，标题含「催眠音声」
+const W2 = `RJ${base}2`; // circleA + tagX + seriesX
+const W3 = `RJ${base}3`; // circleB + tagY，无系列
 
 async function insertFixtures(): Promise<void> {
   const rows = [
@@ -36,6 +39,7 @@ async function insertFixtures(): Promise<void> {
       release: '2024-01-01',
       tags: [TAG_X, TAG_Y],
       vas: [{ id: VA_1, name: VA_1_NAME }],
+      series: { id: SERIES_X, name: SERIES_X_NAME },
     },
     {
       id: W2,
@@ -47,6 +51,7 @@ async function insertFixtures(): Promise<void> {
       release: '2024-01-02',
       tags: [TAG_X],
       vas: [],
+      series: { id: SERIES_X, name: SERIES_X_NAME },
     },
     {
       id: W3,
@@ -95,6 +100,11 @@ afterAll(async () => {
     .delete(circles)
     .where(eq(circles.name, CIRCLE_B))
     .catch(() => {});
+  // series 关联不随 works 级联删除，series 主表需手动清理
+  await db
+    .delete(series)
+    .where(eq(series.id, SERIES_X))
+    .catch(() => {});
 });
 
 describe('queryWorks', () => {
@@ -131,6 +141,27 @@ describe('queryWorks', () => {
       { pageSize: 500 },
     );
     expect(ids(r).sort()).toEqual([W1, W3].sort());
+  });
+
+  it('series 精确筛选（引号含空格名称）', async () => {
+    const r = await queryWorks(`series:"${SERIES_X_NAME}"`, undefined, {
+      pageSize: 500,
+    });
+    expect(ids(r).sort()).toEqual([W1, W2].sort());
+  });
+
+  it('series 前缀通配符', async () => {
+    const r = await queryWorks('series:查询测试系列*', undefined, {
+      pageSize: 500,
+    });
+    expect(ids(r).sort()).toEqual([W1, W2].sort());
+  });
+
+  it('series 不存在 → 空结果', async () => {
+    const r = await queryWorks(`series:"不存在${base}"`, undefined, {
+      pageSize: 500,
+    });
+    expect(r.works).toEqual([]);
   });
 
   it('裸词标题模糊 + 裸 RJ 号精确', async () => {
