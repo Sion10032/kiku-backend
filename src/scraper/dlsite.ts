@@ -4,6 +4,12 @@ import { hasLetter, nameToUUID } from '../filesystem/utils.js';
 import { fetchHtml, fetchJson } from './client.js';
 import { fetchHVDBWorkInfo } from './hvdb.js';
 
+/** 抓取到的系列信息（DLsite SRI 编号 + 系列名；一个作品至多属于一个系列）。 */
+export interface ScrapedSeries {
+  id: string;
+  name: string;
+}
+
 export interface DLsiteWorkInfo {
   id: string;
   title: string;
@@ -20,6 +26,7 @@ export interface DLsiteWorkInfo {
   rank: Record<string, number>;
   tags: string[];
   vas: Array<{ id: string; name: string }>;
+  series: { id: string; name: string } | null;
   description: string;
   coverUrl: string;
   language: string;
@@ -33,6 +40,7 @@ const OUTLINE_LABELS = {
     release: ['販売日'],
     genre: ['ジャンル'],
     va: ['声優'],
+    series: ['シリーズ名'],
   },
   'zh-cn': {
     age: ['年龄指定'],
@@ -40,12 +48,14 @@ const OUTLINE_LABELS = {
     release: ['发售日', '贩卖日'],
     genre: ['分类'],
     va: ['声优'],
+    series: ['系列名'],
   },
   'zh-tw': {
     age: ['年齡指定'],
     release: ['販賣日'],
     genre: ['分類'],
     va: ['聲優'],
+    series: ['系列名'],
   },
 } as const;
 
@@ -54,6 +64,7 @@ type OutlineLabels = {
   release: readonly string[];
   genre: readonly string[];
   va: readonly string[];
+  series: readonly string[];
 };
 
 /** `$()` 的返回类型，即任意节点的 Cheerio 选择器。 */
@@ -83,6 +94,7 @@ interface StaticWorkInfo {
   releaseDate: string;
   tags: string[];
   vas: Array<{ id: string; name: string }>;
+  series: { id: string; name: string } | null;
   description: string;
   coverUrl: string;
   language: string;
@@ -90,7 +102,7 @@ interface StaticWorkInfo {
 }
 
 /** 从 DLsite 工作页 HTML 抓取静态元数据（标题、社团、标签、声优等）。 */
-async function scrapeStaticWorkInfo(
+export async function scrapeStaticWorkInfo(
   rjId: string,
   signal?: AbortSignal,
 ): Promise<StaticWorkInfo> {
@@ -150,6 +162,22 @@ async function scrapeStaticWorkInfo(
       const name = $(el).text().trim();
       if (name) vas.push({ id: nameToUUID(name), name });
     });
+
+  // 系列: シリーズ名行的链接，href 形如 .../fsr/=/title_id/SRI0000027029/...
+  // 一个作品至多一个系列：只保留第一条 title_id 匹配的锚点
+  const series: ScrapedSeries | null = (() => {
+    let found: ScrapedSeries | null = null;
+    findOutlineTd($, labels.series)
+      ?.find('a')
+      .each((_, el) => {
+        if (found) return;
+        const href = $(el).attr('href') || '';
+        const id = href.match(/title_id\/(SRI\d+)/)?.[1];
+        const name = $(el).text().trim();
+        if (id && name) found = { id, name };
+      });
+    return found;
+  })();
 
   // 封面
   const coverUrl = $('meta[property="og:image"]').attr('content') || '';
@@ -213,6 +241,7 @@ async function scrapeStaticWorkInfo(
     releaseDate,
     tags,
     vas,
+    series,
     description,
     coverUrl,
     language,
@@ -345,6 +374,7 @@ export async function searchDLsite(keyword: string): Promise<DLsiteWorkInfo[]> {
         rank: {},
         tags: [],
         vas: [],
+        series: null,
         description: '',
         coverUrl: '',
         language: '',
