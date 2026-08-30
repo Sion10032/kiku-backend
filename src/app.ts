@@ -14,6 +14,7 @@ import { getConfig } from './config/index.js';
 import { authRoutes } from './routes/auth.js';
 import { configRoutes } from './routes/config.js';
 import { credentialsRoutes } from './routes/credentials.js';
+import { favouriteRoutes } from './routes/favourite.js';
 import { healthRoutes } from './routes/health.js';
 import { mediaRoutes } from './routes/media.js';
 import { metadataRoutes } from './routes/metadata.js';
@@ -47,6 +48,7 @@ export async function buildApp() {
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
   await app.register(reviewRoutes, { prefix: '/api' });
+  await app.register(favouriteRoutes, { prefix: '/api' });
   await app.register(progressRoutes, { prefix: '/api' });
   await app.register(configRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
