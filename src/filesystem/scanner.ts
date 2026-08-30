@@ -177,7 +177,7 @@ async function* syncWorkMetadata(
     dir: relativePath,
     title: metadata.title,
     circleName: metadata.circle || 'Unknown',
-    nsfw: metadata.nsfw,
+    ageRating: metadata.ageRating,
     release: metadata.releaseDate || undefined,
     dlCount: metadata.dlCount || undefined,
     price: metadata.price || undefined,

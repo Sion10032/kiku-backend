@@ -171,3 +171,51 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
     }
   });
 });
+
+/** 年齢指定行のみを含む最小ページ（og:image があれば解析失敗判定を回避できる） */
+const AGE_PAGE = (ageCell: string) => `<!DOCTYPE html>
+<html>
+<head>
+  <meta property="og:title" content="年齢テスト [テストサークル] | DLsite" />
+  <meta property="og:image" content="https://img.dlsite.jp/modpub/images2/work/doujin/RJ01560000/RJ01559247_img_main.jpg" />
+</head>
+<body>
+  <table id="work_outline">
+    <tr><th>年齢指定</th><td>${ageCell}</td></tr>
+  </table>
+</body>
+</html>`;
+
+describe('scrapeStaticWorkInfo の年齢指定解析', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  // 年龄指定值跨语言一致（R18/R-15 各语言写法相同，连字符容错）；
+  // 仅全年龄随语言翻译（日：全年齢 / 中：全年龄 / 英：All Ages），连同空值均落默认 'all'
+  it.each([
+    ['R18', 'r18'],
+    ['R-18', 'r18'],
+    ['R-15', 'r15'],
+    ['R15', 'r15'],
+    ['全年齢', 'all'],
+    ['全年龄', 'all'],
+    ['All Ages', 'all'],
+    ['', 'all'],
+  ])('年齢指定「%s」→ %s', async (ageText, expected) => {
+    const { setConfigForTesting, getConfig } = await import(
+      '../src/config/index.js'
+    );
+    const saved = getConfig();
+    setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
+    mockWorkPage(AGE_PAGE(ageText));
+
+    try {
+      const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
+      const info = await scrapeStaticWorkInfo('RJ01559247');
+      expect(info.ageRating).toBe(expected);
+    } finally {
+      setConfigForTesting(saved);
+    }
+  });
+});

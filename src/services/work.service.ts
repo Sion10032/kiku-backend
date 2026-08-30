@@ -1,7 +1,14 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { db } from '../db/main/index.js';
-import type { Circle, Series, Tag, Va, Work } from '../db/main/schema.js';
+import type {
+  AgeRating,
+  Circle,
+  Series,
+  Tag,
+  Va,
+  Work,
+} from '../db/main/schema.js';
 import {
   circles,
   series,
@@ -30,7 +37,8 @@ export interface UpsertWorkInput {
   title: string;
   circleName: string;
   circleId?: string; // DLsite maker_id (optional)
-  nsfw?: boolean;
+  /** 年龄分级（缺省按 all 处理） */
+  ageRating?: AgeRating;
   release?: string;
   dlCount?: number;
   price?: number;
@@ -106,7 +114,7 @@ export async function upsertWork(
           rootFolder: input.rootFolder,
           dir: input.dir,
           deletedAt: null,
-          nsfw: input.nsfw ?? existing.nsfw,
+          ageRating: input.ageRating ?? existing.ageRating,
           release: input.release ?? existing.release,
           dlCount: input.dlCount ?? existing.dlCount,
           price: input.price ?? existing.price,
@@ -201,7 +209,7 @@ export async function upsertWork(
         dir: input.dir,
         title: input.title,
         circleId: circle.id,
-        nsfw: input.nsfw ?? false,
+        ageRating: input.ageRating ?? 'all',
         release: input.release ?? null,
         dlCount: input.dlCount ?? null,
         price: input.price ?? null,
@@ -322,7 +330,8 @@ export interface FormattedWork {
   dir: string;
   title: string;
   circle: { id: number; name: string };
-  nsfw: boolean;
+  /** 年龄分级：all 全年龄 / r15 / r18 */
+  ageRating: AgeRating;
   release: string | null;
   dl_count: number | null;
   price: number | null;
@@ -348,7 +357,7 @@ function formatWork(row: WorkWithRelations): FormattedWork {
     dir: row.dir,
     title: row.title,
     circle: { id: row.circle.id, name: row.circle.name },
-    nsfw: Boolean(row.nsfw),
+    ageRating: row.ageRating,
     release: row.release,
     dl_count: row.dlCount,
     price: row.price,

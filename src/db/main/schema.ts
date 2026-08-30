@@ -19,7 +19,10 @@ export const works = sqliteTable('t_work', {
   circleId: integer('circle_id')
     .notNull()
     .references(() => circles.id),
-  nsfw: integer('nsfw', { mode: 'boolean' }),
+  /** 年龄分级：all 全年龄 / r15 / r18。不迁移旧 nsfw 值，存量行落默认 'all'。 */
+  ageRating: text('age_rating', { enum: ['all', 'r15', 'r18'] })
+    .notNull()
+    .default('all'),
   release: text('release'),
   dlCount: integer('dl_count'),
   price: integer('price'),
@@ -147,6 +150,9 @@ export type NewCircle = typeof circles.$inferInsert;
 
 export type Work = typeof works.$inferSelect;
 export type NewWork = typeof works.$inferInsert;
+
+/** 年龄分级三档（与 t_work.age_rating 的 enum 一致），全后端共用。 */
+export type AgeRating = Work['ageRating'];
 
 export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;

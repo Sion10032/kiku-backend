@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Config } from '../config/schema.js';
 import { db } from '../db/main/index.js';
+import type { AgeRating } from '../db/main/schema.js';
 import {
   circles,
   series,
@@ -26,7 +27,8 @@ export async function updateWorkMetadata(
     tags?: string[];
     vas?: Array<{ id: string; name: string }>;
     series?: { id: string; name: string } | null;
-    nsfw?: boolean;
+    /** 年龄分级（缺省不修改） */
+    ageRating?: AgeRating;
     release?: string;
     dlCount?: number;
     price?: number;
@@ -72,7 +74,8 @@ export async function updateWorkMetadata(
     // Update work fields
     const updateData: Record<string, unknown> = {};
     if (metadata.title) updateData.title = metadata.title;
-    if (metadata.nsfw !== undefined) updateData.nsfw = metadata.nsfw;
+    if (metadata.ageRating !== undefined)
+      updateData.ageRating = metadata.ageRating;
     if (metadata.release) updateData.release = metadata.release;
     if (metadata.dlCount !== undefined) updateData.dlCount = metadata.dlCount;
     if (metadata.price !== undefined) updateData.price = metadata.price;

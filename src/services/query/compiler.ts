@@ -1,6 +1,7 @@
 import { type AnyColumn, eq, inArray, or, type SQL, sql } from 'drizzle-orm';
 import type { LiqeQuery, TagToken } from 'liqe';
 import { db } from '../../db/main/index.js';
+import type { AgeRating } from '../../db/main/schema.js';
 import {
   circles,
   series,
@@ -13,7 +14,7 @@ import {
 import { extractRJCode } from '../../utils/rjcode.js';
 import { QueryParseError } from './parser.js';
 
-const FIELD_WHITELIST = ['circle', 'tag', 'va', 'series', 'nsfw'] as const;
+const FIELD_WHITELIST = ['circle', 'tag', 'va', 'series', 'age'] as const;
 type FieldName = (typeof FIELD_WHITELIST)[number];
 
 /**
@@ -135,8 +136,8 @@ function compileTag(node: TagToken, t: typeof works): SQL | undefined {
           db.select({ id: series.id }).from(series).where(nameCond),
         ),
       );
-    case 'nsfw':
-      return nsfwCondition(expression, t);
+    case 'age':
+      return ageRatingCondition(expression, t);
   }
 }
 
@@ -179,14 +180,18 @@ function nameColumn(fieldName: string) {
   return vas.name;
 }
 
-function nsfwCondition(
+function ageRatingCondition(
   expression: TagToken['expression'] & { type: 'LiteralExpression' },
   t: typeof works,
 ): SQL {
-  if (typeof expression.value !== 'boolean') {
-    throw new QueryParseError('字段 "nsfw" 需要布尔值（true/false）');
+  if (typeof expression.value !== 'string') {
+    throw new QueryParseError('字段 "age" 需要 all/r15/r18 之一');
   }
-  return eq(t.nsfw, expression.value);
+  const value = expression.value.toLowerCase();
+  if (!(['all', 'r15', 'r18'] as const).includes(value as AgeRating)) {
+    throw new QueryParseError('字段 "age" 需要 all/r15/r18 之一');
+  }
+  return eq(t.ageRating, value as AgeRating);
 }
 
 // ---------- 裸词（自由文本） ----------

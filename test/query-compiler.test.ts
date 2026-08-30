@@ -57,10 +57,15 @@ describe('compileQuery：字段条件', () => {
     expect(s?.params[0]).toBe('%催\\_眠_');
   });
 
-  it('nsfw:true → 等值布尔', () => {
-    const s = compile('nsfw:true');
+  it('age:r18 → 等值', () => {
+    const s = compile('age:r18');
     expect(s?.sql).toContain('=');
-    expect(s?.params).toContain(1);
+    expect(s?.params).toContain('r18');
+  });
+
+  it('age 值大小写不敏感', () => {
+    const s = compile('age:R18');
+    expect(s?.params).toContain('r18');
   });
 
   it('quoted 值含通配符仍走精确 eq（引号内不解析通配）', () => {
@@ -117,7 +122,8 @@ describe('compileQuery：不支持构造 → QueryParseError', () => {
     ['price:[100 TO 500]', '不支持的筛选字段 "price"'],
     ['tag:/催.眠/', '暂不支持正则'],
     ['tag:', '缺少值'],
-    ['nsfw:abc', '需要布尔值'],
+    ['age:xxx', 'all/r15/r18'],
+    ['nsfw:true', '不支持的筛选字段 "nsfw"'],
     ['tag:123', '需要文本值'],
     ['true', '不支持的查询词'],
   ])('%s → %s', (q, fragment) => {

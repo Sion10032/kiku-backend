@@ -22,7 +22,7 @@ const idParamsSchema = z.object({
 });
 
 const worksQuerySchema = z.object({
-  /** LQL 查询文本（空/省略 = 全量）。语法：tag:催眠 -tag:百合 circle:"xx" va:x 裸词 */
+  /** LQL 查询文本（空/省略 = 全量）。语法：tag:催眠 -tag:百合 circle:"xx" va:x age:r18 裸词 */
   q: z.string().optional(),
   page: z.coerce.number().default(1),
   order: z
@@ -76,7 +76,7 @@ export const formattedWorkSchema = z.object({
   dir: z.string(),
   title: z.string(),
   circle: circleSchema,
-  nsfw: z.boolean(),
+  ageRating: z.enum(['all', 'r15', 'r18']),
   release: z.string().nullable(),
   dl_count: z.number().nullable(),
   price: z.number().nullable(),

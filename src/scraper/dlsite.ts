@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { getConfig } from '../config/index.js';
+import type { AgeRating } from '../db/main/schema.js';
 import { hasLetter, nameToUUID } from '../filesystem/utils.js';
 import { fetchHtml, fetchJson } from './client.js';
 import { fetchHVDBWorkInfo } from './hvdb.js';
@@ -15,7 +16,8 @@ export interface DLsiteWorkInfo {
   title: string;
   circle: string;
   circleId: string;
-  nsfw: boolean;
+  /** 年龄分级：all 全年龄 / r15 / r18 */
+  ageRating: AgeRating;
   releaseDate: string;
   dlCount: number;
   price: number;
@@ -90,7 +92,8 @@ interface StaticWorkInfo {
   title: string;
   circle: string;
   circleId: string;
-  nsfw: boolean;
+  /** 年龄分级：all 全年龄 / r15 / r18 */
+  ageRating: AgeRating;
   releaseDate: string;
   tags: string[];
   vas: Array<{ id: string; name: string }>;
@@ -129,9 +132,15 @@ export async function scrapeStaticWorkInfo(
   const circleId =
     circleLink.attr('href')?.match(/maker_id\/(RG\d+)/)?.[1] || '';
 
-  // NSFW: 年龄指定行，'R18'/'18禁' 即成人内容（不同语言/时期页面文案不同）
+  // 年龄指定值跨语言一致：'R18'/'R-18' → r18、'R15'/'R-15' → r15；
+  // 仅全年龄随页面语言翻译（日：全年齢 / 中：全年龄 / 英：All Ages），
+  // 连同空值一律落入默认分支 'all'，无需逐语言匹配。
   const ageText = findOutlineTd($, labels.age)?.text().trim() || '';
-  const nsfw = /R18|18禁/.test(ageText);
+  const ageRating: AgeRating = /R-?18/.test(ageText)
+    ? 'r18'
+    : /R-?15/.test(ageText)
+      ? 'r15'
+      : 'all';
 
   // 发售日 (YYYY-MM-DD)
   const releaseDigits = (
@@ -237,7 +246,7 @@ export async function scrapeStaticWorkInfo(
     title,
     circle,
     circleId,
-    nsfw,
+    ageRating,
     releaseDate,
     tags,
     vas,
@@ -363,7 +372,7 @@ export async function searchDLsite(keyword: string): Promise<DLsiteWorkInfo[]> {
         title,
         circle,
         circleId: '',
-        nsfw: true,
+        ageRating: 'r18',
         releaseDate: '',
         dlCount: 0,
         price: 0,

@@ -35,7 +35,7 @@ async function insertFixtures(): Promise<void> {
       dir: `q/${W1}`,
       title: `催眠音声${base}`,
       circleName: CIRCLE_A,
-      nsfw: false,
+      ageRating: 'all',
       release: '2024-01-01',
       tags: [TAG_X, TAG_Y],
       vas: [{ id: VA_1, name: VA_1_NAME }],
@@ -47,7 +47,7 @@ async function insertFixtures(): Promise<void> {
       dir: `q/${W2}`,
       title: `普通作品${base}`,
       circleName: CIRCLE_A,
-      nsfw: true,
+      ageRating: 'r18',
       release: '2024-01-02',
       tags: [TAG_X],
       vas: [],
@@ -59,7 +59,7 @@ async function insertFixtures(): Promise<void> {
       dir: `q/${W3}`,
       title: `无关作品${base}`,
       circleName: CIRCLE_B,
-      nsfw: false,
+      ageRating: 'all',
       release: '2024-01-03',
       tags: [TAG_Y],
       vas: [],
@@ -171,8 +171,8 @@ describe('queryWorks', () => {
     expect(ids(rj)).toEqual([W1]);
   });
 
-  it('nsfw:true', async () => {
-    const r = await queryWorks(`circle:${CIRCLE_A} nsfw:true`, undefined, {
+  it('age:r18', async () => {
+    const r = await queryWorks(`circle:${CIRCLE_A} age:r18`, undefined, {
       pageSize: 500,
     });
     expect(ids(r)).toEqual([W2]);

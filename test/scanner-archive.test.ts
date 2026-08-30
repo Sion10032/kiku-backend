@@ -11,7 +11,7 @@ mock.module('../src/scraper/dlsite.js', () => ({
   fetchDLsiteWorkInfo: async (rjCode: string) => ({
     title: `测试作品 ${rjCode}`,
     circle: '测试社团',
-    nsfw: false,
+    ageRating: 'all' as const,
     releaseDate: '2024-01-01',
     tags: [],
     vas: [],
