@@ -1,9 +1,10 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getConfig } from '../config/index.js';
 import { db } from '../db/main/index.js';
-import type { Circle, Tag, Va, Work } from '../db/main/schema.js';
+import type { Circle, Series, Tag, Va, Work } from '../db/main/schema.js';
 import {
   circles,
+  series,
   tags,
   tagWork,
   vas,
@@ -40,6 +41,7 @@ export interface UpsertWorkInput {
   rank?: Record<string, number>;
   tags?: string[];
   vas?: Array<{ id: string; name: string }>;
+  series?: { id: string; name: string } | null;
   language?: string;
   sourceId?: string;
 }
@@ -50,6 +52,22 @@ export interface UpsertResult {
   created: boolean;
   success: boolean;
   error?: string;
+}
+
+/**
+ * 按 id upsert 系列行（SRI 编号为主键）。
+ * 名字不设唯一且可能变更语义：已存在的系列一律沿用库内记录，不合并、不改名。
+ */
+async function upsertSeriesRow(
+  id: string,
+  name: string,
+): Promise<string | null> {
+  const existing = await db.query.series.findFirst({
+    where: { RAW: (t, op) => op.eq(t.id, id) },
+  });
+  if (existing) return existing.id;
+  await db.insert(series).values({ id, name }).onConflictDoNothing();
+  return id;
 }
 
 /**
@@ -150,6 +168,20 @@ export async function upsertWork(
         }
       }
 
+      // Update series: 仅在传入系列时设置（null/undefined 保持既有 seriesId 不变，存量不回填）
+      if (input.series) {
+        const seriesId = await upsertSeriesRow(
+          input.series.id,
+          input.series.name,
+        );
+        if (seriesId) {
+          await db
+            .update(works)
+            .set({ seriesId })
+            .where(eq(works.id, input.id));
+        }
+      }
+
       return {
         workId: input.id,
         title: input.title,
@@ -157,7 +189,12 @@ export async function upsertWork(
         success: true,
       };
     } else {
-      // Create new work
+      // Create new work（先确保系列行存在，外键开启时插入才能引用）
+      let newSeriesId: string | null = null;
+      if (input.series) {
+        newSeriesId = await upsertSeriesRow(input.series.id, input.series.name);
+      }
+
       await db.insert(works).values({
         id: input.id as string,
         rootFolder: input.rootFolder,
@@ -177,6 +214,7 @@ export async function upsertWork(
         rank: input.rank ? JSON.stringify(input.rank) : null,
         language: input.language ?? null,
         sourceId: input.sourceId ?? null,
+        seriesId: newSeriesId,
       });
 
       // Create tags
@@ -273,6 +311,7 @@ type WorkWithRelations = Work & {
   circle: Circle;
   tags?: Array<{ tag: Tag }>;
   vas?: Array<{ va: Va }>;
+  series?: Series | null;
   reviews?: Array<{ rating: number | null }>;
 };
 
@@ -294,6 +333,7 @@ export interface FormattedWork {
   rank: Record<string, number> | null;
   tags: Array<{ id: number; name: string }>;
   vas: Array<{ id: string; name: string }>;
+  series: { id: string; name: string } | null;
   userRating: number | null;
   /** 当前用户播放进度聚合（null = 未读/未登录） */
   userProgress: WorkProgressSummary | null;
@@ -319,6 +359,8 @@ function formatWork(row: WorkWithRelations): FormattedWork {
     rank: row.rank ? JSON.parse(row.rank) : null,
     tags: row.tags?.map((tw) => ({ id: tw.tag.id, name: tw.tag.name })) ?? [],
     vas: row.vas?.map((vw) => ({ id: vw.va.id, name: vw.va.name })) ?? [],
+    series:
+      row.series != null ? { id: row.series.id, name: row.series.name } : null,
     userRating: row.reviews?.[0]?.rating ?? null,
     userProgress: null,
     language: row.language,
@@ -369,6 +411,7 @@ export async function getWorkById(id: string, username?: string) {
       circle: true,
       tags: { with: { tag: true } },
       vas: { with: { va: true } },
+      series: true,
     },
   });
   if (!row) throw new Error(`Work ${id} not found`);
@@ -395,6 +438,7 @@ export async function getWorksByIdsOrdered(
       circle: true,
       tags: { with: { tag: true } },
       vas: { with: { va: true } },
+      series: true,
     },
     where: {
       RAW: (t, op) =>
@@ -481,6 +525,7 @@ export async function queryWorks(
           circle: true,
           tags: { with: { tag: true } },
           vas: { with: { va: true } },
+          series: true,
         },
         where: {
           RAW: (t, op) =>
@@ -519,6 +564,7 @@ export async function queryWorks(
         circle: true,
         tags: { with: { tag: true } },
         vas: { with: { va: true } },
+        series: true,
       },
       where: {
         RAW: (t, op) => {
@@ -552,6 +598,10 @@ export async function getCircles() {
 
 export async function getTags() {
   return db.query.tags.findMany();
+}
+
+export async function getSeries() {
+  return db.query.series.findMany();
 }
 
 export async function getVas() {

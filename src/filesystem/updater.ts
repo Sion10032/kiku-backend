@@ -3,6 +3,7 @@ import type { Config } from '../config/schema.js';
 import { db } from '../db/main/index.js';
 import {
   circles,
+  series,
   tags,
   tagWork,
   vas,
@@ -24,6 +25,7 @@ export async function updateWorkMetadata(
     circleName?: string;
     tags?: string[];
     vas?: Array<{ id: string; name: string }>;
+    series?: { id: string; name: string } | null;
     nsfw?: boolean;
     release?: string;
     dlCount?: number;
@@ -144,6 +146,31 @@ export async function updateWorkMetadata(
             workId,
           });
         }
+      }
+    }
+
+    // Update series only when a non-null value is passed:
+    // 不传或传 null 时保持既有 seriesId 不变（旧元数据源无系列信息，不得清空）。
+    // 系列行按 id upsert，已存在则沿用库内名字，不合并不改名。
+    if (metadata.series) {
+      const s = metadata.series;
+      let existingSeries = await db.query.series.findFirst({
+        where: { RAW: (t, op) => op.eq(t.id, s.id) },
+      });
+
+      if (!existingSeries) {
+        const result = await db
+          .insert(series)
+          .values({ id: s.id, name: s.name })
+          .returning();
+        existingSeries = result[0];
+      }
+
+      if (existingSeries) {
+        await db
+          .update(works)
+          .set({ seriesId: existingSeries.id })
+          .where(eq(works.id, workId as string));
       }
     }
 

@@ -191,6 +191,7 @@ async function* syncWorkMetadata(
     rank: Object.keys(metadata.rank).length > 0 ? metadata.rank : undefined,
     tags: metadata.tags,
     vas: metadata.vas,
+    series: metadata.series,
     language: metadata.language || undefined,
     sourceId: metadata.sourceId || undefined,
   });
