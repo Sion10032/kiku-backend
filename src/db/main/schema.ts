@@ -124,6 +124,23 @@ export const userProgress = sqliteTable(
   (t) => [primaryKey({ columns: [t.userName, t.workId, t.mediaIndex] })],
 );
 
+// 多态收藏：作品 / 系列 / 声优 / 社团，按用户隔离。
+// 多态目标无法做 FK（targetId 统一存 text：work→RJ 号、series→SRI 号、
+// va→DLsite 声优 id、circle→t_circle.id 转文本），完整性由 favourite.service 校验。
+export const favourites = sqliteTable(
+  't_favourite',
+  {
+    userName: text('user_name')
+      .notNull()
+      .references(() => users.name, { onDelete: 'cascade' }),
+    // 'work' | 'series' | 'va' | 'circle'
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+  },
+  (t) => [primaryKey({ columns: [t.userName, t.targetType, t.targetId] })],
+);
+
 // Export types for all tables
 export type Circle = typeof circles.$inferSelect;
 export type NewCircle = typeof circles.$inferInsert;
@@ -151,3 +168,6 @@ export type NewReview = typeof reviews.$inferInsert;
 
 export type UserProgress = typeof userProgress.$inferSelect;
 export type NewUserProgress = typeof userProgress.$inferInsert;
+
+export type Favourite = typeof favourites.$inferSelect;
+export type NewFavourite = typeof favourites.$inferInsert;
