@@ -9,6 +9,7 @@ import {
 import { QueryParseError } from '../services/query/parser.js';
 import {
   getCircles,
+  getSeries,
   getTags,
   getVas,
   getWorkById,
@@ -55,6 +56,11 @@ const vaSchema = z.object({
   name: z.string(),
 });
 
+const seriesSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
 const userProgressSchema = z.object({
   mediaIndex: z.string(),
   trackTitle: z.string().nullable(),
@@ -81,6 +87,7 @@ export const formattedWorkSchema = z.object({
   rank: z.record(z.string(), z.number()).nullable(),
   tags: z.array(z.object({ id: z.number(), name: z.string() })),
   vas: z.array(z.object({ id: z.string(), name: z.string() })),
+  series: seriesSchema.nullable(),
   userRating: z.number().nullable(),
   userProgress: userProgressSchema.nullable(),
   language: z.string().nullable(),
@@ -324,6 +331,20 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async () => {
       return getVas();
+    },
+  );
+
+  fastify.get(
+    '/series/',
+    {
+      schema: {
+        response: {
+          200: z.array(seriesSchema),
+        },
+      },
+    },
+    async () => {
+      return getSeries();
     },
   );
 };
