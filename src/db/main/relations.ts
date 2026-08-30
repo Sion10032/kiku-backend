@@ -18,6 +18,11 @@ export const relations = defineRelations(schema, (r) => ({
     }),
     tags: r.many.tagWork(),
     vas: r.many.vaWork(),
+    series: r.one.series({
+      from: r.works.seriesId,
+      to: r.series.id,
+      optional: true,
+    }),
     reviews: r.many.reviews(),
     userProgress: r.many.userProgress(),
   },
@@ -34,6 +39,9 @@ export const relations = defineRelations(schema, (r) => ({
   },
   vas: {
     works: r.many.vaWork(),
+  },
+  series: {
+    works: r.many.works(),
   },
   vaWork: {
     va: r.one.vas({ from: r.vaWork.vaId, to: r.vas.id, optional: false }),

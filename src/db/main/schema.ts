@@ -30,6 +30,8 @@ export const works = sqliteTable('t_work', {
   rank: text('rank'),
   language: text('language'),
   sourceId: text('source_id'),
+  /** 所属系列（最多一个，可空）。普通 FK：不级联删除（系列表不会被删除）。 */
+  seriesId: text('series_id').references(() => series.id),
   /** 软删除标记（ISO 时间串，null = 正常）。源文件缺失时置位，超过宽限期后物理清理。 */
   deletedAt: text('deleted_at'),
 });
@@ -42,6 +44,11 @@ export const tags = sqliteTable('t_tag', {
 export const vas = sqliteTable('t_va', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+});
+
+export const series = sqliteTable('t_series', {
+  id: text('id').primaryKey(), // DLsite SRI 编号，如 'SRI0000027029'
+  name: text('name').notNull(), // 不设唯一：存在同名不同系列
 });
 
 export const tagWork = sqliteTable(
@@ -129,6 +136,9 @@ export type NewTag = typeof tags.$inferInsert;
 
 export type Va = typeof vas.$inferSelect;
 export type NewVa = typeof vas.$inferInsert;
+
+export type Series = typeof series.$inferSelect;
+export type NewSeries = typeof series.$inferInsert;
 
 export type TagWork = typeof tagWork.$inferSelect;
 export type VaWork = typeof vaWork.$inferSelect;
