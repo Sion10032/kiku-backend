@@ -45,34 +45,92 @@ function classify(name: string): TrackLeaf['type'] {
  */
 const naturalCollator = new Intl.Collator('ja', { numeric: true });
 
+/** 建树中间结构：目录节点。parent 供跨目录歌词回退的就近 BFS 使用。 */
+type Dir = {
+  dirs: Map<string, Dir>;
+  files: Map<string, TrackLeaf>;
+  parent?: Dir;
+};
+
 /**
- * 歌词候选匹配（按优先级）：
- * 同目录 stem.lrc → 同目录原名.lrc → 同目录原名.vtt → 同目录 stem.vtt
- * → lyrics/ 子目录 stem.lrc → lyrics/ 子目录 stem.vtt，取首个命中。
- * files 为音频所在目录的文件表，lyricsDir 为该目录下 lyrics/ 子目录（可能不存在）。
+ * 歌词候选名（同目录与跨目录回退共用，按优先级）：
+ * stem.lrc → 原名.lrc → 原名.vtt → stem.vtt。
  */
-function findLyrics(
-  files: Map<string, TrackLeaf>,
-  lyricsDir: { files: Map<string, TrackLeaf> } | undefined,
+function lyricsCandidates(
   audioName: string,
-): LyricsRef | undefined {
+): Array<{ name: string; type: 'lrc' | 'vtt' }> {
   const stem = audioName.replace(/\.[^.]+$/, '');
-  const sameDir: Array<{ name: string; type: 'lrc' | 'vtt' }> = [
+  return [
     { name: `${stem}.lrc`, type: 'lrc' },
     { name: `${audioName}.lrc`, type: 'lrc' },
     { name: `${audioName}.vtt`, type: 'vtt' },
     { name: `${stem}.vtt`, type: 'vtt' },
   ];
-  for (const c of sameDir) {
-    const hit = files.get(c.name);
+}
+
+/**
+ * 自 start 起对目录图做 BFS（父目录与子目录均视为邻接），返回按距离
+ * 从近到远排列的目录序列（含 start 自身）；同层按入队序：父目录优先，
+ * 其余子目录按自然序。供 findLyrics 的跨目录回退按「就近优先」扫描。
+ */
+function dirsNearFirst(start: Dir): Dir[] {
+  const ordered: Dir[] = [];
+  const seen = new Set<Dir>([start]);
+  let frontier: Dir[] = [start];
+  while (frontier.length > 0) {
+    const next: Dir[] = [];
+    for (const dir of frontier) {
+      const neighbors: Dir[] = [];
+      if (dir.parent) neighbors.push(dir.parent);
+      for (const [_name, child] of [...dir.dirs.entries()].sort(([a], [b]) =>
+        naturalCollator.compare(a, b),
+      )) {
+        neighbors.push(child);
+      }
+      for (const n of neighbors) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          next.push(n);
+        }
+      }
+    }
+    ordered.push(...next);
+    frontier = next;
+  }
+  return ordered;
+}
+
+/**
+ * 歌词候选匹配（按优先级）：
+ * 1. 同目录 stem.lrc → 原名.lrc → 原名.vtt → stem.vtt；
+ * 2. lyrics/ 子目录 stem.lrc → stem.vtt；
+ * 3. 其余全部目录：自音频所在目录按 dirsNearFirst 的就近序逐目录扫描，
+ *    每目录按与同目录相同的候选名顺序，取首个命中。
+ * dir 为音频所在目录，orderedDirs 为 dirsNearFirst(dir) 的结果。
+ */
+function findLyrics(
+  dir: Dir,
+  orderedDirs: Dir[],
+  audioName: string,
+): LyricsRef | undefined {
+  const candidates = lyricsCandidates(audioName);
+  const stem = audioName.replace(/\.[^.]+$/, '');
+  for (const c of candidates) {
+    const hit = dir.files.get(c.name);
     if (hit) return { hash: hit.hash, type: c.type };
   }
+  const lyricsDir = dir.dirs.get('lyrics');
   if (lyricsDir) {
-    for (const c of [
-      { name: `${stem}.lrc`, type: 'lrc' as const },
-      { name: `${stem}.vtt`, type: 'vtt' as const },
-    ]) {
-      const hit = lyricsDir.files.get(c.name);
+    for (const name of [`${stem}.lrc`, `${stem}.vtt`]) {
+      const hit = lyricsDir.files.get(name);
+      if (hit)
+        return { hash: hit.hash, type: name.endsWith('.lrc') ? 'lrc' : 'vtt' };
+    }
+  }
+  for (const other of orderedDirs) {
+    if (other === dir || other === lyricsDir) continue;
+    for (const c of candidates) {
+      const hit = other.files.get(c.name);
       if (hit) return { hash: hit.hash, type: c.type };
     }
   }
@@ -85,7 +143,6 @@ function findLyrics(
  * 排序：文件夹在前、文件在后，同级自然序（数字编号按数值），与文件夹版行为一致。
  */
 export function entriesToTrackTree(paths: string[]): TrackNode[] {
-  type Dir = { dirs: Map<string, Dir>; files: Map<string, TrackLeaf> };
   const root: Dir = { dirs: new Map(), files: new Map() };
 
   for (const p of paths) {
@@ -96,7 +153,7 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
     for (const seg of segments.slice(0, -1)) {
       let next = dir.dirs.get(seg);
       if (!next) {
-        next = { dirs: new Map(), files: new Map() };
+        next = { dirs: new Map(), files: new Map(), parent: dir };
         dir.dirs.set(seg, next);
       }
       dir = next;
@@ -105,6 +162,7 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
   }
 
   const build = (dir: Dir): TrackNode[] => {
+    const orderedDirs = dirsNearFirst(dir);
     const nodes: TrackNode[] = [];
     for (const [name, child] of [...dir.dirs.entries()].sort(([a], [b]) =>
       naturalCollator.compare(a, b),
@@ -117,11 +175,7 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
       naturalCollator.compare(a, b),
     )) {
       if (file.type === 'audio') {
-        const lyrics = findLyrics(
-          dir.files,
-          dir.dirs.get('lyrics'),
-          file.title,
-        );
+        const lyrics = findLyrics(dir, orderedDirs, file.title);
         nodes.push(lyrics ? { ...file, lyrics } : file);
       } else {
         nodes.push(file);

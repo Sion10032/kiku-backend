@@ -234,4 +234,48 @@ describe('entriesToTrackTree 歌词引用', () => {
     const tree = entriesToTrackTree(['a.mp3']);
     expect(tree).toEqual([{ type: 'audio', title: 'a.mp3', hash: 'a.mp3' }]);
   });
+
+  it('全树回退：同目录无候选时命中其他目录的 stem.lrc', () => {
+    const tree = entriesToTrackTree(['sub/a.wav', 'other/a.lrc']);
+    // 文件夹在前且自然序 other < sub，sub 的 children 仅剩 a.wav
+    const sub = tree[1];
+    const audio = sub?.type === 'folder' ? sub.children[0] : undefined;
+    expect(audio).toEqual({
+      type: 'audio',
+      title: 'a.wav',
+      hash: 'sub/a.wav',
+      lyrics: { hash: 'other/a.lrc', type: 'lrc' },
+    });
+  });
+
+  it('全树回退：根目录音频命中子目录歌词', () => {
+    const tree = entriesToTrackTree(['a.mp3', 'sub/a.lrc']);
+    // 根级：文件夹 sub 在前，audio a.mp3 在 [1]
+    const audio = tree[1];
+    expect(audio).toEqual({
+      type: 'audio',
+      title: 'a.mp3',
+      hash: 'a.mp3',
+      lyrics: { hash: 'sub/a.lrc', type: 'lrc' },
+    });
+  });
+
+  it('全树回退就近优先：近处目录先于远处目录命中', () => {
+    // 对 sub/a.wav 而言：root/a.lrc 距离 1，other/a.lrc 距离 2
+    const tree = entriesToTrackTree(['sub/a.wav', 'a.lrc', 'other/a.lrc']);
+    const sub = tree[1];
+    const audio = sub?.type === 'folder' ? sub.children[0] : undefined;
+    expect(audio?.type === 'audio' && audio.lyrics?.hash === 'a.lrc').toBe(
+      true,
+    );
+  });
+
+  it('同目录歌词仍优先于跨目录回退', () => {
+    const tree = entriesToTrackTree(['sub/a.wav', 'sub/a.lrc', 'other/a.lrc']);
+    const sub = tree[1];
+    const audio = sub?.type === 'folder' ? sub.children[1] : undefined;
+    expect(audio?.type === 'audio' && audio.lyrics?.hash === 'sub/a.lrc').toBe(
+      true,
+    );
+  });
 });
