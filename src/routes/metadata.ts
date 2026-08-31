@@ -180,6 +180,12 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 type: z.enum(['audio', 'text', 'image', 'other']),
                 title: z.string(),
                 hash: z.string(),
+                lyrics: z
+                  .object({
+                    hash: z.string(),
+                    type: z.enum(['lrc', 'vtt']),
+                  })
+                  .optional(),
               }),
             ]),
           ),
