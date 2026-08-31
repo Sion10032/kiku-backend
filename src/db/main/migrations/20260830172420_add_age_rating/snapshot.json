@@ -434,7 +434,7 @@
       "type": "text",
       "notNull": true,
       "autoincrement": false,
-      "default": "'all'",
+      "default": "'r18'",
       "generated": null,
       "name": "age_rating",
       "entityType": "columns",
