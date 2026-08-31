@@ -1,12 +1,9 @@
-import { basename, dirname, extname, join } from 'node:path';
+import { extname } from 'node:path';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getConfig } from '../config/index.js';
 import { openWorkSource, type WorkSource } from '../filesystem/source/index.js';
-import {
-  readAllFromSource,
-  sanitizeMediaIndex,
-} from '../filesystem/source/types.js';
+import { sanitizeMediaIndex } from '../filesystem/source/types.js';
 import { getWorkById } from '../services/work.service.js';
 
 // 通配参数（路由形如 /stream/:id/*）：媒体相对路径可含子文件夹（"早期特典/mp3/x.mp3"）
@@ -138,69 +135,6 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .header('Content-Length', size)
           .header('Content-Disposition', `attachment; filename="${index}"`)
           .send(stream);
-      } catch {
-        return reply.status(404).send({ error: 'Work not found' });
-      }
-    },
-  );
-
-  fastify.get(
-    '/check-lrc/:id/*',
-    {
-      schema: {
-        params: mediaParamsSchema,
-        response: {
-          200: z.object({
-            id: z.string(),
-            index: z.string(),
-            hasLrc: z.boolean(),
-            type: z.enum(['lrc', 'vtt']).optional(),
-            text: z.string().optional(),
-          }),
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id, '*': index } = request.params;
-
-      try {
-        const source = await resolveSource(id, index);
-        if (!source) {
-          return reply.status(404).send({ error: 'File not found' });
-        }
-
-        // 音轨文件名去扩展名（目录前缀保留）："sub/x.wav" → "sub/x"
-        const stem = join(dirname(index), basename(index, extname(index)));
-
-        // 歌词候选（按优先级）：同目录 stem/index → lyrics/ 子目录 stem/index → VTT 变体
-        const stemDir = dirname(stem);
-        const stemBase = basename(stem);
-        const candidates: Array<{ type: 'lrc' | 'vtt'; file: string }> = [
-          { type: 'lrc', file: `${stem}.lrc` },
-          { type: 'lrc', file: `${index}.lrc` },
-          { type: 'vtt', file: `${index}.vtt` },
-          { type: 'vtt', file: `${stem}.vtt` },
-          { type: 'lrc', file: join(stemDir, 'lyrics', `${stemBase}.lrc`) },
-          { type: 'vtt', file: join(stemDir, 'lyrics', `${stemBase}.vtt`) },
-        ];
-
-        for (const candidate of candidates) {
-          if (await source.has(candidate.file)) {
-            const text = (
-              await readAllFromSource(source, candidate.file)
-            ).toString('utf-8');
-            return {
-              id,
-              index,
-              hasLrc: true,
-              type: candidate.type,
-              text,
-            };
-          }
-        }
-
-        return { id, index, hasLrc: false };
       } catch {
         return reply.status(404).send({ error: 'Work not found' });
       }

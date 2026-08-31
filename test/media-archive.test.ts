@@ -119,18 +119,6 @@ describe('media 流式（tar/zip 作品）', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('check-lrc 读取包内歌词', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/media/check-lrc/${TAR_ID}/01.mp3`,
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.hasLrc).toBe(true);
-    expect(body.type).toBe('lrc');
-    expect(body.text).toContain('テスト');
-  });
-
   it('download：200 + attachment + 完整字节', async () => {
     const res = await app.inject({
       method: 'GET',
