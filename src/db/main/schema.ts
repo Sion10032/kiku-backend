@@ -144,6 +144,21 @@ export const favourites = sqliteTable(
   (t) => [primaryKey({ columns: [t.userName, t.targetType, t.targetId] })],
 );
 
+export const tracks = sqliteTable(
+  't_track',
+  {
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+    // 音轨标识 = 文件相对路径（media index，与前端 Track.hash 一致）
+    mediaIndex: text('media_index').notNull(),
+    title: text('title').notNull(),
+    durationSec: real('duration_sec'), // 解析失败为 null
+    sizeBytes: integer('size_bytes').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workId, t.mediaIndex] })],
+);
+
 // Export types for all tables
 export type Circle = typeof circles.$inferSelect;
 export type NewCircle = typeof circles.$inferInsert;
