@@ -16,9 +16,9 @@ import {
 import { classifyMissingWorks } from './prune.js';
 import { openWorkSource } from './source/index.js';
 import { treeHasAudio } from './source/tree.js';
-import { UnsupportedArchiveError, type WorkSource } from './source/types.js';
+import { UnsupportedArchiveError } from './source/types.js';
 import { syncWorkTracks } from './trackSync.js';
-import { collectWorkEntries, type TrackNode } from './utils.js';
+import { collectWorkEntries } from './utils.js';
 
 /** 扫描器模式：scan 扫盘发现新作品；update 遍历数据库刷新既有作品元数据。 */
 export type ScanMode = 'scan' | 'update';
@@ -306,13 +306,12 @@ export async function* performScan(
 
       // folder/archive：打开 source，校验含音频才建任务
       let hasAudio = false;
-      // 保留 source/tree 引用：已扫描作品的跳过分支做音轨 diff 回填
-      let source: WorkSource | null = null;
-      let tree: TrackNode[] | null = null;
       try {
-        source = await openWorkSource(rootFolder.path, entry.relativePath);
-        tree = await source.buildTree();
-        hasAudio = treeHasAudio(tree);
+        const source = await openWorkSource(
+          rootFolder.path,
+          entry.relativePath,
+        );
+        hasAudio = treeHasAudio(await source.buildTree());
       } catch (err) {
         // 打不开/不支持的包：作为失败任务上报
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -361,17 +360,6 @@ export async function* performScan(
               known.sourceId ?? undefined,
             );
           }
-        }
-        // 音轨行 diff 回填：老库升级 / 新增文件 / size 变化时探测，未变更零开销
-        try {
-          if (source && tree) {
-            await syncWorkTracks(entry.rjCode, source, tree);
-          }
-        } catch (err) {
-          yield* emitLog(
-            'warning',
-            `Track sync failed for ${entry.rjCode}: ${String(err)}`,
-          );
         }
         skipped++;
         // 不逐条推送跳过日志（大库时刷屏），仅在汇总处报告总数；
@@ -430,24 +418,6 @@ export async function* performScan(
       } else {
         updated++;
         yield* emitLog('info', `Updated: ${task.rjCode} - ${title}`);
-      }
-
-      // 音轨行同步：探测时长入库（失败不判任务失败——DLsite 元数据已保存）
-      try {
-        const rootPath = config.rootFolders.find(
-          (f) => f.name === task.rootFolder,
-        )?.path;
-        if (rootPath) {
-          const source = await openWorkSource(rootPath, task.relativePath);
-          await syncWorkTracks(task.rjCode, source, await source.buildTree());
-        }
-      } catch (err) {
-        yield* emitLog(
-          'warning',
-          `Track sync failed for ${task.rjCode}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
       }
 
       task.status = 'completed';
@@ -524,13 +494,14 @@ export async function* performScan(
 }
 
 /**
- * update 模式：遍历数据库已有作品，重新抓取 DLsite 元数据并更新。
+ * update 模式：遍历数据库已有作品，重新抓取 DLsite 元数据并更新，
+ * 并顺带做音轨行 diff 回填（音轨时长同步的唯一触发点；scan 模式不做任何
+ * 音轨同步，含新作品，新作品由下次 update metadata 统一补齐）。
  * 对齐原版 PERFORM_UPDATE（updater.js --refreshAll）语义，不扫描文件系统。
- * 签名与 performScan 对齐；config 当前未直接使用（scraper/cover 内部自行读配置），
- * 故按 Biome 规范加下划线前缀。
+ * 导出供测试直接驱动（对齐 performScan）。
  */
-async function* performUpdate(
-  _config: Config,
+export async function* performUpdate(
+  config: Config,
   signal: AbortSignal,
 ): AsyncGenerator<ScanEvent> {
   yield* emitLog('info', 'Starting metadata update...');
@@ -572,6 +543,31 @@ async function* performUpdate(
         updated++;
         yield* emitLog('info', `Updated: ${ref.id} - ${r.value.title}`);
       }
+
+      // 音轨行回填：update 模式是音轨时长同步的唯一触发点——全库作品
+      // （含 scan 新入库）在此做 diff 同步，失败不判任务失败（DLsite 元数据已保存）
+      try {
+        const rootPath = config.rootFolders.find(
+          (f) => f.name === ref.rootFolder,
+        )?.path;
+        if (!rootPath) {
+          yield* emitLog(
+            'warning',
+            `Track sync skipped, root folder not found: ${ref.rootFolder}`,
+          );
+        } else {
+          const source = await openWorkSource(rootPath, ref.dir);
+          await syncWorkTracks(ref.id, source, await source.buildTree());
+        }
+      } catch (err) {
+        yield* emitLog(
+          'warning',
+          `Track sync failed for ${ref.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+
       task.status = 'completed';
       yield { type: 'SCAN_TASK', task: stripTask(task) };
     } catch (err) {
