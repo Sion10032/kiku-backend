@@ -177,7 +177,20 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 children: z.lazy(() => z.array(z.any())),
               }),
               z.object({
-                type: z.enum(['audio', 'text', 'image', 'other']),
+                type: z.literal('audio'),
+                title: z.string(),
+                hash: z.string(),
+                lyrics: z
+                  .object({
+                    hash: z.string(),
+                    type: z.enum(['lrc', 'vtt']),
+                  })
+                  .optional(),
+                // 播放时长（秒）；未知/探测失败为 null（service 层总会带键）
+                durationSec: z.number().nullable().optional(),
+              }),
+              z.object({
+                type: z.enum(['text', 'image', 'other']),
                 title: z.string(),
                 hash: z.string(),
                 lyrics: z

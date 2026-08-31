@@ -27,6 +27,7 @@ import {
 } from './progress.service.js';
 import { compileQuery } from './query/compiler.js';
 import { parseQuery } from './query/parser.js';
+import { getTrackRows } from './track.service.js';
 
 // ---------- Upsert (used by scanner) ----------
 
@@ -649,7 +650,20 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
   }
 
   const source = await openWorkSource(rootFolder.path, row.dir);
-  return source.buildTree();
+  const tree = await source.buildTree();
+  // API 层职责：文件系统 TrackNode 保持纯净，时长在返回前按 mediaIndex 附加
+  // （库内无行的轨/探测失败的轨 → null）。
+  const rows = await getTrackRows(id);
+  const dur = new Map(rows.map((r) => [r.mediaIndex, r.durationSec]));
+  const attach = (nodes: TrackNode[]): TrackNode[] =>
+    nodes.map((n) =>
+      n.type === 'audio'
+        ? { ...n, durationSec: dur.get(n.hash) ?? null }
+        : n.type === 'folder'
+          ? { ...n, children: attach(n.children) }
+          : n,
+    );
+  return attach(tree);
 }
 
 // ---------- Scanner update mode ----------
