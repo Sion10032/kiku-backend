@@ -160,3 +160,78 @@ describe('rekeyStrippedTopDir', () => {
     expect(rekeyStrippedTopDir(m)).toBe(m);
   });
 });
+
+describe('entriesToTrackTree 歌词引用', () => {
+  it('同目录 stem.lrc 匹配，audio 节点携带 lyrics，text 节点保留', () => {
+    const tree = entriesToTrackTree(['a.mp3', 'a.lrc']);
+    // 自然序下 'a.lrc' < 'a.mp3'，text 节点排前
+    expect(tree[0]).toEqual({ type: 'text', title: 'a.lrc', hash: 'a.lrc' });
+    expect(tree[1]).toEqual({
+      type: 'audio',
+      title: 'a.mp3',
+      hash: 'a.mp3',
+      lyrics: { hash: 'a.lrc', type: 'lrc' },
+    });
+  });
+
+  it('优先级：stem.lrc > 原名.lrc > 原名.vtt > stem.vtt', () => {
+    // stem.lrc 与 原名.lrc 并存 → 取 stem.lrc
+    const t1 = entriesToTrackTree(['x.mp3', 'x.lrc', 'x.mp3.lrc']);
+    // 自然序：x.lrc < x.mp3 < x.mp3.lrc，audio 在 [1]
+    const n1 = t1[1];
+    expect(n1?.type === 'audio' && n1.lyrics?.hash === 'x.lrc').toBe(true);
+    // 无 stem.lrc 时回退 原名.lrc
+    const t2 = entriesToTrackTree(['x.mp3', 'x.mp3.lrc', 'x.vtt']);
+    expect(t2[0]).toEqual({
+      type: 'audio',
+      title: 'x.mp3',
+      hash: 'x.mp3',
+      lyrics: { hash: 'x.mp3.lrc', type: 'lrc' },
+    });
+    // 原名.vtt 优先于 stem.vtt
+    const t3 = entriesToTrackTree(['x.mp3', 'x.mp3.vtt', 'x.vtt']);
+    const n3 = t3[0];
+    expect(n3?.type === 'audio' && n3.lyrics?.hash === 'x.mp3.vtt').toBe(true);
+  });
+
+  it('子目录音频匹配同目录歌词，hash 含目录前缀', () => {
+    const tree = entriesToTrackTree(['sub/a.wav', 'sub/a.lrc']);
+    const sub = tree[0];
+    expect(sub?.type === 'folder').toBe(true);
+    // children 自然序：a.lrc < a.wav，audio 在 [1]
+    const audio = sub?.type === 'folder' ? sub.children[1] : undefined;
+    expect(audio).toEqual({
+      type: 'audio',
+      title: 'a.wav',
+      hash: 'sub/a.wav',
+      lyrics: { hash: 'sub/a.lrc', type: 'lrc' },
+    });
+  });
+
+  it('lyrics/ 子目录回退（lrc 优先 vtt）', () => {
+    // 子目录 children：文件夹在前 → [folder 'lyrics', audio a.wav]
+    const t1 = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.lrc']);
+    const folder1 = t1[0];
+    const n1 = folder1?.type === 'folder' ? folder1.children[1] : undefined;
+    expect(n1).toEqual({
+      type: 'audio',
+      title: 'a.wav',
+      hash: 'sub/a.wav',
+      lyrics: { hash: 'sub/lyrics/a.lrc', type: 'lrc' },
+    });
+    const t2 = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.vtt']);
+    const folder2 = t2[0];
+    const n2 = folder2?.type === 'folder' ? folder2.children[1] : undefined;
+    expect(n2).toEqual({
+      type: 'audio',
+      title: 'a.wav',
+      hash: 'sub/a.wav',
+      lyrics: { hash: 'sub/lyrics/a.vtt', type: 'vtt' },
+    });
+  });
+
+  it('无候选时 audio 节点不含 lyrics 键', () => {
+    const tree = entriesToTrackTree(['a.mp3']);
+    expect(tree).toEqual([{ type: 'audio', title: 'a.mp3', hash: 'a.mp3' }]);
+  });
+});

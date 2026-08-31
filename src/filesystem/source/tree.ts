@@ -1,7 +1,7 @@
 // 曲目树唯一构建实现：folder/tar/zip 三种 WorkSource 共用，
 // 保证树形状与排序在不同作品形态间完全一致。
 import { extname } from 'node:path';
-import type { TrackNode } from '../utils.js';
+import type { LyricsRef, TrackLeaf, TrackNode } from '../utils.js';
 
 const AUDIO_EXTENSIONS = new Set([
   '.mp3',
@@ -14,7 +14,7 @@ const AUDIO_EXTENSIONS = new Set([
   '.mp4',
   '.m4a',
 ]);
-const TEXT_EXTENSIONS = new Set(['.txt', '.lrc', '.srt', '.ass']);
+const TEXT_EXTENSIONS = new Set(['.txt', '.lrc', '.vtt', '.srt', '.ass']);
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const SUPPORTED_EXTENSIONS = new Set([
   ...AUDIO_EXTENSIONS,
@@ -30,7 +30,7 @@ export function isSupportedFile(name: string): boolean {
   return SUPPORTED_EXTENSIONS.has(extname(name).toLowerCase());
 }
 
-function classify(name: string): Exclude<TrackNode['type'], 'folder'> {
+function classify(name: string): TrackLeaf['type'] {
   const ext = extname(name).toLowerCase();
   if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
   if (TEXT_EXTENSIONS.has(ext)) return 'text';
@@ -46,12 +46,46 @@ function classify(name: string): Exclude<TrackNode['type'], 'folder'> {
 const naturalCollator = new Intl.Collator('ja', { numeric: true });
 
 /**
+ * 歌词候选匹配（按优先级）：
+ * 同目录 stem.lrc → 同目录原名.lrc → 同目录原名.vtt → 同目录 stem.vtt
+ * → lyrics/ 子目录 stem.lrc → lyrics/ 子目录 stem.vtt，取首个命中。
+ * files 为音频所在目录的文件表，lyricsDir 为该目录下 lyrics/ 子目录（可能不存在）。
+ */
+function findLyrics(
+  files: Map<string, TrackLeaf>,
+  lyricsDir: { files: Map<string, TrackLeaf> } | undefined,
+  audioName: string,
+): LyricsRef | undefined {
+  const stem = audioName.replace(/\.[^.]+$/, '');
+  const sameDir: Array<{ name: string; type: 'lrc' | 'vtt' }> = [
+    { name: `${stem}.lrc`, type: 'lrc' },
+    { name: `${audioName}.lrc`, type: 'lrc' },
+    { name: `${audioName}.vtt`, type: 'vtt' },
+    { name: `${stem}.vtt`, type: 'vtt' },
+  ];
+  for (const c of sameDir) {
+    const hit = files.get(c.name);
+    if (hit) return { hash: hit.hash, type: c.type };
+  }
+  if (lyricsDir) {
+    for (const c of [
+      { name: `${stem}.lrc`, type: 'lrc' as const },
+      { name: `${stem}.vtt`, type: 'vtt' as const },
+    ]) {
+      const hit = lyricsDir.files.get(c.name);
+      if (hit) return { hash: hit.hash, type: c.type };
+    }
+  }
+  return undefined;
+}
+
+/**
  * 相对路径列表 → TrackNode 树。
  * 入参为「/」分隔的相对路径；跳过不支持扩展名的路径。
  * 排序：文件夹在前、文件在后，同级自然序（数字编号按数值），与文件夹版行为一致。
  */
 export function entriesToTrackTree(paths: string[]): TrackNode[] {
-  type Dir = { dirs: Map<string, Dir>; files: Map<string, TrackNode> };
+  type Dir = { dirs: Map<string, Dir>; files: Map<string, TrackLeaf> };
   const root: Dir = { dirs: new Map(), files: new Map() };
 
   for (const p of paths) {
@@ -82,7 +116,16 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
     for (const [_name, file] of [...dir.files.entries()].sort(([a], [b]) =>
       naturalCollator.compare(a, b),
     )) {
-      nodes.push(file);
+      if (file.type === 'audio') {
+        const lyrics = findLyrics(
+          dir.files,
+          dir.dirs.get('lyrics'),
+          file.title,
+        );
+        nodes.push(lyrics ? { ...file, lyrics } : file);
+      } else {
+        nodes.push(file);
+      }
     }
     return nodes;
   };

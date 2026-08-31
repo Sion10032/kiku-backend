@@ -89,17 +89,31 @@ export async function collectWorkEntries(
   return out;
 }
 
-export type TrackNode =
-  | {
-      type: 'folder';
-      title: string;
-      children: TrackNode[];
-    }
-  | {
-      type: 'audio' | 'text' | 'image' | 'other';
-      title: string;
-      hash: string; // 相对于 work dir 的路径，如 'subfolder/track01.mp3'
-    };
+/** 歌词文件引用（建树时匹配，仅 audio 节点设置）。 */
+export interface LyricsRef {
+  /** 歌词文件相对路径（media index，同 hash 语义） */
+  hash: string;
+  type: 'lrc' | 'vtt';
+}
+
+/** 树分支节点（目录）。 */
+export interface TrackBranch {
+  type: 'folder';
+  title: string;
+  children: TrackNode[];
+}
+
+/** 树叶节点（audio/text/image/other）。 */
+export interface TrackLeaf {
+  type: 'audio' | 'text' | 'image' | 'other';
+  title: string;
+  /** 相对于 work dir 的路径，如 'subfolder/track01.mp3' */
+  hash: string;
+  /** 仅 audio 节点：建树时按候选规则匹配到的歌词文件 */
+  lyrics?: LyricsRef;
+}
+
+export type TrackNode = TrackBranch | TrackLeaf;
 
 /**
  * 构建文件树结构
