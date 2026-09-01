@@ -90,6 +90,8 @@ export const formattedWorkSchema = z.object({
   series: seriesSchema.nullable(),
   userRating: z.number().nullable(),
   userProgress: userProgressSchema.nullable(),
+  /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
+  duration: z.number().nullable(),
   language: z.string().nullable(),
   sourceId: z.string().nullable(),
 });

@@ -3,7 +3,13 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { db } from '../src/db/main/index.js';
-import { circles, userProgress, users, works } from '../src/db/main/schema.js';
+import {
+  circles,
+  tracks,
+  userProgress,
+  users,
+  works,
+} from '../src/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
@@ -233,6 +239,38 @@ describe('GET /api/history', () => {
       expect(workB).toBeDefined();
       expect(workB.userProgress).not.toBeNull();
       expect(workB.userProgress.updatedAt).toBe(T2);
+    });
+  });
+
+  describe('duration 注入', () => {
+    it('有音轨的作品注入 SUM(duration_sec)，无音轨作品为 null', async () => {
+      await db.insert(tracks).values([
+        {
+          workId: WORK_A,
+          mediaIndex: 'dur-a1.mp3',
+          title: 'a1',
+          sizeBytes: 1,
+          durationSec: 60,
+        },
+        {
+          workId: WORK_A,
+          mediaIndex: 'dur-a2.mp3',
+          title: 'a2',
+          sizeBytes: 1,
+          durationSec: 30,
+        },
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/history?page=1&pageSize=10',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const body = res.json();
+      const workA = body.works.find((w: { id: string }) => w.id === WORK_A);
+      const workB = body.works.find((w: { id: string }) => w.id === WORK_B);
+      expect(workA.duration).toBe(90);
+      expect(workB.duration).toBeNull();
     });
   });
 

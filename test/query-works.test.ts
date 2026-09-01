@@ -1,8 +1,10 @@
-import { afterAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../src/db/main/index.js';
 import { circles, series, tags, vas, works } from '../src/db/main/schema.js';
+import { upsertTrackRow } from '../src/services/track.service.js';
 import {
+  getWorkById,
   queryWorks,
   softDeleteWork,
   upsertWork,
@@ -204,5 +206,52 @@ describe('queryWorks', () => {
 
   it('不支持的筛选字段抛错', async () => {
     await expect(queryWorks('price:100')).rejects.toThrow('不支持的筛选字段');
+  });
+});
+
+describe('总时长注入（duration）', () => {
+  // 上一个 describe 末尾软删了 W1，insertFixtures 幂等（upsert 清 deletedAt）
+  beforeEach(insertFixtures);
+
+  it('列表注入 SUM(duration_sec)：部分 null 取部分和，无音轨行为 null（匿名也注入）', async () => {
+    await upsertTrackRow({
+      workId: W1,
+      mediaIndex: 'a.mp3',
+      title: 'a',
+      sizeBytes: 1,
+      durationSec: 60,
+    });
+    await upsertTrackRow({
+      workId: W1,
+      mediaIndex: 'b.mp3',
+      title: 'b',
+      sizeBytes: 1,
+      durationSec: null,
+    });
+    await upsertTrackRow({
+      workId: W2,
+      mediaIndex: 'a.mp3',
+      title: 'a',
+      sizeBytes: 1,
+      durationSec: null,
+    });
+
+    const r = await queryWorks(undefined, undefined, { pageSize: 500 });
+    const byId = new Map(r.works.map((w) => [w.id, w]));
+    expect(byId.get(W1)?.duration).toBe(60);
+    expect(byId.get(W2)?.duration).toBeNull();
+    expect(byId.get(W3)?.duration).toBeNull();
+  });
+
+  it('详情同样注入', async () => {
+    await upsertTrackRow({
+      workId: W1,
+      mediaIndex: 'a.mp3',
+      title: 'a',
+      sizeBytes: 1,
+      durationSec: 75.5,
+    });
+    const w = await getWorkById(W1);
+    expect(w.duration).toBe(75.5);
   });
 });

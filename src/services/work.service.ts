@@ -27,7 +27,7 @@ import {
 } from './progress.service.js';
 import { compileQuery } from './query/compiler.js';
 import { parseQuery } from './query/parser.js';
-import { getTrackRows } from './track.service.js';
+import { getTotalDurations, getTrackRows } from './track.service.js';
 
 // ---------- Upsert (used by scanner) ----------
 
@@ -347,6 +347,8 @@ export interface FormattedWork {
   userRating: number | null;
   /** 当前用户播放进度聚合（null = 未读/未登录） */
   userProgress: WorkProgressSummary | null;
+  /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
+  duration: number | null;
   language: string | null;
   sourceId: string | null;
 }
@@ -373,18 +375,30 @@ function formatWork(row: WorkWithRelations): FormattedWork {
       row.series != null ? { id: row.series.id, name: row.series.name } : null,
     userRating: row.reviews?.[0]?.rating ?? null,
     userProgress: null,
+    duration: null,
     language: row.language,
     sourceId: row.sourceId,
   };
 }
 
 /**
+ * 批量注入作品总时长（SUM(t_track.duration_sec)，匿名也注入）。
+ * 整页一次聚合查询，避免 N+1。
+ */
+async function attachTotalDuration(items: FormattedWork[]): Promise<void> {
+  if (items.length === 0) return;
+  const durMap = await getTotalDurations(items.map((w) => w.id));
+  for (const item of items) {
+    item.duration = durMap.get(item.id) ?? null;
+  }
+}
+
+/**
  * 批量注入当前用户的评分与播放进度（userRating/userProgress，避免逐作品 N+1）。
  *
  * 未登录（username 为空）时保持 null（未读态），不做任何查询。
- * 到调用点后再覆盖 formatWork 的默认值。
  */
-async function attachUserData(
+async function attachUserRatingsAndProgress(
   items: FormattedWork[],
   username?: string,
 ): Promise<void> {
@@ -408,6 +422,20 @@ async function attachUserData(
     item.userRating = ratingByWork.get(item.id) ?? null;
     item.userProgress = progressMap.get(item.id) ?? null;
   }
+}
+
+/**
+ * 统一注入入口：总时长（匿名也注入）+ 用户评分/播放进度（未登录跳过），并行执行。
+ * 各列表/详情端点 formatWork 后调用一次。
+ */
+async function attachUserData(
+  items: FormattedWork[],
+  username?: string,
+): Promise<void> {
+  await Promise.all([
+    attachTotalDuration(items),
+    attachUserRatingsAndProgress(items, username),
+  ]);
 }
 
 export async function getWorkById(id: string, username?: string) {

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
 import { tracks } from '../db/main/schema.js';
 
@@ -73,4 +73,30 @@ export async function deleteTrackRows(
     .where(
       and(eq(tracks.workId, workId), inArray(tracks.mediaIndex, mediaIndexes)),
     );
+}
+
+/**
+ * 作品总时长批量聚合：SUM(duration_sec)（秒）。
+ *
+ * - SUM 天然忽略 null：个别音轨探测失败 → 已知部分和
+ * - 无音轨行 / 全部未知 → null（Map 仍含键，调用方免判 undefined）
+ * - 批量入参供列表页整页一次查询，避免 N+1
+ */
+export async function getTotalDurations(
+  workIds: string[],
+): Promise<Map<string, number | null>> {
+  const map = new Map<string, number | null>(workIds.map((id) => [id, null]));
+  if (workIds.length === 0) return map;
+  const rows = await db
+    .select({
+      workId: tracks.workId,
+      total: sql<number | null>`sum(${tracks.durationSec})`,
+    })
+    .from(tracks)
+    .where(inArray(tracks.workId, workIds))
+    .groupBy(tracks.workId);
+  for (const r of rows) {
+    if (map.has(r.workId)) map.set(r.workId, r.total);
+  }
+  return map;
 }

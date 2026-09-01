@@ -4,6 +4,7 @@ import { db } from '../src/db/main/index.js';
 import { tracks } from '../src/db/main/schema.js';
 import {
   deleteTrackRows,
+  getTotalDurations,
   getTrackRows,
   planTrackSync,
   upsertTrackRow,
@@ -88,5 +89,96 @@ describe('track.service（DB）', () => {
     });
     await deleteTrackRows(WORK, ['x.mp3']);
     expect(await getTrackRows(WORK)).toEqual([]);
+  });
+});
+
+describe('getTotalDurations（批量聚合总时长）', () => {
+  const OTHER = 'RJ00000002';
+
+  beforeEach(async () => {
+    // 用例间自行清残留音轨行（preload 仅隔离进程）
+    await db.delete(tracks).where(eq(tracks.workId, WORK));
+    await db.delete(tracks).where(eq(tracks.workId, OTHER));
+    await seedWork();
+    const r = await upsertWork({
+      id: OTHER,
+      rootFolder: 'lib',
+      dir: 'RJ00000002',
+      title: 'T2',
+      circleName: 'C',
+      tags: [],
+      vas: [],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('SUM 忽略 null：部分音轨探测失败时返回已知部分和', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'a.mp3',
+      title: 'a',
+      sizeBytes: 1,
+      durationSec: 100.5,
+    });
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'b.mp3',
+      title: 'b',
+      sizeBytes: 1,
+      durationSec: null,
+    });
+    const map = await getTotalDurations([WORK]);
+    expect(map.get(WORK)).toBe(100.5);
+  });
+
+  it('全部音轨时长未知 → null（Map 含键）', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'a.mp3',
+      title: 'a',
+      sizeBytes: 1,
+      durationSec: null,
+    });
+    const map = await getTotalDurations([WORK]);
+    expect(map.has(WORK)).toBe(true);
+    expect(map.get(WORK)).toBeNull();
+  });
+
+  it('无音轨行 → null（Map 含键）', async () => {
+    const map = await getTotalDurations([WORK]);
+    expect(map.has(WORK)).toBe(true);
+    expect(map.get(WORK)).toBeNull();
+  });
+
+  it('批量多作品互不串扰', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'a.mp3',
+      title: 'a',
+      sizeBytes: 1,
+      durationSec: 60,
+    });
+    await upsertTrackRow({
+      workId: OTHER,
+      mediaIndex: 'x.mp3',
+      title: 'x',
+      sizeBytes: 1,
+      durationSec: 30,
+    });
+    await upsertTrackRow({
+      workId: OTHER,
+      mediaIndex: 'y.mp3',
+      title: 'y',
+      sizeBytes: 1,
+      durationSec: 45,
+    });
+    const map = await getTotalDurations([WORK, OTHER]);
+    expect(map.get(WORK)).toBe(60);
+    expect(map.get(OTHER)).toBe(75);
+  });
+
+  it('空入参 → 空 Map，不发查询', async () => {
+    const map = await getTotalDurations([]);
+    expect(map.size).toBe(0);
   });
 });
