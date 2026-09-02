@@ -127,6 +127,23 @@ export const userProgress = sqliteTable(
   (t) => [primaryKey({ columns: [t.userName, t.workId, t.mediaIndex] })],
 );
 
+// 作品已读标记（独立于播放进度：标记 = 1 行；首次产生进度时自动写入，可手动覆盖）。
+// 存在即已读，删除即未读；标记未读不清理进度（D3）。
+export const readStates = sqliteTable(
+  't_read_state',
+  {
+    userName: text('user_name')
+      .notNull()
+      .references(() => users.name, { onDelete: 'cascade' }),
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+    // 标记时刻（ISO 8601 文本，与全库时间戳风格一致）
+    readAt: text('read_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userName, t.workId] })],
+);
+
 // 多态收藏：作品 / 系列 / 声优 / 社团，按用户隔离。
 // 多态目标无法做 FK（targetId 统一存 text：work→RJ 号、series→SRI 号、
 // va→DLsite 声优 id、circle→t_circle.id 转文本），完整性由 favourite.service 校验。
@@ -189,6 +206,9 @@ export type NewReview = typeof reviews.$inferInsert;
 
 export type UserProgress = typeof userProgress.$inferSelect;
 export type NewUserProgress = typeof userProgress.$inferInsert;
+
+export type ReadState = typeof readStates.$inferSelect;
+export type NewReadState = typeof readStates.$inferInsert;
 
 export type Favourite = typeof favourites.$inferSelect;
 export type NewFavourite = typeof favourites.$inferInsert;
