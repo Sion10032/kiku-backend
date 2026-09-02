@@ -1,6 +1,9 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
-import { userProgress, works } from '../db/main/schema.js';
+import { readStates, userProgress, works } from '../db/main/schema.js';
+
+/** 听完判定阈值（position/duration ≥ 此值视为听完），前端 progressStore 同值对齐。 */
+export const LISTENED_RATIO = 0.95;
 
 /** 单作品的进度聚合（列表注入用，camelCase 对齐前端 Review 响应风格）。 */
 export interface WorkProgressSummary {
@@ -24,6 +27,24 @@ export async function upsertProgress(data: {
   duration?: number | null;
 }) {
   const now = new Date().toISOString();
+
+  // 自动已读（D2）：作品此前无任何进度行（真·首次收听）时顺带写标记。
+  // 仅此一次跳变触发——手动标记未读后继续上报不会翻回已读；
+  // onConflictDoNothing 保证并发上报/重复触发不覆盖已有标记。
+  const existed = await db.query.userProgress.findFirst({
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
+        op.and(op.eq(t.userName, data.userName), op.eq(t.workId, data.workId))!,
+    },
+    columns: { mediaIndex: true },
+  });
+  if (!existed) {
+    await db
+      .insert(readStates)
+      .values({ userName: data.userName, workId: data.workId, readAt: now })
+      .onConflictDoNothing();
+  }
 
   await db
     .insert(userProgress)
@@ -99,7 +120,9 @@ export async function getProgressByWorks(
 
     const listenedCount = list.filter(
       (r) =>
-        r.duration != null && r.duration > 0 && r.position / r.duration >= 0.95,
+        r.duration != null &&
+        r.duration > 0 &&
+        r.position / r.duration >= LISTENED_RATIO,
     ).length;
 
     result.set(workId, {
@@ -115,6 +138,46 @@ export async function getProgressByWorks(
   return result;
 }
 
+/** 置为已读（手动入口：upsert，重复标记刷新 readAt）。 */
+export async function markWorkRead(userName: string, workId: string) {
+  const now = new Date().toISOString();
+  await db
+    .insert(readStates)
+    .values({ userName, workId, readAt: now })
+    .onConflictDoUpdate({
+      target: [readStates.userName, readStates.workId],
+      set: { readAt: now },
+    });
+}
+
+/** 置为未读（删标记行；进度不动，见 D3）。 */
+export async function markWorkUnread(userName: string, workId: string) {
+  await db
+    .delete(readStates)
+    .where(
+      and(eq(readStates.userName, userName), eq(readStates.workId, workId)),
+    )
+    .run();
+}
+
+/** 批量查已读作品集合（attachUserData 注入用，避免 N+1）。 */
+export async function getReadWorkIds(
+  userName: string,
+  workIds: string[],
+): Promise<Set<string>> {
+  if (workIds.length === 0) return new Set();
+  const rows = await db
+    .select({ workId: readStates.workId })
+    .from(readStates)
+    .where(
+      and(
+        eq(readStates.userName, userName),
+        inArray(readStates.workId, workIds),
+      ),
+    );
+  return new Set(rows.map((r) => r.workId));
+}
+
 /** 删除某用户在某作品的全部进度（作品回到未读态）。返回删除行数。 */
 export async function deleteWorkProgress(userName: string, workId: string) {
   const deleted = await db
@@ -123,6 +186,9 @@ export async function deleteWorkProgress(userName: string, workId: string) {
       and(eq(userProgress.userName, userName), eq(userProgress.workId, workId)),
     )
     .run();
+
+  // 删除进度 = 彻底回到未读态：级联清已读标记（对齐前端对话框文案）
+  await markWorkUnread(userName, workId);
 
   return deleted.changes;
 }
