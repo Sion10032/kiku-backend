@@ -23,6 +23,7 @@ import type { TrackNode } from '../filesystem/utils.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
   getProgressByWorks,
+  getReadWorkIds,
   type WorkProgressSummary,
 } from './progress.service.js';
 import { compileQuery } from './query/compiler.js';
@@ -347,6 +348,8 @@ export interface FormattedWork {
   userRating: number | null;
   /** 当前用户播放进度聚合（null = 未读/未登录） */
   userProgress: WorkProgressSummary | null;
+  /** 当前用户已读标记（独立于进度；未登录恒 false） */
+  read: boolean;
   /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
   duration: number | null;
   language: string | null;
@@ -375,6 +378,7 @@ function formatWork(row: WorkWithRelations): FormattedWork {
       row.series != null ? { id: row.series.id, name: row.series.name } : null,
     userRating: row.reviews?.[0]?.rating ?? null,
     userProgress: null,
+    read: false,
     duration: null,
     language: row.language,
     sourceId: row.sourceId,
@@ -405,7 +409,7 @@ async function attachUserRatingsAndProgress(
   if (!username || items.length === 0) return;
   const workIds = items.map((w) => w.id);
 
-  const [reviewRows, progressMap] = await Promise.all([
+  const [reviewRows, progressMap, readSet] = await Promise.all([
     db.query.reviews.findMany({
       where: {
         RAW: (t, op) =>
@@ -415,12 +419,14 @@ async function attachUserRatingsAndProgress(
       columns: { workId: true, rating: true },
     }),
     getProgressByWorks(username, workIds),
+    getReadWorkIds(username, workIds),
   ]);
 
   const ratingByWork = new Map(reviewRows.map((r) => [r.workId, r.rating]));
   for (const item of items) {
     item.userRating = ratingByWork.get(item.id) ?? null;
     item.userProgress = progressMap.get(item.id) ?? null;
+    item.read = readSet.has(item.id);
   }
 }
 

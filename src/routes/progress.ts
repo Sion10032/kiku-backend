@@ -4,6 +4,8 @@ import {
   deleteWorkProgress,
   getUserHistoryIds,
   getWorkProgress,
+  markWorkRead,
+  markWorkUnread,
   upsertProgress,
 } from '../services/progress.service.js';
 import { getUserByName } from '../services/user.service.js';
@@ -77,6 +79,53 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
         duration,
       });
 
+      return { success: true };
+    },
+  );
+
+  // 标记已读/未读（只读写标记行，不动进度；workId 404 防护对齐 PUT /progress）
+  fastify.put(
+    '/progress/:workId/read',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        params: workIdParamsSchema,
+        response: {
+          200: z.object({ success: z.boolean() }),
+          401: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = request.user as { name: string; group: string };
+      const { workId } = request.params;
+      try {
+        await getWorkById(workId);
+      } catch {
+        return reply.status(404).send({ error: `Work ${workId} not found` });
+      }
+      await markWorkRead(user.name, workId);
+      return { success: true };
+    },
+  );
+
+  fastify.delete(
+    '/progress/:workId/read',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        params: workIdParamsSchema,
+        response: {
+          200: z.object({ success: z.boolean() }),
+          401: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request) => {
+      const user = request.user as { name: string; group: string };
+      const { workId } = request.params;
+      await markWorkUnread(user.name, workId);
       return { success: true };
     },
   );
