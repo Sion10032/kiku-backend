@@ -1,9 +1,36 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
-import { readStates, userProgress, works } from '../db/main/schema.js';
+import { readStates, tracks, userProgress, works } from '../db/main/schema.js';
 
 /** 听完判定阈值（position/duration ≥ 此值视为听完），前端 progressStore 同值对齐。 */
 export const LISTENED_RATIO = 0.95;
+
+/** 已听完轨数（仅计已知时长的音轨；自动已读跳变判定用，与 listenedCount 同口径）。 */
+async function countListenedTracks(
+  userName: string,
+  workId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(tracks)
+    .innerJoin(
+      userProgress,
+      and(
+        eq(userProgress.workId, tracks.workId),
+        eq(userProgress.mediaIndex, tracks.mediaIndex),
+        eq(userProgress.userName, userName),
+      ),
+    )
+    .where(
+      and(
+        eq(tracks.workId, workId),
+        gt(tracks.durationSec, 0),
+        gt(userProgress.duration, 0),
+        sql`${userProgress.position} * 1.0 / ${userProgress.duration} >= ${LISTENED_RATIO}`,
+      ),
+    );
+  return row?.count ?? 0;
+}
 
 /** 单作品的进度聚合（列表注入用，camelCase 对齐前端 Review 响应风格）。 */
 export interface WorkProgressSummary {
@@ -28,22 +55,47 @@ export async function upsertProgress(data: {
 }) {
   const now = new Date().toISOString();
 
-  // 自动已读（D2）：作品此前无任何进度行（真·首次收听）时顺带写标记。
-  // 仅此一次跳变触发——手动标记未读后继续上报不会翻回已读；
-  // onConflictDoNothing 保证并发上报/重复触发不覆盖已有标记。
-  const existed = await db.query.userProgress.findFirst({
-    where: {
-      RAW: (t, op) =>
-        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
-        op.and(op.eq(t.userName, data.userName), op.eq(t.workId, data.workId))!,
-    },
-    columns: { mediaIndex: true },
-  });
-  if (!existed) {
-    await db
-      .insert(readStates)
-      .values({ userName: data.userName, workId: data.workId, readAt: now })
-      .onConflictDoNothing();
+  // 自动已读快速门控（性能优化）：「非听完 → 听完」跳变只能由当前上报的这轨
+  // 新变为听完触发（其余音轨的状态不受本次上报影响），因此仅当「上报后当前
+  // 轨听完」时才值得做计数比对：
+  // - 上报自带有效 duration（>0）：直接按 payload 判定，不读库——播放中的
+  //   绝大多数未听完上报在此短路，省去每次 1-2 次计数查询
+  // - 上报缺省/为 null 的 duration（upsert 保留库中旧值）：需查原行 duration 判定
+  let currentListened = false;
+  if (data.duration != null) {
+    currentListened =
+      data.duration > 0 && data.position / data.duration >= LISTENED_RATIO;
+  } else {
+    const [prev] = await db
+      .select({ duration: userProgress.duration })
+      .from(userProgress)
+      .where(
+        and(
+          eq(userProgress.userName, data.userName),
+          eq(userProgress.workId, data.workId),
+          eq(userProgress.mediaIndex, data.mediaIndex),
+        ),
+      )
+      .limit(1);
+    currentListened =
+      prev?.duration != null &&
+      prev.duration > 0 &&
+      data.position / prev.duration >= LISTENED_RATIO;
+  }
+
+  // 听完判定基数：仅计已知时长的音轨（与 listenedCount 的 duration>0 口径一致）。
+  // 全部时长未知的作品无法自动判定，仅能手动标记。
+  let total = 0;
+  let listenedBefore = 0;
+  if (currentListened) {
+    const [trackTotal] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(tracks)
+      .where(and(eq(tracks.workId, data.workId), gt(tracks.durationSec, 0)));
+    total = trackTotal?.count ?? 0;
+    if (total > 0) {
+      listenedBefore = await countListenedTracks(data.userName, data.workId);
+    }
   }
 
   await db
@@ -71,6 +123,19 @@ export async function upsertProgress(data: {
         updatedAt: now,
       },
     });
+
+  // 自动已读（修订 D2）：仅在「非听完 → 听完」跳变时顺带写标记。
+  // 已听完作品的继续上报无跳变——手动未读不会被播放翻回（手动意图优先）；
+  // onConflictDoNothing 保证并发上报不覆盖已有标记。
+  if (total > 0 && listenedBefore < total) {
+    const listenedAfter = await countListenedTracks(data.userName, data.workId);
+    if (listenedAfter >= total) {
+      await db
+        .insert(readStates)
+        .values({ userName: data.userName, workId: data.workId, readAt: now })
+        .onConflictDoNothing();
+    }
+  }
 }
 
 /** 某用户在某作品的全部进度行（详情页/继续播放用）。 */
