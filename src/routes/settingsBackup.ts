@@ -26,6 +26,43 @@ const backupDetailSchema = z.object({
 // 错误响应
 const errorResponseSchema = z.object({ error: z.string() });
 
+// 与前端 kiku-frontend/src/stores/settingsStore.ts 的 SNAPSHOT_KEYS/设置类型严格同步：前端新增/修改设置字段（尤其枚举值）时必须同步本 schema，否则备份时该字段会被 trim/拒绝，还原丢失
+//
+// 严格校验设计（防止本接口被滥用为任意数据存储）：
+// - 顶层/嵌套对象的未知键在 zod 解析时被 strip（trim 无关字段）；类型/枚举不匹配 → 验证失败 → 400
+// - 全部键 optional：快照可能来自旧版本前端，缺键合法（前端 apply 时忽略缺失字段）
+// - 嵌套对象字段全必填（与前端 FloatingLyricsSettings/PreviewSettings 一致）
+// - uiScale 前端 apply 时已夹取 80–130，后端仅校验为 number，不做范围校验
+const payloadSchema = z.object({
+  dynamicColor: z.boolean().optional(),
+  colorMode: z.enum(['light', 'dark', 'auto']).optional(),
+  mediaNotification: z.boolean().optional(),
+  floatingLyrics: z
+    .object({
+      enabled: z.boolean(),
+      fontSize: z.number(),
+      lines: z.number(),
+      opacity: z.number(),
+    })
+    .optional(),
+  preview: z
+    .object({
+      textFontSize: z.number(),
+      textWordWrap: z.boolean(),
+    })
+    .optional(),
+  coverBlurMode: z.enum(['always', 'hover', 'never']).optional(),
+  timeDisplayMode: z.enum(['total', 'remaining']).optional(),
+  worksPaginationMode: z.enum(['paginate', 'infinite']).optional(),
+  worksPaginatorPosition: z.enum(['top', 'bottom', 'both']).optional(),
+  worksHistoryStrip: z.boolean().optional(),
+  uiScale: z.number().optional(),
+});
+
+// payload 序列化后的文本大小上限（4KB）：在 zod 验证前的 preValidation 中检查，
+// 否则「带超大未知键」的请求会先被 strip 掉未知键而绕过大小限制
+const PAYLOAD_MAX_SIZE = 4096;
+
 // 设置云端备份：用户手动命名的设置快照，按 (userName, name) upsert
 export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // 备份列表（service 按 updatedAt 倒序返回）
@@ -73,21 +110,30 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
     '/settings-backups/:name',
     {
       preHandler: [fastify.authenticate],
+      preValidation: async (request, reply) => {
+        // zod 验证前先按原始 payload 文本大小拦截
+        const raw = JSON.stringify(
+          (request.body as { payload?: unknown } | undefined)?.payload,
+        );
+        if (raw !== undefined && raw.length > PAYLOAD_MAX_SIZE) {
+          return reply.status(400).send({ error: '备份内容过大（上限 4KB）' });
+        }
+      },
       schema: {
         params: z.object({ name: backupNameSchema }),
-        body: z.object({
-          // 宽松校验：结构由前端 settingsStore 白名单保证，后端仅要求是对象
-          payload: z.record(z.string(), z.unknown()),
-        }),
+        body: z.object({ payload: payloadSchema }),
         response: {
           200: z.object({ name: z.string(), updatedAt: z.string() }),
           409: errorResponseSchema,
+          400: errorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       const user = request.user as { name: string; group: string };
       const { name } = request.params;
+      // zod 验证后 fastify 会用解析结果替换 request.body（未知键已被 strip），
+      // 这里序列化的已是白名单内的干净对象
       const ok = await upsertSettingBackup(
         user.name,
         name,

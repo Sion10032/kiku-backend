@@ -139,7 +139,10 @@ describe('Settings Backup Routes', () => {
 
   describe('新建', () => {
     it('PUT 新备份 → 200；列表含该项；详情 payload 原样返回', async () => {
-      const payload = { theme: 'dark', floatingLyrics: { enabled: true } };
+      const payload = {
+        colorMode: 'dark',
+        floatingLyrics: { enabled: true, fontSize: 14, lines: 2, opacity: 0.8 },
+      };
       const put = await putBackup(tokenA, 'basic_a', payload);
       expect(put.statusCode).toBe(200);
       expect(put.body.name).toBe('basic_a');
@@ -162,14 +165,19 @@ describe('Settings Backup Routes', () => {
 
   describe('覆盖更新', () => {
     it('同名 PUT 不同 payload → 200，updatedAt 变新，列表仍 1 条', async () => {
-      const first = await putBackup(tokenA, 'overwrite_x', { v: 1 });
+      const first = await putBackup(tokenA, 'overwrite_x', {
+        mediaNotification: true,
+      });
       expect(first.statusCode).toBe(200);
       const firstUpdatedAt = first.body.updatedAt!;
 
       // ISO 时间戳精确到毫秒，稍等确保可比
       await new Promise((r) => setTimeout(r, 5));
 
-      const secondPayload = { v: 2, floatingLyrics: { enabled: false } };
+      const secondPayload = {
+        mediaNotification: false,
+        preview: { textFontSize: 16, textWordWrap: false },
+      };
       const second = await putBackup(tokenA, 'overwrite_x', secondPayload);
       expect(second.statusCode).toBe(200);
       expect(second.body.updatedAt! > firstUpdatedAt).toBe(true);
@@ -254,8 +262,8 @@ describe('Settings Backup Routes', () => {
     });
 
     it('两用户同名备份互不干扰（payload 各自独立）', async () => {
-      const payloadA = { who: 'A', floatingLyrics: { enabled: true } };
-      const payloadB = { who: 'B', floatingLyrics: { enabled: false } };
+      const payloadA = { colorMode: 'light', worksHistoryStrip: true };
+      const payloadB = { colorMode: 'dark', worksHistoryStrip: false };
 
       const putA = await putBackup(tokenA, 'iso_same', payloadA);
       const putB = await putBackup(tokenB, 'iso_same', payloadB);
@@ -296,6 +304,130 @@ describe('Settings Backup Routes', () => {
         url: `/api/settings-backups/${'x'.repeat(51)}`,
         headers: { authorization: `Bearer ${tokenA}` },
         payload: { payload: { ok: true } },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  describe('payload 严格校验', () => {
+    it('完整快照（11 键齐全）PUT → 200；GET parse 后结构与值原样保留', async () => {
+      const snapshot = {
+        dynamicColor: false,
+        colorMode: 'auto',
+        mediaNotification: false,
+        floatingLyrics: { enabled: true, fontSize: 16, lines: 3, opacity: 0.5 },
+        preview: { textFontSize: 20, textWordWrap: false },
+        coverBlurMode: 'hover',
+        timeDisplayMode: 'remaining',
+        worksPaginationMode: 'infinite',
+        worksPaginatorPosition: 'bottom',
+        worksHistoryStrip: false,
+        uiScale: 110,
+      };
+      const put = await putBackup(tokenA, 'strict_full', snapshot);
+      expect(put.statusCode).toBe(200);
+
+      const detail = await getBackup(tokenA, 'strict_full');
+      expect(detail.statusCode).toBe(200);
+      expect(JSON.parse(detail.body.payload!)).toEqual(snapshot);
+    });
+
+    it('枚举全值合法 → 200：colorMode 三值各自 PUT，其余枚举逐值覆盖', async () => {
+      for (const colorMode of ['light', 'dark', 'auto'] as const) {
+        const res = await putBackup(tokenA, 'strict_enum', { colorMode });
+        expect(res.statusCode).toBe(200);
+      }
+      const others = [
+        { coverBlurMode: 'always' },
+        { coverBlurMode: 'hover' },
+        { coverBlurMode: 'never' },
+        { timeDisplayMode: 'total' },
+        { timeDisplayMode: 'remaining' },
+        { worksPaginationMode: 'paginate' },
+        { worksPaginationMode: 'infinite' },
+        { worksPaginatorPosition: 'top' },
+        { worksPaginatorPosition: 'bottom' },
+        { worksPaginatorPosition: 'both' },
+      ] as const;
+      for (const payload of others) {
+        const res = await putBackup(tokenA, 'strict_enum', payload);
+        expect(res.statusCode).toBe(200);
+      }
+    });
+
+    it('未知顶层键被 trim：入库 payload 无 evil/hack，已知键保留', async () => {
+      const res = await putBackup(tokenA, 'strict_trim_top', {
+        colorMode: 'dark',
+        evil: { a: 1 },
+        hack: 'x',
+      });
+      expect(res.statusCode).toBe(200);
+
+      const detail = await getBackup(tokenA, 'strict_trim_top');
+      expect(detail.statusCode).toBe(200);
+      // 精确相等：证明 handler 拿到的是 strip 后的 body（zod 验证结果替换了 request.body）
+      expect(JSON.parse(detail.body.payload!)).toEqual({ colorMode: 'dark' });
+    });
+
+    it('未知嵌套键被 trim：floatingLyrics.extra 被剔除，已知键保留', async () => {
+      const res = await putBackup(tokenA, 'strict_trim_nested', {
+        floatingLyrics: {
+          enabled: true,
+          fontSize: 14,
+          lines: 1,
+          opacity: 0.5,
+          extra: 'junk',
+        },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const detail = await getBackup(tokenA, 'strict_trim_nested');
+      expect(detail.statusCode).toBe(200);
+      expect(JSON.parse(detail.body.payload!)).toEqual({
+        floatingLyrics: { enabled: true, fontSize: 14, lines: 1, opacity: 0.5 },
+      });
+    });
+
+    it('枚举非法值 → 400（colorMode: sepia）', async () => {
+      const res = await putBackup(tokenA, 'strict_bad_enum', {
+        colorMode: 'sepia',
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('嵌套字段类型错误 → 400（floatingLyrics.enabled 为字符串）', async () => {
+      const res = await putBackup(tokenA, 'strict_bad_type', {
+        floatingLyrics: {
+          enabled: 'yes',
+          fontSize: 14,
+          lines: 1,
+          opacity: 0.5,
+        },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('嵌套字段缺失 → 400（floatingLyrics 无 opacity）', async () => {
+      const res = await putBackup(tokenA, 'strict_bad_missing', {
+        floatingLyrics: { enabled: true, fontSize: 14, lines: 1 },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('payload 超过 4KB（含超大未知键）→ 400 且 error 含「4KB」', async () => {
+      // 若大小闸在 zod 验证之后，超大未知键会被先 strip 掉而返回 200；
+      // 400 证明 preValidation 在验证前拦截
+      const res = await putBackup(tokenA, 'strict_too_big', {
+        colorMode: 'dark',
+        junk: 'x'.repeat(5000),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toContain('4KB');
+    });
+
+    it('字段类型错误 → 400（uiScale 为字符串）', async () => {
+      const res = await putBackup(tokenA, 'strict_bad_ui_scale', {
+        uiScale: '110',
       });
       expect(res.statusCode).toBe(400);
     });
