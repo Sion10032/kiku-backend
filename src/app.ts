@@ -21,6 +21,7 @@ import { metadataRoutes } from './routes/metadata.js';
 import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
 import { scannerRoutes } from './routes/scanner.js';
+import { settingsBackupRoutes } from './routes/settingsBackup.js';
 import { versionRoutes } from './routes/version.js';
 
 export async function buildApp() {
@@ -49,6 +50,7 @@ export async function buildApp() {
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
   await app.register(reviewRoutes, { prefix: '/api' });
   await app.register(favouriteRoutes, { prefix: '/api' });
+  await app.register(settingsBackupRoutes, { prefix: '/api' });
   await app.register(progressRoutes, { prefix: '/api' });
   await app.register(configRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
