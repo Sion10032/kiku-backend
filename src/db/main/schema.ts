@@ -161,6 +161,22 @@ export const favourites = sqliteTable(
   (t) => [primaryKey({ columns: [t.userName, t.targetType, t.targetId] })],
 );
 
+// 设置云端备份：用户手动命名快照，(userName, name) 唯一，同名覆盖更新。
+// payload 为前端 settingsStore 持久化字段的 JSON 快照，结构由前端保证，
+// 后端仅校验是合法 JSON 文本；上限每用户 10 条，由 service 层强制。
+export const settingsBackups = sqliteTable(
+  't_settings_backup',
+  {
+    userName: text('user_name')
+      .notNull()
+      .references(() => users.name, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    payload: text('payload').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userName, t.name] })],
+);
+
 export const tracks = sqliteTable(
   't_track',
   {
@@ -212,3 +228,6 @@ export type NewReadState = typeof readStates.$inferInsert;
 
 export type Favourite = typeof favourites.$inferSelect;
 export type NewFavourite = typeof favourites.$inferInsert;
+
+export type SettingsBackup = typeof settingsBackups.$inferSelect;
+export type NewSettingsBackup = typeof settingsBackups.$inferInsert;
