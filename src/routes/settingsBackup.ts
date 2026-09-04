@@ -4,7 +4,7 @@ import {
   deleteSettingBackup,
   getSettingBackup,
   listSettingBackups,
-  upsertSettingBackup,
+  upsertBackupAndReturn,
 } from '../services/settingsBackup.service.js';
 
 // 备份名：非空、最长 50 字符（前端设置界面同名约束）
@@ -134,24 +134,16 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { name } = request.params;
       // zod 验证后 fastify 会用解析结果替换 request.body（未知键已被 strip），
       // 这里序列化的已是白名单内的干净对象
-      const ok = await upsertSettingBackup(
+      const result = await upsertBackupAndReturn(
         user.name,
         name,
         JSON.stringify(request.body.payload),
       );
-      if (!ok) {
+      if (result === 'limit-reached') {
         // 新建时已达每用户上限（覆盖更新不受限，不会走到这里）
         return reply.status(409).send({ error: '最多保留 10 条备份' });
       }
-      // upsert 仅返回 boolean，组合 get 组装响应（upsert 成功后必然存在）
-      const backup = await getSettingBackup(user.name, name);
-      if (!backup) {
-        // 理论上不可达：响应 schema 未声明 404，抛错兼作类型收窄
-        throw new Error(
-          `unreachable: upsert succeeded but backup missing (${name})`,
-        );
-      }
-      return { name: backup.name, updatedAt: backup.updatedAt };
+      return { name: result.name, updatedAt: result.updatedAt };
     },
   );
 

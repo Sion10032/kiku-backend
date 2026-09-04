@@ -76,6 +76,23 @@ export async function upsertSettingBackup(
   return true;
 }
 
+/** upsert + 回读组装详情（成功后必然存在；不可达分支抛错兼作类型收窄） */
+export async function upsertBackupAndReturn(
+  userName: string,
+  name: string,
+  payloadJson: string,
+): Promise<'limit-reached' | SettingsBackupDetailDto> {
+  const ok = await upsertSettingBackup(userName, name, payloadJson);
+  if (!ok) return 'limit-reached';
+  const backup = await getSettingBackup(userName, name);
+  if (!backup) {
+    throw new Error(
+      `unreachable: upsert succeeded but backup missing (${name})`,
+    );
+  }
+  return backup;
+}
+
 /** 删除备份（幂等，删不存在不报错）。 */
 export async function deleteSettingBackup(
   userName: string,
