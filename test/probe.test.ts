@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { collectAudioLeaves, probeDuration } from '../src/filesystem/probe.js';
-import type { TrackNode } from '../src/filesystem/utils.js';
+import { collectAudioLeaves, probeDuration } from '../src/infra/fs/probe.js';
+import type { TrackNode } from '../src/infra/fs/utils.js';
 import { memorySource } from './helpers/memorySource.js';
 
 const FIX = join(import.meta.dir, 'fixtures/audio');

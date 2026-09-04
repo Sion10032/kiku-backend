@@ -1,6 +1,4 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { openWorkSource } from '../filesystem/source/index.js';
-import type { TrackNode } from '../filesystem/utils.js';
 import { getConfig } from '../infra/config/index.js';
 import { db } from '../infra/db/main/index.js';
 import type {
@@ -20,6 +18,8 @@ import {
   vaWork,
   works,
 } from '../infra/db/main/schema.js';
+import { openWorkSource } from '../infra/fs/source/index.js';
+import type { TrackNode } from '../infra/fs/utils.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
   getProgressByWorks,

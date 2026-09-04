@@ -27,7 +27,7 @@ mock.module('../src/services/cover.service.js', () => ({
   deleteAllCovers: () => 0,
 }));
 
-const { performScan } = await import('../src/filesystem/scanner.js');
+const { performScan } = await import('../src/scanner/scanner.js');
 const { db } = await import('../src/infra/db/main/index.js');
 const { works } = await import('../src/infra/db/main/schema.js');
 const { softDeleteWork } = await import('../src/services/work.service.js');

@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { entriesToTrackTree } from '../src/filesystem/source/tree.js';
-import { syncWorkTracks } from '../src/filesystem/trackSync.js';
+import { entriesToTrackTree } from '../src/infra/fs/source/tree.js';
+import { syncWorkTracks } from '../src/scanner/trackSync.js';
 import { getTrackRows } from '../src/services/track.service.js';
 import { upsertWork } from '../src/services/work.service.js';
 import { memorySource } from './helpers/memorySource.js';

@@ -5,7 +5,7 @@ import {
   sanitizeMediaIndex,
   UnsupportedArchiveError,
   type WorkSource,
-} from '../src/filesystem/source/types.js';
+} from '../src/infra/fs/source/types.js';
 
 describe('sanitizeMediaIndex', () => {
   it('接受正常相对路径（含子目录与中日文字符）', () => {

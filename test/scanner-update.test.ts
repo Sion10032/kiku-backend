@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ScanEvent } from '../src/filesystem/scanner.js';
+import type { ScanEvent } from '../src/scanner/scanner.js';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
@@ -33,7 +33,7 @@ mock.module('../src/services/cover.service.js', () => ({
 }));
 
 const { performScan, performUpdate } = await import(
-  '../src/filesystem/scanner.js'
+  '../src/scanner/scanner.js'
 );
 const { db } = await import('../src/infra/db/main/index.js');
 const { circles, works } = await import('../src/infra/db/main/schema.js');

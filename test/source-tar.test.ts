@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createTarSource } from '../src/filesystem/source/tar.js';
+import { createTarSource } from '../src/infra/fs/source/tar.js';
 import { buildTar } from './helpers/archive.js';
 
 let dir: string;

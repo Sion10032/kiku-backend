@@ -20,8 +20,8 @@ const { eq } = await import('drizzle-orm');
 const { setConfigForTesting, getConfig } = await import(
   '../src/infra/config/index.js'
 );
-const { openWorkSource } = await import('../src/filesystem/source/index.js');
-const { syncWorkTracks } = await import('../src/filesystem/trackSync.js');
+const { openWorkSource } = await import('../src/infra/fs/source/index.js');
+const { syncWorkTracks } = await import('../src/scanner/trackSync.js');
 const { upsertWork } = await import('../src/services/work.service.js');
 
 const WORK = 'RJ00000004';

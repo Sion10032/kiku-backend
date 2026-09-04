@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { extractRJCode } from '../utils/rjcode.js';
+import { extractRJCode } from '../../utils/rjcode.js';
 import { collectDirPaths } from './source/folder.js';
 import { entriesToTrackTree } from './source/tree.js';
 

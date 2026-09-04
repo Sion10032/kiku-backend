@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TextDecoder } from 'node:util';
-import { UnsupportedArchiveError } from '../src/filesystem/source/types.js';
-import { createZipSource } from '../src/filesystem/source/zip.js';
+import { UnsupportedArchiveError } from '../src/infra/fs/source/types.js';
+import { createZipSource } from '../src/infra/fs/source/zip.js';
 import { buildZip } from './helpers/archive.js';
 
 let dir: string;

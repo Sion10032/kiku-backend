@@ -1,6 +1,6 @@
 // Readable 必须是值导入：readRange 内会 new Readable（简报原稿的 import type 会在运行时抛 ReferenceError）
 import { Readable } from 'node:stream';
-import type { WorkSource } from '../../src/filesystem/source/types.js';
+import type { WorkSource } from '../../src/infra/fs/source/types.js';
 
 /** 内存 WorkSource：Map<hash, Buffer>，readRange 语义与真实源一致。 */
 export function memorySource(

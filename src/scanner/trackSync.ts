@@ -1,12 +1,16 @@
 import {
+  collectAudioLeaves,
+  probeDuration,
+  probeTrackSizes,
+} from '../infra/fs/probe.js';
+import type { WorkSource } from '../infra/fs/source/types.js';
+import type { TrackNode } from '../infra/fs/utils.js';
+import {
   deleteTrackRows,
   getTrackRows,
   planTrackSync,
   upsertTrackRow,
 } from '../services/track.service.js';
-import { collectAudioLeaves, probeDuration, probeTrackSizes } from './probe.js';
-import type { WorkSource } from './source/types.js';
-import type { TrackNode } from './utils.js';
 
 /**
  * 音轨行同步：size diff → 仅对新增/变更条目探测时长 → upsert/delete。

@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createFolderSource } from '../src/filesystem/source/folder.js';
-import { openWorkSource } from '../src/filesystem/source/index.js';
-import { UnsupportedArchiveError } from '../src/filesystem/source/types.js';
+import { createFolderSource } from '../src/infra/fs/source/folder.js';
+import { openWorkSource } from '../src/infra/fs/source/index.js';
+import { UnsupportedArchiveError } from '../src/infra/fs/source/types.js';
 
 let dir: string;
 

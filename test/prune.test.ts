@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { classifyMissingWorks } from '../src/filesystem/prune.js';
+import { classifyMissingWorks } from '../src/scanner/prune.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = new Date('2024-06-01T00:00:00.000Z');

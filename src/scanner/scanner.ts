@@ -1,5 +1,9 @@
 import { EventEmitter } from 'node:events';
 import type { Config } from '../infra/config/schema.js';
+import { openWorkSource } from '../infra/fs/source/index.js';
+import { treeHasAudio } from '../infra/fs/source/tree.js';
+import { UnsupportedArchiveError } from '../infra/fs/source/types.js';
+import { collectWorkEntries } from '../infra/fs/utils.js';
 import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
 import {
   type CoverType,
@@ -14,11 +18,7 @@ import {
   upsertWork,
 } from '../services/work.service.js';
 import { classifyMissingWorks } from './prune.js';
-import { openWorkSource } from './source/index.js';
-import { treeHasAudio } from './source/tree.js';
-import { UnsupportedArchiveError } from './source/types.js';
 import { syncWorkTracks } from './trackSync.js';
-import { collectWorkEntries } from './utils.js';
 
 /** 扫描器模式：scan 扫盘发现新作品；update 遍历数据库刷新既有作品元数据。 */
 export type ScanMode = 'scan' | 'update';
