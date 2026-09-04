@@ -161,15 +161,16 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { id } = request.params;
 
       try {
-        const tracks = await getWorkTracks(id);
-        return tracks;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-
-        if (errorMessage.includes('not found')) {
-          return reply.status(404).send({ error: errorMessage });
+        const result = await getWorkTracks(id);
+        if (!result.ok) {
+          const error =
+            result.reason === 'work-not-found'
+              ? `Work ${id} not found`
+              : `Root folder "${result.rootFolder}" not found`;
+          return reply.status(404).send({ error });
         }
-
+        return result.tracks;
+      } catch {
         return reply.status(500).send({ error: 'Failed to get track list' });
       }
     },

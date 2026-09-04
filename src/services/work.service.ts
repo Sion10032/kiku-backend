@@ -652,12 +652,20 @@ export async function getVas() {
   return db.query.vas.findMany();
 }
 
+export type WorkTracksResult =
+  | { ok: true; tracks: TrackNode[] }
+  | {
+      ok: false;
+      reason: 'work-not-found' | 'root-folder-not-found';
+      rootFolder?: string; // root-folder-not-found 时携带，供 route 报文使用
+    };
+
 /**
  * 获取作品的文件树
  * @param id 作品 ID（完整 RJ code）
  * @returns 文件树结构
  */
-export async function getWorkTracks(id: string): Promise<TrackNode[]> {
+export async function getWorkTracks(id: string): Promise<WorkTracksResult> {
   const row = await db.query.works.findFirst({
     where: {
       RAW: (t, op) =>
@@ -673,14 +681,18 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
   });
 
   if (!row) {
-    throw new Error(`Work ${id} not found`);
+    return { ok: false, reason: 'work-not-found' };
   }
 
   const config = getConfig();
   const rootFolder = config.rootFolders.find((f) => f.name === row.rootFolder);
 
   if (!rootFolder) {
-    throw new Error(`Root folder "${row.rootFolder}" not found`);
+    return {
+      ok: false,
+      reason: 'root-folder-not-found',
+      rootFolder: row.rootFolder,
+    };
   }
 
   const source = await openWorkSource(rootFolder.path, row.dir);
@@ -697,7 +709,7 @@ export async function getWorkTracks(id: string): Promise<TrackNode[]> {
           ? { ...n, children: attach(n.children) }
           : n,
     );
-  return attach(tree);
+  return { ok: true, tracks: attach(tree) };
 }
 
 // ---------- Scanner update mode ----------
