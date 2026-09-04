@@ -1,29 +1,13 @@
 import { extname } from 'node:path';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { getConfig } from '../config/index.js';
-import { openWorkSource, type WorkSource } from '../filesystem/source/index.js';
-import { sanitizeMediaIndex } from '../filesystem/source/types.js';
-import { getWorkById } from '../services/work.service.js';
+import { openWorkMedia } from '../services/media.service.js';
 
 // 通配参数（路由形如 /stream/:id/*）：媒体相对路径可含子文件夹（"早期特典/mp3/x.mp3"）
 const mediaParamsSchema = z.object({
   id: z.string(),
   '*': z.string().min(1),
 });
-
-/** 解析 media index 路径 → WorkSource；失败返回 null（调用方应 404）。 */
-async function resolveSource(
-  id: string,
-  index: string,
-): Promise<WorkSource | null> {
-  if (!sanitizeMediaIndex(index)) return null;
-  const config = getConfig();
-  const work = await getWorkById(id);
-  const rootFolder = config.rootFolders.find((f) => f.name === work.rootFolder);
-  if (!rootFolder) return null;
-  return openWorkSource(rootFolder.path, work.dir);
-}
 
 const mimeTypes: Record<string, string> = {
   '.mp3': 'audio/mpeg',
@@ -67,7 +51,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { id, '*': index } = request.params;
 
       try {
-        const source = await resolveSource(id, index);
+        const source = await openWorkMedia(id, index);
         if (!source || !(await source.has(index))) {
           return reply.status(404).send({ error: 'File not found' });
         }
@@ -120,7 +104,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { id, '*': index } = request.params;
 
       try {
-        const source = await resolveSource(id, index);
+        const source = await openWorkMedia(id, index);
         if (!source || !(await source.has(index))) {
           return reply.status(404).send({ error: 'File not found' });
         }
