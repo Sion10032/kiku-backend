@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
-import { reviews, works } from '../db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { reviews, works } from '../infra/db/main/schema.js';
 
 export async function getReviewsByWorkId(workId: string) {
   return db.query.reviews.findMany({

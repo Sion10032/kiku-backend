@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
+import { db } from '../infra/db/main/index.js';
 import {
   circles,
   favourites,
@@ -7,7 +7,7 @@ import {
   vas,
   vaWork,
   works,
-} from '../db/main/schema.js';
+} from '../infra/db/main/schema.js';
 
 export type FavouriteTargetType = 'work' | 'series' | 'va' | 'circle';
 

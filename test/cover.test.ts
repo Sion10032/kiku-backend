@@ -19,7 +19,7 @@ const realFetch = globalThis.fetch;
 // 动态 import：确保 setupTestEnvironment（CONFIG_PATH）先生效
 const { downloadCover, coverExists, getCoverData, deleteAllCovers } =
   await import('../src/services/cover.service');
-const { deleteBlob } = await import('../src/db/blob/index');
+const { deleteBlob } = await import('../src/infra/db/blob/index');
 
 describe('cover.service（blob.db 存储）', () => {
   beforeEach(() => {

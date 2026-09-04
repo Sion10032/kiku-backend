@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { hashPassword } from '../auth/utils.js';
-import { db } from '../db/main/index.js';
-import { users } from '../db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { users } from '../infra/db/main/schema.js';
 
 export async function getUserByName(name: string) {
   return db.query.users.findFirst({

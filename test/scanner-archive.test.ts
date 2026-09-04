@@ -26,8 +26,8 @@ mock.module('../src/services/cover.service.js', () => ({
 }));
 
 const { performScan } = await import('../src/filesystem/scanner.js');
-const { db } = await import('../src/db/main/index.js');
-const { works } = await import('../src/db/main/schema.js');
+const { db } = await import('../src/infra/db/main/index.js');
+const { works } = await import('../src/infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { buildTar } = await import('./helpers/archive.js');
 const { buildZip } = await import('./helpers/archive.js');

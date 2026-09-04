@@ -35,8 +35,8 @@ mock.module('../src/services/cover.service.js', () => ({
 const { performScan, performUpdate } = await import(
   '../src/filesystem/scanner.js'
 );
-const { db } = await import('../src/db/main/index.js');
-const { circles, works } = await import('../src/db/main/schema.js');
+const { db } = await import('../src/infra/db/main/index.js');
+const { circles, works } = await import('../src/infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { getConfig, setConfigForTesting } = await import(
   '../src/infra/config/index.js'

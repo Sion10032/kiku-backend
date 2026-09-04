@@ -14,8 +14,8 @@ function getBlobDatabasePath(): string {
 }
 
 export default defineConfig({
-  schema: './src/db/blob/schema.ts',
-  out: './src/db/blob/migrations',
+  schema: './src/infra/db/blob/schema.ts',
+  out: './src/infra/db/blob/migrations',
   dialect: 'sqlite',
   dbCredentials: {
     url: getBlobDatabasePath(),

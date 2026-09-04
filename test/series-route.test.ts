@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { db } from '../src/db/main/index.js';
-import { series, works } from '../src/db/main/schema.js';
+import { db } from '../src/infra/db/main/index.js';
+import { series, works } from '../src/infra/db/main/schema.js';
 import { upsertWork } from '../src/services/work.service.js';
 import { setupTestEnvironment } from './helpers/setup';
 

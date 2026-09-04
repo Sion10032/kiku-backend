@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
-import { settingsBackups } from '../db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { settingsBackups } from '../infra/db/main/schema.js';
 
 /** 备份列表项（不含 payload，列表轻量）。 */
 export interface SettingsBackupSummaryDto {

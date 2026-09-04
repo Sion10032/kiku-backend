@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
-import type { AgeRating } from '../db/main/schema.js';
+import type { Config } from '../infra/config/schema.js';
+import { db } from '../infra/db/main/index.js';
+import type { AgeRating } from '../infra/db/main/schema.js';
 import {
   circles,
   series,
@@ -9,8 +10,7 @@ import {
   vas,
   vaWork,
   works,
-} from '../db/main/schema.js';
-import type { Config } from '../infra/config/schema.js';
+} from '../infra/db/main/schema.js';
 
 export interface UpdateResult {
   workId: string;

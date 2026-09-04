@@ -1,4 +1,9 @@
-import { blobExists, deleteBlob, getBlob, putBlob } from '../db/blob/index.js';
+import {
+  blobExists,
+  deleteBlob,
+  getBlob,
+  putBlob,
+} from '../infra/db/blob/index.js';
 import { HttpError, retryFetch } from '../scraper/client.js';
 import { getWorkById } from './work.service.js';
 

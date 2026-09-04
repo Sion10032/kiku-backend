@@ -1,6 +1,11 @@
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
-import { readStates, tracks, userProgress, works } from '../db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import {
+  readStates,
+  tracks,
+  userProgress,
+  works,
+} from '../infra/db/main/schema.js';
 import { getUserByName } from './user.service.js';
 import { getWorkById } from './work.service.js';
 

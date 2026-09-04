@@ -14,8 +14,8 @@ function getDatabasePath(): string {
 }
 
 export default defineConfig({
-  schema: './src/db/main/schema.ts',
-  out: './src/db/main/migrations',
+  schema: './src/infra/db/main/schema.ts',
+  out: './src/infra/db/main/migrations',
   dialect: 'sqlite',
   dbCredentials: {
     url: process.env.DATABASE_URL || getDatabasePath(),

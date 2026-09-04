@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { db } from '../src/db/main/index.js';
-import { tracks } from '../src/db/main/schema.js';
+import { db } from '../src/infra/db/main/index.js';
+import { tracks } from '../src/infra/db/main/schema.js';
 import {
   deleteTrackRows,
   getTotalDurations,

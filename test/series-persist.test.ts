@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, it } from 'bun:test';
 import { inArray } from 'drizzle-orm';
-import { db } from '../src/db/main/index.js';
-import { series, works } from '../src/db/main/schema.js';
 import { updateWorkMetadata } from '../src/filesystem/updater.js';
+import { db } from '../src/infra/db/main/index.js';
+import { series, works } from '../src/infra/db/main/schema.js';
 import {
   getSeries,
   getWorkById,

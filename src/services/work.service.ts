@@ -1,5 +1,8 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
+import { openWorkSource } from '../filesystem/source/index.js';
+import type { TrackNode } from '../filesystem/utils.js';
+import { getConfig } from '../infra/config/index.js';
+import { db } from '../infra/db/main/index.js';
 import type {
   AgeRating,
   Circle,
@@ -7,7 +10,7 @@ import type {
   Tag,
   Va,
   Work,
-} from '../db/main/schema.js';
+} from '../infra/db/main/schema.js';
 import {
   circles,
   series,
@@ -16,10 +19,7 @@ import {
   vas,
   vaWork,
   works,
-} from '../db/main/schema.js';
-import { openWorkSource } from '../filesystem/source/index.js';
-import type { TrackNode } from '../filesystem/utils.js';
-import { getConfig } from '../infra/config/index.js';
+} from '../infra/db/main/schema.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
   getProgressByWorks,

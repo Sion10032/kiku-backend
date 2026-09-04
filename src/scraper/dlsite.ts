@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
-import type { AgeRating } from '../db/main/schema.js';
 import { hasLetter, nameToUUID } from '../filesystem/utils.js';
 import { getConfig } from '../infra/config/index.js';
+import type { AgeRating } from '../infra/db/main/schema.js';
 import { fetchHtml, fetchJson } from './client.js';
 import { fetchHVDBWorkInfo } from './hvdb.js';
 

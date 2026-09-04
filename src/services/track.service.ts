@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { db } from '../db/main/index.js';
-import { tracks } from '../db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { tracks } from '../infra/db/main/schema.js';
 
 export type TrackRow = typeof tracks.$inferSelect;
 

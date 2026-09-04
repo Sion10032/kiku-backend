@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { getConfig } from '../../infra/config/index.js';
+import { getConfig } from '../../config/index.js';
 import { blobs } from './schema.js';
 
 /**
@@ -38,7 +38,7 @@ blobSqlite.exec('PRAGMA busy_timeout = 1000');
 export const blobDb = drizzle({ client: blobSqlite });
 
 // 启动时应用待处理迁移（经 __drizzle_migrations 表幂等）
-migrate(blobDb, { migrationsFolder: './src/db/blob/migrations' });
+migrate(blobDb, { migrationsFolder: './src/infra/db/blob/migrations' });
 
 /**
  * 已存储的二进制记录

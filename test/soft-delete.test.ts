@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { db } from '../src/db/main/index.js';
-import { tags, tagWork, works } from '../src/db/main/schema.js';
+import { db } from '../src/infra/db/main/index.js';
+import { tags, tagWork, works } from '../src/infra/db/main/schema.js';
 import {
   getWorkById,
   hardDeleteWork,

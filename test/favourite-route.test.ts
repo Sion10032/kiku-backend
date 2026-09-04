@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
-import { db } from '../src/db/main/index.js';
-import { circles, series, users, works } from '../src/db/main/schema.js';
+import { db } from '../src/infra/db/main/index.js';
+import { circles, series, users, works } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();

@@ -14,8 +14,8 @@ import { setupTestEnvironment } from './helpers/setup';
 setupTestEnvironment();
 
 const { buildApp } = await import('../src/app.js');
-const { db } = await import('../src/db/main/index.js');
-const { circles, works } = await import('../src/db/main/schema.js');
+const { db } = await import('../src/infra/db/main/index.js');
+const { circles, works } = await import('../src/infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { setConfigForTesting, getConfig } = await import(
   '../src/infra/config/index.js'

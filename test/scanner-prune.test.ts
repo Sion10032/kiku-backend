@@ -28,8 +28,8 @@ mock.module('../src/services/cover.service.js', () => ({
 }));
 
 const { performScan } = await import('../src/filesystem/scanner.js');
-const { db } = await import('../src/db/main/index.js');
-const { works } = await import('../src/db/main/schema.js');
+const { db } = await import('../src/infra/db/main/index.js');
+const { works } = await import('../src/infra/db/main/schema.js');
 const { softDeleteWork } = await import('../src/services/work.service.js');
 
 let root: string;

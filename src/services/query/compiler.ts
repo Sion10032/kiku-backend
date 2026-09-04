@@ -1,7 +1,7 @@
 import { type AnyColumn, eq, inArray, or, type SQL, sql } from 'drizzle-orm';
 import type { LiqeQuery, TagToken } from 'liqe';
-import { db } from '../../db/main/index.js';
-import type { AgeRating } from '../../db/main/schema.js';
+import { db } from '../../infra/db/main/index.js';
+import type { AgeRating } from '../../infra/db/main/schema.js';
 import {
   circles,
   series,
@@ -10,7 +10,7 @@ import {
   vas,
   vaWork,
   works,
-} from '../../db/main/schema.js';
+} from '../../infra/db/main/schema.js';
 import { extractRJCode } from '../../utils/rjcode.js';
 import { QueryParseError } from './parser.js';
 

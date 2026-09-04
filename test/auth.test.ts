@@ -3,8 +3,8 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { hashPassword } from '../src/auth/utils.js';
-import { db } from '../src/db/main/index.js';
-import { users } from '../src/db/main/schema.js';
+import { db } from '../src/infra/db/main/index.js';
+import { users } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();

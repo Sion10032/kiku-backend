@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { db } from '../src/db/main/index.js';
+import { db } from '../src/infra/db/main/index.js';
 import {
   circles,
   favourites,
@@ -8,7 +8,7 @@ import {
   users,
   vas,
   works,
-} from '../src/db/main/schema.js';
+} from '../src/infra/db/main/schema.js';
 import {
   addFavourite,
   listFavourites,

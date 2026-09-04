@@ -1,7 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
 import { eq, inArray } from 'drizzle-orm';
-import { db } from '../src/db/main/index.js';
-import { circles, series, tags, vas, works } from '../src/db/main/schema.js';
+import { db } from '../src/infra/db/main/index.js';
+import {
+  circles,
+  series,
+  tags,
+  vas,
+  works,
+} from '../src/infra/db/main/schema.js';
 import { upsertTrackRow } from '../src/services/track.service.js';
 import type { UpsertWorkInput } from '../src/services/work.service.js';
 import {

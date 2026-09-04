@@ -11,7 +11,7 @@ const MAIN_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x01]);
 const SAM_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02]);
 
 // blob 库操作与 app 构建在 mock 外正常加载
-const { putBlob, deleteBlob } = await import('../src/db/blob/index');
+const { putBlob, deleteBlob } = await import('../src/infra/db/blob/index');
 const { buildApp } = await import('../src/app');
 
 describe('GET /api/cover/:id/file 封面回退', () => {
