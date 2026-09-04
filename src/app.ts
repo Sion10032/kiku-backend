@@ -9,7 +9,6 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { initAdminFromEnv } from './auth/init.js';
-import { authPlugin } from './auth/plugin.js';
 import { getConfig } from './infra/config/index.js';
 import { authRoutes } from './routes/auth.js';
 import { configRoutes } from './routes/config.js';
@@ -18,6 +17,7 @@ import { favouriteRoutes } from './routes/favourite.js';
 import { healthRoutes } from './routes/health.js';
 import { mediaRoutes } from './routes/media.js';
 import { metadataRoutes } from './routes/metadata.js';
+import { authPlugin } from './routes/plugins/auth.js';
 import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
 import { scannerRoutes } from './routes/scanner.js';
