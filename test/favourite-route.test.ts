@@ -94,7 +94,7 @@ describe('Favourite Routes', () => {
         payload: { targetType: 'work', targetId: WORK_ID },
       });
       expect(put.statusCode).toBe(200);
-      expect(put.json()).toEqual({ favourited: true });
+      expect(put.json<{ favourited: boolean }>()).toEqual({ favourited: true });
 
       const list = await app.inject({
         method: 'GET',
@@ -122,7 +122,10 @@ describe('Favourite Routes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(status.statusCode).toBe(200);
-      expect(status.json()).toEqual({ [WORK_ID]: true, RJ00000000: false });
+      expect(status.json<Record<string, boolean>>()).toEqual({
+        [WORK_ID]: true,
+        RJ00000000: false,
+      });
 
       const del = await app.inject({
         method: 'DELETE',
@@ -130,7 +133,9 @@ describe('Favourite Routes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(del.statusCode).toBe(200);
-      expect(del.json()).toEqual({ message: 'Favourite removed' });
+      expect(del.json<{ message: string }>()).toEqual({
+        message: 'Favourite removed',
+      });
 
       const empty = await app.inject({
         method: 'GET',

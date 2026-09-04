@@ -183,7 +183,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(del.statusCode).toBe(200);
-      expect(del.json()).toEqual({ success: true });
+      expect(del.json<{ success: boolean }>()).toEqual({ success: true });
 
       expect(await getReadStateRow(WORK_MAIN)).toHaveLength(0);
       expect(await getWorkRead(app, token, WORK_MAIN)).toBe(false);
@@ -216,7 +216,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(del.statusCode).toBe(200);
-      expect(del.json()).toEqual({ deleted: 1 });
+      expect(del.json<{ deleted: number }>()).toEqual({ deleted: 1 });
       expect(await getReadStateRow(WORK_DEL)).toHaveLength(0);
       const get = await app.inject({
         method: 'GET',
@@ -270,7 +270,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
         headers: { authorization: `Bearer ${token}` },
       });
       expect(put.statusCode).toBe(200);
-      expect(put.json()).toEqual({ success: true });
+      expect(put.json<{ success: boolean }>()).toEqual({ success: true });
 
       expect(await getReadStateRow(WORK_MANUAL)).toHaveLength(1);
       const after = await app.inject({

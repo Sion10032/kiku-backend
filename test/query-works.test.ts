@@ -3,6 +3,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { db } from '../src/db/main/index.js';
 import { circles, series, tags, vas, works } from '../src/db/main/schema.js';
 import { upsertTrackRow } from '../src/services/track.service.js';
+import type { UpsertWorkInput } from '../src/services/work.service.js';
 import {
   getWorkById,
   queryWorks,
@@ -30,7 +31,7 @@ const W2 = `RJ${base}2`; // circleA + tagX + seriesX
 const W3 = `RJ${base}3`; // circleB + tagY，无系列
 
 async function insertFixtures(): Promise<void> {
-  const rows = [
+  const rows: UpsertWorkInput[] = [
     {
       id: W1,
       rootFolder: 'testroot',

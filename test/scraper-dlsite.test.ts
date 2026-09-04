@@ -213,7 +213,7 @@ describe('scrapeStaticWorkInfo の年齢指定解析', () => {
     try {
       const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
       const info = await scrapeStaticWorkInfo('RJ01559247');
-      expect(info.ageRating).toBe(expected);
+      expect(info.ageRating).toBe(expected as 'all' | 'r15' | 'r18');
     } finally {
       setConfigForTesting(saved);
     }
