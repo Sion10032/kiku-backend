@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { setupTestEnvironment } from './helpers/setup';
+import { setupTestEnvironment } from '@test/helpers/setup';
 
 setupTestEnvironment();
 
@@ -91,16 +91,14 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行から id/name を抽出できる', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/infra/config/index.js'
+      '../config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
     mockWorkPage(WORK_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import(
-        '../src/infra/scraper/dlsite'
-      );
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toEqual({
@@ -118,16 +116,14 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行がない作品は series が null になる', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/infra/config/index.js'
+      '../config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
     mockWorkPage(NO_SERIES_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import(
-        '../src/infra/scraper/dlsite'
-      );
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toBeNull();
@@ -138,16 +134,14 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行のリンクが title_id を含まない場合は series が null になる', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/infra/config/index.js'
+      '../config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
     mockWorkPage(NON_SERIES_LINK_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import(
-        '../src/infra/scraper/dlsite'
-      );
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toBeNull();
@@ -158,16 +152,14 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行に SRI アンカーが複数ある場合は最初の 1 つだけを採用する', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/infra/config/index.js'
+      '../config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
     mockWorkPage(TWO_SERIES_LINKS_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import(
-        '../src/infra/scraper/dlsite'
-      );
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toEqual({
@@ -212,16 +204,14 @@ describe('scrapeStaticWorkInfo の年齢指定解析', () => {
     ['', 'all'],
   ])('年齢指定「%s」→ %s', async (ageText, expected) => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/infra/config/index.js'
+      '../config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
     mockWorkPage(AGE_PAGE(ageText));
 
     try {
-      const { scrapeStaticWorkInfo } = await import(
-        '../src/infra/scraper/dlsite'
-      );
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
       const info = await scrapeStaticWorkInfo('RJ01559247');
       expect(info.ageRating).toBe(expected as 'all' | 'r15' | 'r18');
     } finally {

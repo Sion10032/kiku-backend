@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
-import { db } from '../src/infra/db/main/index.js';
+import { db } from '../infra/db/main/index.js';
 import {
   circles,
   favourites,
@@ -8,14 +9,13 @@ import {
   users,
   vas,
   works,
-} from '../src/infra/db/main/schema.js';
+} from '../infra/db/main/schema.js';
 import {
   addFavourite,
   listFavourites,
   removeFavourite,
   statusFavourites,
-} from '../src/services/favourite.service.js';
-import { setupTestEnvironment } from './helpers/setup';
+} from './favourite.service.js';
 
 setupTestEnvironment();
 

@@ -1,14 +1,10 @@
 import { afterAll, describe, expect, it } from 'bun:test';
+import { setupTestEnvironment } from '@test/helpers/setup';
 import { inArray } from 'drizzle-orm';
-import { db } from '../src/infra/db/main/index.js';
-import { series, works } from '../src/infra/db/main/schema.js';
-import { updateWorkMetadata } from '../src/scanner/updater.js';
-import {
-  getSeries,
-  getWorkById,
-  upsertWork,
-} from '../src/services/work.service.js';
-import { setupTestEnvironment } from './helpers/setup';
+import { db } from '../infra/db/main/index.js';
+import { series, works } from '../infra/db/main/schema.js';
+import { updateWorkMetadata } from '../scanner/updater.js';
+import { getSeries, getWorkById, upsertWork } from './work.service.js';
 
 setupTestEnvironment();
 

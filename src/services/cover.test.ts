@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { expectNotNull } from './helpers/assert';
-import { setupTestEnvironment } from './helpers/setup';
+import { expectNotNull } from '@test/helpers/assert';
+import { setupTestEnvironment } from '@test/helpers/setup';
 
 setupTestEnvironment();
 
@@ -18,8 +18,8 @@ const realFetch = globalThis.fetch;
 
 // 动态 import：确保 setupTestEnvironment（CONFIG_PATH）先生效
 const { downloadCover, coverExists, getCoverData, deleteAllCovers } =
-  await import('../src/services/cover.service');
-const { deleteBlob } = await import('../src/infra/db/blob/index');
+  await import('./cover.service');
+const { deleteBlob } = await import('../infra/db/blob/index');
 
 describe('cover.service（blob.db 存储）', () => {
   beforeEach(() => {

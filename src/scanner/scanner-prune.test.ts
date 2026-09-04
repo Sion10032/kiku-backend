@@ -2,14 +2,14 @@ import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildZip } from '@test/helpers/archive.js';
+import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
-import { buildZip } from './helpers/archive.js';
-import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
 
 // 网络/封面隔离：先 mock 再动态 import 被测模块
-mock.module('../src/infra/scraper/dlsite.js', () => ({
+mock.module('../infra/scraper/dlsite.js', () => ({
   fetchDLsiteWorkInfo: async (rjCode: string) => ({
     title: `测试作品 ${rjCode}`,
     circle: '测试社团',
@@ -21,16 +21,16 @@ mock.module('../src/infra/scraper/dlsite.js', () => ({
     rank: {},
   }),
 }));
-mock.module('../src/services/cover.service.js', () => ({
+mock.module('../services/cover.service.js', () => ({
   coverExists: () => true,
   downloadCover: async () => true,
   deleteAllCovers: () => 0,
 }));
 
-const { performScan } = await import('../src/scanner/scanner.js');
-const { db } = await import('../src/infra/db/main/index.js');
-const { works } = await import('../src/infra/db/main/schema.js');
-const { softDeleteWork } = await import('../src/services/work.service.js');
+const { performScan } = await import('./scanner.js');
+const { db } = await import('../infra/db/main/index.js');
+const { works } = await import('../infra/db/main/schema.js');
+const { softDeleteWork } = await import('../services/work.service.js');
 
 let root: string;
 const base = 400000 + Math.floor(Math.random() * 500000);
@@ -47,7 +47,7 @@ async function runScan() {
   const events: unknown[] = [];
   for await (const ev of performScan(
     {
-      ...(await import('../src/infra/config/index.js')).getConfig(),
+      ...(await import('../infra/config/index.js')).getConfig(),
       rootFolders: [{ name: 'scanroot', path: root }],
       scannerMaxRecursionDepth: 2,
     },

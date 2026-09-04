@@ -8,13 +8,13 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ScanEvent } from '../src/scanner/scanner.js';
-import { setupTestEnvironment } from './helpers/setup';
+import { setupTestEnvironment } from '@test/helpers/setup';
+import type { ScanEvent } from './scanner.js';
 
 setupTestEnvironment();
 
 // 网络隔离：先 mock 再动态 import 被测模块
-mock.module('../src/infra/scraper/dlsite.js', () => ({
+mock.module('../infra/scraper/dlsite.js', () => ({
   fetchDLsiteWorkInfo: async (rjCode: string) => ({
     title: `测试作品 ${rjCode}`,
     circle: '回填测试社团',
@@ -26,26 +26,26 @@ mock.module('../src/infra/scraper/dlsite.js', () => ({
     rank: {},
   }),
 }));
-mock.module('../src/services/cover.service.js', () => ({
+mock.module('../services/cover.service.js', () => ({
   coverExists: () => true,
   downloadCover: async () => true,
   deleteAllCovers: () => 0,
 }));
 
-const { performScan, performUpdate } = await import(
-  '../src/scanner/scanner.js'
-);
-const { db } = await import('../src/infra/db/main/index.js');
-const { circles, works } = await import('../src/infra/db/main/schema.js');
+const { performScan, performUpdate } = await import('./scanner.js');
+const { db } = await import('../infra/db/main/index.js');
+const { circles, works } = await import('../infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { getConfig, setConfigForTesting } = await import(
-  '../src/infra/config/index.js'
+  '../infra/config/index.js'
 );
-const { getTrackRows } = await import('../src/services/track.service.js');
-const { upsertWork } = await import('../src/services/work.service.js');
+const { getTrackRows } = await import('../services/track.service.js');
+const { upsertWork } = await import('../services/work.service.js');
 
 const ROOT_FOLDER = 'update-root';
-const sine = readFileSync(join(import.meta.dir, 'fixtures/audio/sine.wav'));
+const sine = readFileSync(
+  join(import.meta.dir, '../../test/fixtures/audio/sine.wav'),
+);
 
 // RJ 后必须恰好 6 或 8 位纯数字
 const base = 300000 + Math.floor(Math.random() * 600000);

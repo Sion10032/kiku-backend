@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
+import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
-import { db } from '../src/infra/db/main/index.js';
-import { tracks } from '../src/infra/db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { tracks } from '../infra/db/main/schema.js';
 import {
   deleteTrackRows,
   getTotalDurations,
   getTrackRows,
   planTrackSync,
   upsertTrackRow,
-} from '../src/services/track.service.js';
-import { upsertWork } from '../src/services/work.service.js';
-import { setupTestEnvironment } from './helpers/setup';
+} from './track.service.js';
+import { upsertWork } from './work.service.js';
 
 setupTestEnvironment();
 

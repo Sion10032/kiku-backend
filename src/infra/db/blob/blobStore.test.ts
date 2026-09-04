@@ -1,13 +1,11 @@
 import { beforeAll, describe, expect, it } from 'bun:test';
-import { expectNotNull } from './helpers/assert';
-import { setupTestEnvironment } from './helpers/setup';
+import { expectNotNull } from '@test/helpers/assert';
+import { setupTestEnvironment } from '@test/helpers/setup';
 
 setupTestEnvironment();
 
 // 动态 import：确保 blobStore 开库发生在测试环境就绪之后
-const { putBlob, getBlob, blobExists, deleteBlob } = await import(
-  '../src/infra/db/blob/index'
-);
+const { putBlob, getBlob, blobExists, deleteBlob } = await import('./index');
 
 const NS = 'test-blob';
 

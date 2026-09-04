@@ -1,15 +1,15 @@
 import { afterAll, describe, expect, it } from 'bun:test';
+import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
-import { db } from '../src/infra/db/main/index.js';
-import { tags, tagWork, works } from '../src/infra/db/main/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { tags, tagWork, works } from '../infra/db/main/schema.js';
 import {
   getWorkById,
   hardDeleteWork,
   queryWorks,
   softDeleteWork,
   upsertWork,
-} from '../src/services/work.service.js';
-import { setupTestEnvironment } from './helpers/setup';
+} from './work.service.js';
 
 setupTestEnvironment();
 

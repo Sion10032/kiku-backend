@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { collectAudioLeaves, probeDuration } from '../src/infra/fs/probe.js';
-import type { TrackNode } from '../src/infra/fs/utils.js';
-import { memorySource } from './helpers/memorySource.js';
+import { memorySource } from '@test/helpers/memorySource.js';
+import { collectAudioLeaves, probeDuration } from './probe.js';
+import type { TrackNode } from './utils.js';
 
-const FIX = join(import.meta.dir, 'fixtures/audio');
+const FIX = join(import.meta.dir, '../../../test/fixtures/audio');
 function fixtureSource(): ReturnType<typeof memorySource> {
   return memorySource({
     'sine.mp3': readFileSync(join(FIX, 'sine.mp3')),

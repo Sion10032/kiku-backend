@@ -1,22 +1,16 @@
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
+import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq, inArray } from 'drizzle-orm';
-import { db } from '../src/infra/db/main/index.js';
-import {
-  circles,
-  series,
-  tags,
-  vas,
-  works,
-} from '../src/infra/db/main/schema.js';
-import { upsertTrackRow } from '../src/services/track.service.js';
-import type { UpsertWorkInput } from '../src/services/work.service.js';
+import { db } from '../infra/db/main/index.js';
+import { circles, series, tags, vas, works } from '../infra/db/main/schema.js';
+import { upsertTrackRow } from './track.service.js';
+import type { UpsertWorkInput } from './work.service.js';
 import {
   getWorkById,
   queryWorks,
   softDeleteWork,
   upsertWork,
-} from '../src/services/work.service.js';
-import { setupTestEnvironment } from './helpers/setup';
+} from './work.service.js';
 
 setupTestEnvironment();
 

@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setupTestEnvironment } from './helpers/setup';
+import { setupTestEnvironment } from '@test/helpers/setup';
 
 setupTestEnvironment();
 
 // 网络隔离：先 mock 再动态 import 被测模块
-mock.module('../src/infra/scraper/dlsite.js', () => ({
+mock.module('../infra/scraper/dlsite.js', () => ({
   fetchDLsiteWorkInfo: async (rjCode: string) => ({
     title: `测试作品 ${rjCode}`,
     circle: '测试社团',
@@ -19,18 +19,18 @@ mock.module('../src/infra/scraper/dlsite.js', () => ({
     rank: {},
   }),
 }));
-mock.module('../src/services/cover.service.js', () => ({
+mock.module('../services/cover.service.js', () => ({
   coverExists: () => true,
   downloadCover: async () => true,
   deleteAllCovers: () => 0,
 }));
 
-const { performScan } = await import('../src/scanner/scanner.js');
-const { db } = await import('../src/infra/db/main/index.js');
-const { works } = await import('../src/infra/db/main/schema.js');
+const { performScan } = await import('./scanner.js');
+const { db } = await import('../infra/db/main/index.js');
+const { works } = await import('../infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
-const { buildTar } = await import('./helpers/archive.js');
-const { buildZip } = await import('./helpers/archive.js');
+const { buildTar } = await import('@test/helpers/archive.js');
+const { buildZip } = await import('@test/helpers/archive.js');
 
 let root: string;
 // 6 个连续 6 位 RJ 号（RJ 后必须恰好 6 或 8 位纯数字，不可加字母后缀）
@@ -83,7 +83,7 @@ async function runScan() {
   const events: unknown[] = [];
   for await (const ev of performScan(
     {
-      ...(await import('../src/infra/config/index.js')).getConfig(),
+      ...(await import('../infra/config/index.js')).getConfig(),
       rootFolders: [{ name: 'scanroot', path: root }],
       scannerMaxRecursionDepth: 2,
     },

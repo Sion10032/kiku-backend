@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import type { ScanEvent, ScanTaskPayload } from '../src/scanner/scanner.js';
-import { setupTestEnvironment } from './helpers/setup';
+import { setupTestEnvironment } from '@test/helpers/setup';
+import type { ScanEvent, ScanTaskPayload } from './scanner.js';
 
 setupTestEnvironment();
 
 // bun test 转译器不支持 await import 解构内的 inline type 修饰符，
 // 故类型改用静态 import type（擦除后不影响动态导入时序）
 const { applyScanEvent, emptySnapshot, SCAN_LOG_CAP } = await import(
-  '../src/scanner/scanner.js'
+  './scanner.js'
 );
 
 const taskEv = (task: ScanTaskPayload): ScanEvent => ({

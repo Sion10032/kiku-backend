@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { parseQuery, QueryParseError } from '../src/services/query/parser';
+import { parseQuery, QueryParseError } from './parser';
 
 describe('parseQuery', () => {
   it('合法查询返回 AST', () => {

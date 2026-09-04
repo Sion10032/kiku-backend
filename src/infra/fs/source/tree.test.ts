@@ -6,7 +6,7 @@ import {
   rekeyStrippedTopDir,
   stripCommonTopDir,
   treeHasAudio,
-} from '../src/infra/fs/source/tree.js';
+} from './tree.js';
 
 describe('entriesToTrackTree', () => {
   it('根目录文件生成 audio/text/image/other 叶节点，hash 为相对路径', () => {

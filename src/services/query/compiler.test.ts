@@ -2,8 +2,8 @@ import { describe, expect, it } from 'bun:test';
 // drizzle 1.0.0-rc 移除了 SQL.toSQL()，用方言的 sqlToQuery() 取得 { sql, params }
 import { SQLiteDialect } from 'drizzle-orm/sqlite-core';
 import type { LiqeQuery } from 'liqe';
-import { compileQuery } from '../src/services/query/compiler';
-import { parseQuery, QueryParseError } from '../src/services/query/parser';
+import { compileQuery } from './compiler';
+import { parseQuery, QueryParseError } from './parser';
 
 const dialect = new SQLiteDialect();
 

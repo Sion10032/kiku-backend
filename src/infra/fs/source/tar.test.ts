@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createTarSource } from '../src/infra/fs/source/tar.js';
-import { buildTar } from './helpers/archive.js';
+import { buildTar } from '@test/helpers/archive.js';
+import { createTarSource } from './tar.js';
 
 let dir: string;
 const audio = Buffer.alloc(2048, 0x5a);

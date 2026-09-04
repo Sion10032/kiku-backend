@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { entriesToTrackTree } from '../src/infra/fs/source/tree.js';
-import { syncWorkTracks } from '../src/scanner/trackSync.js';
-import { getTrackRows } from '../src/services/track.service.js';
-import { upsertWork } from '../src/services/work.service.js';
-import { memorySource } from './helpers/memorySource.js';
-import { setupTestEnvironment } from './helpers/setup.js';
+import { memorySource } from '@test/helpers/memorySource.js';
+import { setupTestEnvironment } from '@test/helpers/setup.js';
+import { entriesToTrackTree } from '../infra/fs/source/tree.js';
+import { getTrackRows } from '../services/track.service.js';
+import { upsertWork } from '../services/work.service.js';
+import { syncWorkTracks } from './trackSync.js';
 
 setupTestEnvironment();
 
@@ -22,7 +22,9 @@ test('syncWorkTracks：首轮入库带时长，次轮无变更零动作', async 
     tags: [],
     vas: [],
   });
-  const wav = readFileSync(join(import.meta.dir, 'fixtures/audio/sine.wav'));
+  const wav = readFileSync(
+    join(import.meta.dir, '../../test/fixtures/audio/sine.wav'),
+  );
   const src = memorySource({ 'a.wav': wav, 'b.wav': wav });
   const tree = entriesToTrackTree(['a.wav', 'b.wav']);
 
@@ -37,7 +39,9 @@ test('syncWorkTracks：首轮入库带时长，次轮无变更零动作', async 
 });
 
 test('size 变化 → 重探测更新；消失 → 删行', async () => {
-  const wav = readFileSync(join(import.meta.dir, 'fixtures/audio/sine.wav'));
+  const wav = readFileSync(
+    join(import.meta.dir, '../../test/fixtures/audio/sine.wav'),
+  );
   const tree = entriesToTrackTree(['a.wav']);
   await syncWorkTracks(WORK, memorySource({ 'a.wav': wav }), tree);
 
