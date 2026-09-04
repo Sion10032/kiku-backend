@@ -1,6 +1,8 @@
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/main/index.js';
 import { readStates, tracks, userProgress, works } from '../db/main/schema.js';
+import { getUserByName } from './user.service.js';
+import { getWorkById } from './work.service.js';
 
 /** 听完判定阈值（position/duration ≥ 此值视为听完），前端 progressStore 同值对齐。 */
 export const LISTENED_RATIO = 0.95;
@@ -52,7 +54,16 @@ export async function upsertProgress(data: {
   trackTitle?: string;
   position: number;
   duration?: number | null;
-}) {
+}): Promise<'user-missing' | 'work-missing' | 'ok'> {
+  // FK 防护：幽灵 token（用户已不存在）→ 'user-missing'（route 映射 401）；
+  // 作品不在库 → 'work-missing'（route 映射 404，进度静默丢弃）
+  if (!(await getUserByName(data.userName))) return 'user-missing';
+  try {
+    await getWorkById(data.workId);
+  } catch {
+    return 'work-missing';
+  }
+
   const now = new Date().toISOString();
 
   // 自动已读快速门控（性能优化）：「非听完 → 听完」跳变只能由当前上报的这轨
@@ -136,6 +147,8 @@ export async function upsertProgress(data: {
         .onConflictDoNothing();
     }
   }
+
+  return 'ok';
 }
 
 /** 某用户在某作品的全部进度行（详情页/继续播放用）。 */
@@ -204,7 +217,17 @@ export async function getProgressByWorks(
 }
 
 /** 置为已读（手动入口：upsert，重复标记刷新 readAt）。 */
-export async function markWorkRead(userName: string, workId: string) {
+export async function markWorkRead(
+  userName: string,
+  workId: string,
+): Promise<'work-missing' | 'ok'> {
+  // FK 防护：作品不在库 → 'work-missing'（route 映射 404）
+  try {
+    await getWorkById(workId);
+  } catch {
+    return 'work-missing';
+  }
+
   const now = new Date().toISOString();
   await db
     .insert(readStates)
@@ -213,6 +236,8 @@ export async function markWorkRead(userName: string, workId: string) {
       target: [readStates.userName, readStates.workId],
       set: { readAt: now },
     });
+
+  return 'ok';
 }
 
 /** 置为未读（删标记行；进度不动，见 D3）。 */

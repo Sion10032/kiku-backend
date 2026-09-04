@@ -8,8 +8,7 @@ import {
   markWorkUnread,
   upsertProgress,
 } from '../services/progress.service.js';
-import { getUserByName } from '../services/user.service.js';
-import { getWorkById, getWorksByIdsOrdered } from '../services/work.service.js';
+import { getWorksByIdsOrdered } from '../services/work.service.js';
 import { formattedWorkSchema, paginationSchema } from './schemas/work.js';
 
 // 请求体 snake_case 对齐 review.ts（work_id/review_text）风格
@@ -56,21 +55,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { work_id, media_index, track_title, position, duration } =
         request.body;
 
-      // FK 防护：t_user_progress 有 user/work 两个外键，直接写入不存在的
-      // 父行会执 SQLITE_CONSTRAINT_FOREIGNKEY → 500。
-      // - 幽灵 token（签名有效但用户已不存在，如库重建后未重新注册）→
-      //   401：前端 beforeError 拦截后清 token 跳登录，恢复正常会话
-      // - 作品不在库（前端缓存页面播放已重建库）→ 404：进度无意义静默丢弃
-      if (!(await getUserByName(user.name))) {
-        return reply.status(401).send({ error: 'User not found' });
-      }
-      try {
-        await getWorkById(work_id);
-      } catch {
-        return reply.status(404).send({ error: `Work ${work_id} not found` });
-      }
-
-      await upsertProgress({
+      const outcome = await upsertProgress({
         userName: user.name,
         workId: work_id,
         mediaIndex: media_index,
@@ -78,7 +63,12 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
         position,
         duration,
       });
-
+      if (outcome === 'user-missing') {
+        return reply.status(401).send({ error: 'User not found' });
+      }
+      if (outcome === 'work-missing') {
+        return reply.status(404).send({ error: `Work ${work_id} not found` });
+      }
       return { success: true };
     },
   );
@@ -100,12 +90,10 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const user = request.user;
       const { workId } = request.params;
-      try {
-        await getWorkById(workId);
-      } catch {
+      const outcome = await markWorkRead(user.name, workId);
+      if (outcome === 'work-missing') {
         return reply.status(404).send({ error: `Work ${workId} not found` });
       }
-      await markWorkRead(user.name, workId);
       return { success: true };
     },
   );
