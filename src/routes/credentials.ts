@@ -1,12 +1,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { hashPassword } from '../auth/utils.js';
 import {
-  createUser,
+  changePassword,
+  createUserAccount,
   deleteUser,
-  getUserByName,
   getUsers,
-  updateUserPassword,
 } from '../services/user.service.js';
 
 const createUserSchema = z.object({
@@ -63,19 +61,15 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { name, password, group } = request.body;
-      const existing = await getUserByName(name);
-      if (existing) {
-        return reply.status(409).send({ error: 'User already exists' });
-      }
-
-      const hashedPassword = hashPassword(password);
-      const user = await createUser({ name, password: hashedPassword, group });
-
-      if (!user) {
+      const result = await createUserAccount(name, password, group);
+      if (!result.ok) {
+        if (result.reason === 'conflict') {
+          return reply.status(409).send({ error: 'User already exists' });
+        }
         return reply.status(500).send({ error: 'Failed to create user' });
       }
 
-      return { name: user.name, group: user.group };
+      return { name: result.user.name, group: result.user.group };
     },
   );
 
@@ -93,13 +87,10 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { name, newPassword } = request.body;
-      const user = await getUserByName(name);
-      if (!user) {
+      const result = await changePassword(name, newPassword);
+      if (result === 'not-found') {
         return reply.status(404).send({ error: 'User not found' });
       }
-
-      const hashedPassword = hashPassword(newPassword);
-      await updateUserPassword(name, hashedPassword);
 
       return { message: 'Password updated' };
     },
