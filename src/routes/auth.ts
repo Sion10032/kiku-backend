@@ -1,12 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { hashPassword, signToken, verifyPassword } from '../auth/utils.js';
-import { getConfig, updateConfig } from '../config/index.js';
-import {
-  createUser,
-  getUserByName,
-  getUsers,
-} from '../services/user.service.js';
+import { signToken } from '../auth/utils.js';
+import { login, register, setupInstance } from '../services/auth.service.js';
+import { getUsers } from '../services/user.service.js';
 
 const loginSchema = z.object({
   name: z.string().min(4),
@@ -38,14 +34,10 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { name, password } = request.body;
-      const user = await getUserByName(name);
-
-      if (!user || !verifyPassword(password, user.password)) {
+      const user = await login(name, password);
+      if (!user)
         return reply.status(401).send({ error: 'Invalid credentials' });
-      }
-
-      const token = signToken(fastify, { name: user.name, group: user.group });
-      return { token, name: user.name, group: user.group };
+      return { token: signToken(fastify, user), ...user };
     },
   );
 
@@ -97,21 +89,10 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const existing = await getUsers();
-      if (existing.length > 0) {
+      const result = await setupInstance(request.body);
+      if (!result)
         return reply.status(403).send({ error: 'Setup already completed' });
-      }
-
-      const { name, password, instanceMode, allowRegistration } = request.body;
-      await createUser({
-        name,
-        password: hashPassword(password),
-        group: 'administrator',
-      });
-      updateConfig({ instanceMode, allowRegistration });
-
-      const token = signToken(fastify, { name, group: 'administrator' });
-      return { token, name, group: 'administrator' };
+      return { token: signToken(fastify, result), ...result };
     },
   );
 
@@ -129,23 +110,16 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (!getConfig().allowRegistration) {
-        return reply.status(403).send({ error: 'Registration is not allowed' });
+      const result = await register(request.body.name, request.body.password);
+      if (!result.ok) {
+        const status = result.reason === 'registration-disabled' ? 403 : 409;
+        const error =
+          result.reason === 'registration-disabled'
+            ? 'Registration is not allowed'
+            : 'Username already exists';
+        return reply.status(status).send({ error });
       }
-
-      const { name, password } = request.body;
-      if (await getUserByName(name)) {
-        return reply.status(409).send({ error: 'Username already exists' });
-      }
-
-      await createUser({
-        name,
-        password: hashPassword(password),
-        group: 'user',
-      });
-
-      const token = signToken(fastify, { name, group: 'user' });
-      return { token, name, group: 'user' };
+      return { token: signToken(fastify, result.user), ...result.user };
     },
   );
 };
