@@ -2,9 +2,8 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   type CoverType,
-  coverExists,
-  downloadCover,
-  getCoverData,
+  getCover,
+  getCoverWithFallback,
 } from '../services/cover.service.js';
 import { QueryParseError } from '../services/query/parser.js';
 import {
@@ -197,39 +196,19 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { type } = request.query as { type: CoverType };
-
-      // 检查作品是否存在
-      const work = await getWorkById(id).catch(() => undefined);
-      if (!work) {
-        return reply.status(404).send({ error: `Work ${id} not found` });
-      }
-
-      // 检查封面是否已存在
-      const exists = coverExists(id, type);
-
-      if (exists) {
-        return reply.send({
-          url: `/api/cover/${id}/file?type=${type}`,
-          type,
-          exists: true,
+      const result = await getCover(id, type);
+      if (
+        result.status === 'work-not-found' ||
+        result.status === 'cover-not-found'
+      ) {
+        return reply.status(404).send({
+          error:
+            result.status === 'work-not-found'
+              ? `Work ${id} not found`
+              : `Cover for work ${id} not found`,
         });
       }
-
-      // 尝试下载封面（使用 sourceId 如果存在）
-      const sourceId = work.sourceId || undefined;
-      const downloadResult = await downloadCover(id, type, undefined, sourceId);
-
-      if (downloadResult) {
-        return reply.send({
-          url: `/api/cover/${id}/file?type=${type}`,
-          type,
-          exists: true,
-        });
-      }
-
-      return reply
-        .status(404)
-        .send({ error: `Cover for work ${id} not found` });
+      return reply.send({ url: result.url, type: result.type, exists: true });
     },
   );
 
@@ -246,12 +225,7 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { type } = request.query as { type: CoverType };
-
-      // 部分作品没有 sam/240x240 等衍生封面（下载 404），
-      // 此时回退到 main，避免前端列表缩略图整片占位
-      const cover =
-        getCoverData(id, type) ??
-        (type !== 'main' ? getCoverData(id, 'main') : null);
+      const cover = getCoverWithFallback(id, type);
       if (!cover) {
         return reply
           .status(404)

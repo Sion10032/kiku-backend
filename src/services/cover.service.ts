@@ -1,5 +1,6 @@
 import { blobExists, deleteBlob, getBlob, putBlob } from '../db/blob/index.js';
 import { HttpError, retryFetch } from '../scraper/client.js';
+import { getWorkById } from './work.service.js';
 
 /**
  * 封面图片类型
@@ -181,6 +182,53 @@ export function getCoverData(
  */
 export function deleteCover(id: string, type: CoverType): boolean {
   return deleteBlob(COVER_NAMESPACE, getCoverKey(id, type));
+}
+
+export type GetCoverResult =
+  | { status: 'ok'; url: string; type: CoverType }
+  | { status: 'work-not-found' }
+  | { status: 'cover-not-found' };
+
+/**
+ * 封面编排：作品存在性 → 本地缓存 → 按 sourceId 下载
+ * @param id 作品ID
+ * @param type 封面类型
+ * @returns 编排结果（ok 携带内部 API url）
+ */
+export async function getCover(
+  id: string,
+  type: CoverType,
+): Promise<GetCoverResult> {
+  const work = await getWorkById(id).catch(() => undefined);
+  if (!work) return { status: 'work-not-found' };
+
+  // 注意：此处 url 是内部 API 路径（与 getCoverUrl 的 DLsite 外部 url 不同），手拼保持响应不变
+  if (coverExists(id, type)) {
+    return { status: 'ok', url: `/api/cover/${id}/file?type=${type}`, type };
+  }
+
+  const sourceId = work.sourceId || undefined;
+  if (await downloadCover(id, type, undefined, sourceId)) {
+    return { status: 'ok', url: `/api/cover/${id}/file?type=${type}`, type };
+  }
+  return { status: 'cover-not-found' };
+}
+
+/**
+ * 读取封面数据，衍生封面（sam/240x240 等）缺失时回退 main，
+ * 避免前端列表缩略图整片占位
+ * @param id 作品ID
+ * @param type 封面类型
+ * @returns 封面二进制数据与 MIME，不存在则返回 null
+ */
+export function getCoverWithFallback(
+  id: string,
+  type: CoverType,
+): ReturnType<typeof getCoverData> {
+  return (
+    getCoverData(id, type) ??
+    (type !== 'main' ? getCoverData(id, 'main') : null)
+  );
 }
 
 /**
