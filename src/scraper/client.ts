@@ -1,4 +1,4 @@
-import { getConfig } from '../config/index.js';
+import { getConfig } from '../infra/config/index.js';
 
 /**
  * 带 HTTP 状态码的抓取错误。

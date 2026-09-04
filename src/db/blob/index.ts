@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { getConfig } from '../../config/index.js';
+import { getConfig } from '../../infra/config/index.js';
 import { blobs } from './schema.js';
 
 /**

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { getConfig } from '../config/index.js';
+import { getConfig } from '../infra/config/index.js';
 
 export function md5(str: string): string {
   return createHash('md5').update(str).digest('hex');

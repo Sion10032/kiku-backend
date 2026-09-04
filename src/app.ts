@@ -10,7 +10,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { initAdminFromEnv } from './auth/init.js';
 import { authPlugin } from './auth/plugin.js';
-import { getConfig } from './config/index.js';
+import { getConfig } from './infra/config/index.js';
 import { authRoutes } from './routes/auth.js';
 import { configRoutes } from './routes/config.js';
 import { credentialsRoutes } from './routes/credentials.js';

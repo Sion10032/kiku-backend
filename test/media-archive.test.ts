@@ -12,7 +12,7 @@ const { db } = await import('../src/db/main/index.js');
 const { circles, works } = await import('../src/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { setConfigForTesting, getConfig } = await import(
-  '../src/config/index.js'
+  '../src/infra/config/index.js'
 );
 const { buildTar, buildZip } = await import('./helpers/archive.js');
 

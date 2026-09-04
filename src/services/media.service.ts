@@ -1,6 +1,6 @@
-import { getConfig } from '../config/index.js';
 import { openWorkSource, type WorkSource } from '../filesystem/source/index.js';
 import { sanitizeMediaIndex } from '../filesystem/source/types.js';
+import { getConfig } from '../infra/config/index.js';
 import { getWorkById } from './work.service.js';
 
 /** 解析 media index 路径 → WorkSource；失败返回 null（调用方应 404）。

@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword } from '../auth/utils.js';
-import { getConfig, updateConfig } from '../config/index.js';
+import { getConfig, updateConfig } from '../infra/config/index.js';
 import { createUser, getUserByName, getUsers } from './user.service.js';
 
 export interface AuthUser {

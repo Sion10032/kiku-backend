@@ -3,7 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { getConfig } from '../../config/index.js';
+import { getConfig } from '../../infra/config/index.js';
 import { relations } from './relations.js';
 
 // 获取数据库路径

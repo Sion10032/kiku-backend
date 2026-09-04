@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { defineConfig } from 'drizzle-kit';
-import { getConfig } from './src/config/index.js';
+import { getConfig } from './src/infra/config/index.js';
 
 // 获取数据库路径
 function getDatabasePath(): string {

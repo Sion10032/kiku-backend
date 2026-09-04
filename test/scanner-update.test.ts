@@ -39,7 +39,7 @@ const { db } = await import('../src/db/main/index.js');
 const { circles, works } = await import('../src/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { getConfig, setConfigForTesting } = await import(
-  '../src/config/index.js'
+  '../src/infra/config/index.js'
 );
 const { getTrackRows } = await import('../src/services/track.service.js');
 const { upsertWork } = await import('../src/services/work.service.js');

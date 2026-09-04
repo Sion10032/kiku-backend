@@ -1,5 +1,4 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { getConfig } from '../config/index.js';
 import { db } from '../db/main/index.js';
 import type {
   AgeRating,
@@ -20,6 +19,7 @@ import {
 } from '../db/main/schema.js';
 import { openWorkSource } from '../filesystem/source/index.js';
 import type { TrackNode } from '../filesystem/utils.js';
+import { getConfig } from '../infra/config/index.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
   getProgressByWorks,

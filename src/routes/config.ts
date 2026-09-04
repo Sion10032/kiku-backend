@@ -1,6 +1,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { getConfig, getSharedConfig, updateConfig } from '../config/index.js';
-import { configSchema, sharedConfigSchema } from '../config/schema.js';
+import {
+  getConfig,
+  getSharedConfig,
+  updateConfig,
+} from '../infra/config/index.js';
+import { configSchema, sharedConfigSchema } from '../infra/config/schema.js';
 
 const updateConfigSchema = configSchema.partial();
 

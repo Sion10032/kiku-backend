@@ -18,7 +18,7 @@ const { db } = await import('../src/db/main/index.js');
 const { circles, works } = await import('../src/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { setConfigForTesting, getConfig } = await import(
-  '../src/config/index.js'
+  '../src/infra/config/index.js'
 );
 const { openWorkSource } = await import('../src/filesystem/source/index.js');
 const { syncWorkTracks } = await import('../src/filesystem/trackSync.js');

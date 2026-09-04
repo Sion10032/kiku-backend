@@ -83,7 +83,7 @@ async function runScan() {
   const events: unknown[] = [];
   for await (const ev of performScan(
     {
-      ...(await import('../src/config/index.js')).getConfig(),
+      ...(await import('../src/infra/config/index.js')).getConfig(),
       rootFolders: [{ name: 'scanroot', path: root }],
       scannerMaxRecursionDepth: 2,
     },

@@ -1,7 +1,7 @@
 import fastifyJwt from '@fastify/jwt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
-import { getConfig } from '../config/index.js';
+import { getConfig } from '../infra/config/index.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {

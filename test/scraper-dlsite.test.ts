@@ -91,7 +91,7 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行から id/name を抽出できる', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/config/index.js'
+      '../src/infra/config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
@@ -116,7 +116,7 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行がない作品は series が null になる', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/config/index.js'
+      '../src/infra/config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
@@ -134,7 +134,7 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行のリンクが title_id を含まない場合は series が null になる', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/config/index.js'
+      '../src/infra/config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
@@ -152,7 +152,7 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
 
   it('シリーズ名行に SRI アンカーが複数ある場合は最初の 1 つだけを採用する', async () => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/config/index.js'
+      '../src/infra/config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
@@ -204,7 +204,7 @@ describe('scrapeStaticWorkInfo の年齢指定解析', () => {
     ['', 'all'],
   ])('年齢指定「%s」→ %s', async (ageText, expected) => {
     const { setConfigForTesting, getConfig } = await import(
-      '../src/config/index.js'
+      '../src/infra/config/index.js'
     );
     const saved = getConfig();
     setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });

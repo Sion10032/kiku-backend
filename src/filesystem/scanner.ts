@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Config } from '../config/schema.js';
+import type { Config } from '../infra/config/schema.js';
 import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
 import {
   type CoverType,
