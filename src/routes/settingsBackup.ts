@@ -77,7 +77,7 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       return listSettingBackups(user.name);
     },
   );
@@ -96,7 +96,7 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const backup = await getSettingBackup(user.name, request.params.name);
       if (!backup) {
         return reply.status(404).send({ error: '备份不存在' });
@@ -130,7 +130,7 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { name } = request.params;
       // zod 验证后 fastify 会用解析结果替换 request.body（未知键已被 strip），
       // 这里序列化的已是白名单内的干净对象
@@ -168,7 +168,7 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       await deleteSettingBackup(user.name, request.params.name);
       return { message: '备份已删除' };
     },

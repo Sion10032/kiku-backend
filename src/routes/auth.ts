@@ -63,7 +63,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       return { name: user.name, group: user.group };
     },
   );

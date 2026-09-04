@@ -128,7 +128,8 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { q, page, order, sort } = request.query;
-      const user = (request.user as { name?: string })?.name;
+      // onRequest 匿名放行，运行时 user 可为 undefined，可选链必需
+      const user = request.user?.name;
       try {
         return await queryWorks(q, user, {
           page,
@@ -157,7 +158,8 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const user = (request.user as { name?: string })?.name;
+      // onRequest 匿名放行，运行时 user 可为 undefined，可选链必需
+      const user = request.user?.name;
 
       try {
         return await getWorkById(id, user);

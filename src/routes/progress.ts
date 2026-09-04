@@ -52,7 +52,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { work_id, media_index, track_title, position, duration } =
         request.body;
 
@@ -98,7 +98,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { workId } = request.params;
       try {
         await getWorkById(workId);
@@ -123,7 +123,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { workId } = request.params;
       await markWorkUnread(user.name, workId);
       return { success: true };
@@ -153,7 +153,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { page, pageSize } = request.query;
       const { workIds, totalCount } = await getUserHistoryIds(user.name, {
         page,
@@ -177,7 +177,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { workId } = request.params;
       return getWorkProgress(user.name, workId);
     },
@@ -196,7 +196,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { workId } = request.params;
       const deleted = await deleteWorkProgress(user.name, workId);
       return { deleted };

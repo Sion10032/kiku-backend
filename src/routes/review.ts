@@ -82,7 +82,7 @@ export const reviewRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { work_id, rating, review_text, progress } = request.body;
 
       return upsertReview({
@@ -108,7 +108,7 @@ export const reviewRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       const { work_id } = request.body;
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       await deleteReview(user.name, work_id);
 
       return { message: 'Review deleted' };

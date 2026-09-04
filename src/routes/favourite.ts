@@ -43,7 +43,7 @@ export const favouriteRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       return listFavourites(user.name, request.query.targetType);
     },
   );
@@ -63,7 +63,7 @@ export const favouriteRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { targetType, ids } = request.query;
       return statusFavourites(
         user.name,
@@ -92,7 +92,7 @@ export const favouriteRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { targetType, targetId } = request.body;
       const ok = await addFavourite(user.name, targetType, targetId);
       if (!ok) {
@@ -119,7 +119,7 @@ export const favouriteRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const user = request.user as { name: string; group: string };
+      const user = request.user;
       const { targetType, targetId } = request.params;
       await removeFavourite(user.name, targetType, targetId);
       return { message: 'Favourite removed' };
