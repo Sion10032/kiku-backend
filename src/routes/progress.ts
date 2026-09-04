@@ -10,7 +10,7 @@ import {
 } from '../services/progress.service.js';
 import { getUserByName } from '../services/user.service.js';
 import { getWorkById, getWorksByIdsOrdered } from '../services/work.service.js';
-import { formattedWorkSchema, paginationSchema } from './metadata.js';
+import { formattedWorkSchema, paginationSchema } from './schemas/work.js';
 
 // 请求体 snake_case 对齐 review.ts（work_id/review_text）风格
 const progressBodySchema = z.object({
