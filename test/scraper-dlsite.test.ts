@@ -98,7 +98,9 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
     mockWorkPage(WORK_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
+      const { scrapeStaticWorkInfo } = await import(
+        '../src/infra/scraper/dlsite'
+      );
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toEqual({
@@ -123,7 +125,9 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
     mockWorkPage(NO_SERIES_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
+      const { scrapeStaticWorkInfo } = await import(
+        '../src/infra/scraper/dlsite'
+      );
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toBeNull();
@@ -141,7 +145,9 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
     mockWorkPage(NON_SERIES_LINK_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
+      const { scrapeStaticWorkInfo } = await import(
+        '../src/infra/scraper/dlsite'
+      );
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toBeNull();
@@ -159,7 +165,9 @@ describe('scrapeStaticWorkInfo のシリーズ名解析', () => {
     mockWorkPage(TWO_SERIES_LINKS_PAGE_HTML);
 
     try {
-      const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
+      const { scrapeStaticWorkInfo } = await import(
+        '../src/infra/scraper/dlsite'
+      );
       const info = await scrapeStaticWorkInfo('RJ01559247');
 
       expect(info.series).toEqual({
@@ -211,7 +219,9 @@ describe('scrapeStaticWorkInfo の年齢指定解析', () => {
     mockWorkPage(AGE_PAGE(ageText));
 
     try {
-      const { scrapeStaticWorkInfo } = await import('../src/scraper/dlsite');
+      const { scrapeStaticWorkInfo } = await import(
+        '../src/infra/scraper/dlsite'
+      );
       const info = await scrapeStaticWorkInfo('RJ01559247');
       expect(info.ageRating).toBe(expected as 'all' | 'r15' | 'r18');
     } finally {

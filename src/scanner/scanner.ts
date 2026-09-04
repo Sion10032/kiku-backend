@@ -4,7 +4,7 @@ import { openWorkSource } from '../infra/fs/source/index.js';
 import { treeHasAudio } from '../infra/fs/source/tree.js';
 import { UnsupportedArchiveError } from '../infra/fs/source/types.js';
 import { collectWorkEntries } from '../infra/fs/utils.js';
-import { fetchDLsiteWorkInfo } from '../scraper/dlsite.js';
+import { fetchDLsiteWorkInfo } from '../infra/scraper/dlsite.js';
 import {
   type CoverType,
   coverExists,

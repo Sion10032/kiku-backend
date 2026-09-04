@@ -19,7 +19,7 @@ describe('retryFetch 对 4xx 的重试策略', () => {
   });
 
   it('404 是永久错误：只请求一次，立即失败', async () => {
-    const { retryFetch } = await import('../src/scraper/client');
+    const { retryFetch } = await import('../src/infra/scraper/client');
 
     let err: (Error & { status?: number }) | null = null;
     try {
@@ -42,7 +42,7 @@ describe('retryFetch 对 4xx 的重试策略', () => {
       async () => new Response('ok', { status: 200, statusText: 'OK' }),
     );
 
-    const { retryFetch } = await import('../src/scraper/client');
+    const { retryFetch } = await import('../src/infra/scraper/client');
     const res = await retryFetch('https://example.com/retry-me');
 
     expect(res.ok).toBe(true);

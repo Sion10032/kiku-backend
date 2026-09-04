@@ -4,7 +4,7 @@ import {
   getBlob,
   putBlob,
 } from '../infra/db/blob/index.js';
-import { HttpError, retryFetch } from '../scraper/client.js';
+import { HttpError, retryFetch } from '../infra/scraper/client.js';
 import { getWorkById } from './work.service.js';
 
 /**

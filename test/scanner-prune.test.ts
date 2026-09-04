@@ -9,7 +9,7 @@ import { setupTestEnvironment } from './helpers/setup';
 setupTestEnvironment();
 
 // 网络/封面隔离：先 mock 再动态 import 被测模块
-mock.module('../src/scraper/dlsite.js', () => ({
+mock.module('../src/infra/scraper/dlsite.js', () => ({
   fetchDLsiteWorkInfo: async (rjCode: string) => ({
     title: `测试作品 ${rjCode}`,
     circle: '测试社团',
