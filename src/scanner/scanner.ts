@@ -158,7 +158,7 @@ const stripTask = (t: ScanTask): ScanTaskPayload => ({
  * scan 与 update 两种模式共用；yield 事件流（日志即时推送），
  * return 值携带结果供调用方计数；失败时抛错，由调用方记 failed task。
  */
-async function* syncWorkMetadata(
+export async function* syncWorkMetadata(
   rjCode: string,
   rootFolder: string,
   relativePath: string,
