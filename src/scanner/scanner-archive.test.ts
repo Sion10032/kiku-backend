@@ -43,12 +43,17 @@ const ids = [0, 1, 2, 3, 4, 5].map((i) => `RJ${base + i}`) as [
   string,
   string,
 ];
+// VJ 号文件夹作品（扫描入口需同样识别 VJ 前缀）
+const vjId = `VJ${String(100000 + Math.floor(Math.random() * 800000)).padStart(6, '0')}`;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'kiku-scan-'));
   // 1. 文件夹作品（嵌套一层：root/分类/RJ...）
   mkdirSync(join(root, '分類', ids[0]), { recursive: true });
   writeFileSync(join(root, '分類', ids[0], '01.mp3'), 'x');
+  // 7. VJ 号文件夹作品（嵌套一层：root/分类/VJ...）
+  mkdirSync(join(root, '分類', vjId), { recursive: true });
+  writeFileSync(join(root, '分類', vjId, '01.mp3'), 'x');
   // 2. tar 作品（嵌套）
   writeFileSync(
     join(root, '分類', `${ids[1]}.tar`),
@@ -77,6 +82,7 @@ afterAll(async () => {
   for (const id of ids.slice(0, 3)) {
     await db.delete(works).where(eq(works.id, id));
   }
+  await db.delete(works).where(eq(works.id, vjId));
 });
 
 async function runScan() {
@@ -138,5 +144,13 @@ describe('performScan（压缩包作品）', () => {
       await db.select().from(works).where(eq(works.id, ids[5])).limit(1)
     )[0];
     expect(w6).toBeUndefined(); // 无音频 → 忽略
+  });
+
+  it('VJ 号文件夹作品同样入库', async () => {
+    await runScan();
+    const w = (
+      await db.select().from(works).where(eq(works.id, vjId)).limit(1)
+    )[0];
+    expect(w?.dir).toBe(`分類/${vjId}`);
   });
 });
