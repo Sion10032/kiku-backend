@@ -15,7 +15,7 @@ import {
 setupTestEnvironment();
 
 // base 取 7 位数字：RJ{base}{1,2,3} 恰为 8 位，符合库内合法 RJ 号格式
-// （extractRJCode 只认 6/8 位），使「裸 RJ 号精确匹配」用例走 eq 路径
+// （extractWorkCode 只认 6/8 位），使「裸 RJ 号精确匹配」用例走 eq 路径
 const base = 1000000 + Math.floor(Math.random() * 2000000);
 const CIRCLE_A = `查询测试社团A${base}`;
 const CIRCLE_B = `查询测试社团B${base}`;

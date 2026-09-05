@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { extractRJCode } from '../../utils/rjcode.js';
+import { extractWorkCode } from '../../utils/rjcode.js';
 import { collectDirPaths } from './source/folder.js';
 import { entriesToTrackTree } from './source/tree.js';
 
@@ -44,7 +44,7 @@ export async function collectWorkEntries(
     () => [],
   );
   for (const entry of entries) {
-    const rj = extractRJCode(entry.name);
+    const rj = extractWorkCode(entry.name);
     if (entry.isDirectory()) {
       if (rj) {
         out.push({

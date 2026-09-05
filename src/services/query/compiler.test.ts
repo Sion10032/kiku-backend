@@ -108,6 +108,11 @@ describe('compileQuery：裸词', () => {
     expect(s?.sql).not.toContain('LIKE');
   });
 
+  it('VJ 号裸词按 id 精确匹配', () => {
+    const s = compile('VJ01003042');
+    expect(s?.params).toContain('VJ01003042');
+  });
+
   it('裸词中的字面 _ 被转义（% \\ 无法出现在 unquoted 裸词中）', () => {
     const s = compile('a_b');
     expect(s?.params[0]).toBe('%a\\_b%');

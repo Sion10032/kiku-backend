@@ -11,7 +11,7 @@ import {
   vaWork,
   works,
 } from '../../infra/db/main/schema.js';
-import { extractRJCode } from '../../utils/rjcode.js';
+import { extractWorkCode } from '../../utils/rjcode.js';
 import { QueryParseError } from './parser.js';
 
 const FIELD_WHITELIST = ['circle', 'tag', 'va', 'series', 'age'] as const;
@@ -206,7 +206,7 @@ function compileBareTerm(
     throw new QueryParseError(`不支持的查询词 "${value}"`);
   }
   const text = String(value);
-  const rj = extractRJCode(text);
+  const rj = extractWorkCode(text);
   if (rj) return eq(t.id, rj);
 
   const pattern = `%${escapeLike(text)}%`;
