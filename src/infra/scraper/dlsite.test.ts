@@ -219,3 +219,84 @@ describe('scrapeStaticWorkInfo の年齢指定解析', () => {
     }
   });
 });
+
+describe('fetchDLsiteWorkInfo（VJ 作品）', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  const VJ_PAGE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta property="og:title" content="テストゲーム [テストブランド] | DLsite" />
+  <meta property="og:image" content="https://img.dlsite.jp/modpub/images2/work/professional/VJ01004000/VJ01003042_img_main.jpg" />
+</head>
+<body>
+  <table id="work_outline">
+    <tr><th>年齢指定</th><td>R18</td></tr>
+    <tr><th>販売日</th><td>2025年03月14日</td></tr>
+    <tr><th>ジャンル</th><td><a href="https://www.dlsite.com/pro/fsr/=/genre/276/from/work.genre">アクション</a></td></tr>
+  </table>
+</body>
+</html>`;
+
+  it('VJ 号请求 pro 站点，sourceId 从 professional 封面 URL 提取', async () => {
+    const { setConfigForTesting, getConfig } = await import(
+      '../config/index.js'
+    );
+    const saved = getConfig();
+    setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
+
+    const urls: string[] = [];
+    globalThis.fetch = mock(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes('/pro/work/=/product_id/VJ01003042.html')) {
+        return new Response(VJ_PAGE_HTML, { status: 200 });
+      }
+      if (url.includes('/product/info/ajax')) {
+        return new Response(
+          JSON.stringify({
+            VJ01003042: {
+              dl_count: 10,
+              price: 1000,
+              review_count: 2,
+              rate_count: 5,
+              rate_average_2dp: 4.5,
+              rate_count_detail: [],
+              rank: [],
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // HVDB 兜底等其余请求 → 404（fetchHVDBWorkInfo 内部 catch 返回 null）
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    try {
+      // scanner-*.test.ts 会用 mock.module 覆盖 dlsite 模块的 fetchDLsiteWorkInfo，
+      // 且 bun 的模块 mock 在同进程内跨测试文件生效。加 query 绕开缓存，
+      // 拿到未被 mock 的真实模块实例。
+      const { fetchDLsiteWorkInfo } = await import('./dlsite?vj-test');
+      const info = await fetchDLsiteWorkInfo('VJ01003042');
+
+      expect(info.id).toBe('VJ01003042');
+      expect(info.sourceId).toBe('VJ01003042');
+      expect(
+        urls.some((u) =>
+          u.startsWith('https://www.dlsite.com/pro/work/=/product_id/'),
+        ),
+      ).toBe(true);
+      expect(
+        urls.some((u) =>
+          u.startsWith('https://www.dlsite.com/pro-touch/product/info/ajax'),
+        ),
+      ).toBe(true);
+      expect(urls.every((u) => !u.includes('maniax'))).toBe(true);
+    } finally {
+      globalThis.fetch = realFetch;
+      setConfigForTesting(saved);
+    }
+  });
+});

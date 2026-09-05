@@ -1,9 +1,21 @@
 import * as cheerio from 'cheerio';
+import {
+  dlsiteAjaxSegment,
+  dlsiteSiteSegment,
+  parseWorkCode,
+  WORK_CODE_SOURCE,
+  type WorkCodePrefix,
+} from '../../utils/rjcode.js';
 import { getConfig } from '../config/index.js';
 import type { AgeRating } from '../db/main/schema.js';
 import { hasLetter, nameToUUID } from '../fs/utils.js';
 import { fetchHtml, fetchJson } from './client.js';
 import { fetchHVDBWorkInfo } from './hvdb.js';
+
+/** 取作品代码前缀；非法输入回退 RJ（URL 拼接错误由后续抓取失败暴露，与旧行为一致）。 */
+function prefixOf(id: string): WorkCodePrefix {
+  return parseWorkCode(id)?.prefix ?? 'RJ';
+}
 
 /** 抓取到的系列信息（DLsite SRI 编号 + 系列名；一个作品至多属于一个系列）。 */
 export interface ScrapedSeries {
@@ -109,7 +121,7 @@ export async function scrapeStaticWorkInfo(
   rjId: string,
   signal?: AbortSignal,
 ): Promise<StaticWorkInfo> {
-  const url = `https://www.dlsite.com/maniax/work/=/product_id/${rjId}.html`;
+  const url = `https://www.dlsite.com/${dlsiteSiteSegment(prefixOf(rjId))}/work/=/product_id/${rjId}.html`;
   const pageLanguage = getConfig().tagLanguage;
   const labels: OutlineLabels = OUTLINE_LABELS[pageLanguage];
 
@@ -233,13 +245,15 @@ export async function scrapeStaticWorkInfo(
   });
   const language = Array.from(languageSet).join(',');
 
-  // sourceId: 从封面 URL 中提取未翻译版本的 RJ 号
-  // 封面 URL 格式: https://img.dlsite.jp/modpub/images2/work/doujin/RJ01560000/RJ01559247_img_main.jpg
-  // 其中 RJ01559247 是 sourceId
+  // sourceId: 从封面 URL 中提取未翻译版本的作品代码
+  // 封面 URL 格式: https://img.dlsite.jp/modpub/images2/work/{doujin|professional}/{组号}/{作品代码}_img_main.jpg
+  // 组号在前不会误匹配；仅取紧邻 "_img_main.jpg" 之前的作品代码
   let sourceId = '';
-  const coverMatch = coverUrl.match(/RJ(\d+)_img_main\.jpg/);
+  const coverMatch = coverUrl.match(
+    new RegExp(`(${WORK_CODE_SOURCE})_img_main\\.jpg`),
+  );
   if (coverMatch) {
-    sourceId = `RJ${coverMatch[1]}`;
+    sourceId = coverMatch[1];
   }
 
   return {
@@ -283,7 +297,7 @@ async function scrapeDynamicWorkInfo(
   rjId: string,
   signal?: AbortSignal,
 ): Promise<DynamicWorkInfo> {
-  const url = `https://www.dlsite.com/maniax-touch/product/info/ajax?product_id=${rjId}`;
+  const url = `https://www.dlsite.com/${dlsiteAjaxSegment(prefixOf(rjId))}/product/info/ajax?product_id=${rjId}`;
   const data = await fetchJson<Record<string, DLsiteAjaxItem>>(url, {
     externalSignal: signal,
   });
@@ -360,15 +374,17 @@ export async function searchDLsite(keyword: string): Promise<DLsiteWorkInfo[]> {
 
   $('.search_result_img_box').each((_, el) => {
     const href = $(el).find('a').attr('href') || '';
-    const rjMatch = href.match(/product_id\/(RJ\d+)/);
+    const codeMatch = href.match(
+      new RegExp(`product_id/(${WORK_CODE_SOURCE})`),
+    );
 
-    if (rjMatch?.[1]) {
-      const rjId = rjMatch[1];
+    if (codeMatch?.[1]) {
+      const workId = codeMatch[1];
       const title = $(el).find('.work_name').text().trim();
       const circle = $(el).find('.maker_name').text().trim();
 
       works.push({
-        id: rjId,
+        id: workId,
         title,
         circle,
         circleId: '',
