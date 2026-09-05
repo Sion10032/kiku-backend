@@ -138,11 +138,11 @@ export async function scrapeStaticWorkInfo(
     .trim()
     .replace(/ \[.+\] \| DLsite$/, '');
 
-  // 社团
+  // 社团/品牌：RJ 是社团（maker_id RG 前缀），VJ 是品牌（maker_id VG 前缀）
   const circleLink = $('span.maker_name a').first();
   const circle = circleLink.text().trim();
   const circleId =
-    circleLink.attr('href')?.match(/maker_id\/(RG\d+)/)?.[1] || '';
+    circleLink.attr('href')?.match(/maker_id\/([RV]G\d+)/)?.[1] || '';
 
   // 年龄指定值跨语言一致：'R18'/'R-18' → r18、'R15'/'R-15' → r15；
   // 仅全年龄随页面语言翻译（日：全年齢 / 中：全年龄 / 英：All Ages），
@@ -229,7 +229,7 @@ export async function scrapeStaticWorkInfo(
   const languageSet = new Set<string>();
   $('#work_outline tr').each((_, tr) => {
     const th = $(tr).children('th').first().text().trim();
-    if (/支持的语言|対応言語/.test(th)) {
+    if (/支持的语言|対応言語|對應語言/.test(th)) {
       $(tr)
         .children('td')
         .first()
