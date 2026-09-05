@@ -23,6 +23,7 @@ import { reviewRoutes } from './routes/review.js';
 import { scannerRoutes } from './routes/scanner.js';
 import { settingsBackupRoutes } from './routes/settingsBackup.js';
 import { versionRoutes } from './routes/version.js';
+import { workAdminRoutes } from './routes/workAdmin.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
@@ -46,6 +47,7 @@ export async function buildApp() {
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(metadataRoutes, { prefix: '/api' });
+  await app.register(workAdminRoutes, { prefix: '/api' });
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
   await app.register(reviewRoutes, { prefix: '/api' });

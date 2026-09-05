@@ -307,6 +307,15 @@ export async function softDeleteWork(id: string): Promise<void> {
     .where(eq(works.id, id));
 }
 
+/** 作品行是否存在（含软删行）；workAdmin 删除路由判 404 用。 */
+export async function workExists(id: string): Promise<boolean> {
+  const row = await db.query.works.findFirst({
+    where: { RAW: (t, op) => op.eq(t.id, id) },
+    columns: { id: true },
+  });
+  return row != null;
+}
+
 /**
  * 物理删除：删除作品记录（级联清 tagWork/vaWork/reviews/userProgress，
  * SQLite 外键已开启）并清理封面 blob。
