@@ -85,4 +85,16 @@ describe('cover.service（blob.db 存储）', () => {
     expect(count).toBeGreaterThanOrEqual(1);
     expect(coverExists('RJ000007', 'main')).toBe(false);
   });
+
+  it('VJ 号封面走 professional 路径，分组号带 VJ 前缀', async () => {
+    const ok = await downloadCover('VJ01003042', 'main');
+    expect(ok).toBe(true);
+    const url = fetchMock.mock.calls[0]?.[0];
+    expectNotNull(url);
+    expect(url).toContain(
+      'work/professional/VJ01004000/VJ01003042_img_main.jpg',
+    );
+    expect(coverExists('VJ01003042', 'main')).toBe(true);
+    deleteBlob('cover', 'VJ01003042_main');
+  });
 });

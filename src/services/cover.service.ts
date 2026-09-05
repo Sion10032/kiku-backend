@@ -5,6 +5,7 @@ import {
   putBlob,
 } from '../infra/db/blob/index.js';
 import { HttpError, retryFetch } from '../infra/scraper/client.js';
+import { dlsiteImgSegment, parseWorkCode } from '../utils/rjcode.js';
 import { getWorkById } from './work.service.js';
 
 /**
@@ -19,32 +20,31 @@ const COVER_NAMESPACE = 'cover';
 
 /**
  * 获取封面图片的URL
- * @param rjcode 作品ID（RJ代码）
+ * @param rjcode 作品ID（RJ/VJ 代码）
  * @param type 封面类型
  * @returns 封面图片的URL
  */
 function getCoverUrl(rjcode: string, type: CoverType): string {
-  // 从ID中提取数字部分
-  const numStr = rjcode.match(/(\d+)/)?.[1];
-  if (!numStr) {
+  const parsed = parseWorkCode(rjcode);
+  if (!parsed) {
     throw new Error(`Invalid work ID: ${rjcode}`);
   }
 
-  const numId = parseInt(numStr, 10);
-
-  // 计算用于URL的ID（每1000/10000个一组）
+  // 计算用于URL的分组ID（每1000个一组；数字超 999999 用 8 位，否则 6 位）
+  const numId = parseInt(parsed.digits, 10);
   const codeLength = numId > 999999 ? 8 : 6;
   const groupCount = 1000;
   const groupId =
     numId % groupCount === 0
       ? numId
       : Math.floor(numId / groupCount) * groupCount + groupCount;
-  const groupRJCode = `RJ${groupId.toString().padStart(codeLength, '0')}`;
+  const groupCode = `${parsed.prefix}${groupId.toString().padStart(codeLength, '0')}`;
+  const imgSegment = dlsiteImgSegment(parsed.prefix);
 
   const url =
     type === '240x240' || type === '360x360'
-      ? `https://img.dlsite.jp/resize/images2/work/doujin/${groupRJCode}/${rjcode}_img_main_${type}.jpg`
-      : `https://img.dlsite.jp/modpub/images2/work/doujin/${groupRJCode}/${rjcode}_img_${type}.jpg`;
+      ? `https://img.dlsite.jp/resize/images2/work/${imgSegment}/${groupCode}/${rjcode}_img_main_${type}.jpg`
+      : `https://img.dlsite.jp/modpub/images2/work/${imgSegment}/${groupCode}/${rjcode}_img_${type}.jpg`;
 
   return url;
 }
@@ -64,7 +64,7 @@ function getCoverKey(id: string, type: CoverType): string {
  * @param id 作品ID（用作存储 key）
  * @param type 封面类型
  * @param signal 可选的取消信号
- * @param sourceId 未翻译版本的 RJ 号（用于下载封面 URL）
+ * @param sourceId 未翻译版本的作品代码（用于下载封面 URL）
  * @returns 下载是否成功
  */
 export async function downloadCover(
