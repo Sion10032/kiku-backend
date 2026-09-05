@@ -452,3 +452,39 @@ describe('scrapeStaticWorkInfo（zh-tw 對應語言行）', () => {
     }
   });
 });
+
+/** 地区限制等错误页：#main 内是 error_box，无任何作品数据 */
+const REGION_ERROR_PAGE_HTML = `<div id="main" data-section_name="main">
+    <div class="error_box error_box_work" data-nosnippet="">
+        <div class="error_box_inner">
+            <div class="title_img">
+                <p class="error_large_text">SORRY...</p>
+                <p class="title_text">您所在的国家・区域无法购买此作品。</p>
+            </div>
+        </div>
+    </div>
+</div>`;
+
+describe('scrapeStaticWorkInfo（错误页）', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('#main 内是 error_box 时直接抛错，不尝试解析作品数据', async () => {
+    const { setConfigForTesting, getConfig } = await import(
+      '../config/index.js'
+    );
+    const saved = getConfig();
+    setConfigForTesting({ ...saved, tagLanguage: 'zh-cn' });
+    mockWorkPage(REGION_ERROR_PAGE_HTML);
+
+    try {
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
+      await expect(scrapeStaticWorkInfo('RJ01559247')).rejects.toThrow(
+        /error page/i,
+      );
+    } finally {
+      setConfigForTesting(saved);
+    }
+  });
+});

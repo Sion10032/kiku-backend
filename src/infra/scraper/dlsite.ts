@@ -131,6 +131,14 @@ export async function scrapeStaticWorkInfo(
   });
   const $ = cheerio.load(html);
 
+  // 地区限制/作品不可用等错误页：#main 内是 error_box，没有任何作品数据，
+  // 继续解析只会得到全空字段，直接抛错让 scanner 记 failed task。
+  if ($('#main .error_box').length > 0) {
+    throw new Error(
+      `DLsite returned an error page (region-restricted or unavailable): ${url}`,
+    );
+  }
+
   // 标题: og:title 形如 'xxx [社团名] | DLsite'，去掉后缀
   const title = (
     $('meta[property="og:title"]').attr('content') || $('#work_name').text()
