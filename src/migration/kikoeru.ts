@@ -128,6 +128,61 @@ interface OldRow {
   [key: string]: unknown;
 }
 
+/**
+ * kikoeru 旧库 rate_count_detail 存的是 DLsite AJAX 原始数组 JSON：
+ * [{ review_point, count, ratio }] → kiku 契约 record { "1": count, ... }（丢弃 ratio）。
+ * 解析失败 / 形状不符 / 空对象 → null（与 scanner 空数据「不写」语义一致）。
+ */
+function normalizeRateCountDetail(raw: unknown): Record<string, number> | null {
+  if (typeof raw !== 'string' || !raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const out: Record<string, number> = {};
+  for (const item of parsed) {
+    const reviewPoint = (item as { review_point?: unknown })?.review_point;
+    const count = (item as { count?: unknown })?.count;
+    if (typeof count !== 'number') continue;
+    if (typeof reviewPoint !== 'number' && typeof reviewPoint !== 'string') {
+      continue;
+    }
+    out[String(reviewPoint)] = count;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * kikoeru 旧库 rank 存的是 DLsite AJAX 原始数组 JSON：
+ * [{ term, category, rank, rank_date }] → kiku 契约 record { "term_category": rank }
+ * （丢弃 rank_date；term/category 缺失的项跳过）。
+ * 解析失败 / 形状不符 / 空对象 → null。
+ */
+function normalizeRank(raw: unknown): Record<string, number> | null {
+  if (typeof raw !== 'string' || !raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const out: Record<string, number> = {};
+  for (const item of parsed) {
+    const term = (item as { term?: unknown })?.term;
+    const category = (item as { category?: unknown })?.category;
+    const rank = (item as { rank?: unknown })?.rank;
+    if (typeof term !== 'string' || !term) continue;
+    if (typeof category !== 'string' || !category) continue;
+    if (typeof rank !== 'number') continue;
+    out[`${term}_${category}`] = rank;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** 执行迁移：门禁校验 → 主库事务 → 封面导入 + config 副作用 */
 export function migrateFromKikoeru(
   oldDataDir: string,
@@ -214,25 +269,34 @@ export function migrateFromKikoeru(
         stats.vas = vaRows.length;
       }
 
-      // 3) works：ageRating 恒 'r18'（rescan 后 DLsite 回写真实分级）
+      // 3) works：ageRating 按旧库 nsfw 布尔列映射（真值 → 'r18'，假值/NULL → 'all'；
+      //    旧库无 r15 信息不判定）；rescan 后 DLsite 元数据仍回写更精确的真实分级。
+      //    rate_count_detail/rank 由 DLsite 原始数组 JSON 归一化为 kiku record 再存 JSON 串
       const workValues = oldWorks
         .filter((w) => idMap.has(Number(w.id)))
-        .map((w) => ({
-          id: idMap.get(Number(w.id))!,
-          rootFolder: String(w.root_folder),
-          dir: String(w.dir),
-          title: String(w.title),
-          circleId: Number(w.circle_id),
-          ageRating: 'r18' as const,
-          release: (w.release as string | null) ?? null,
-          dlCount: (w.dl_count as number | null) ?? null,
-          price: (w.price as number | null) ?? null,
-          reviewCount: (w.review_count as number | null) ?? null,
-          rateCount: (w.rate_count as number | null) ?? null,
-          rateAverage2dp: (w.rate_average_2dp as number | null) ?? null,
-          rateCountDetail: (w.rate_count_detail as string | null) ?? null,
-          rank: (w.rank as string | null) ?? null,
-        }));
+        .map((w) => {
+          const rateCountDetail = normalizeRateCountDetail(w.rate_count_detail);
+          const rank = normalizeRank(w.rank);
+          return {
+            id: idMap.get(Number(w.id))!,
+            rootFolder: String(w.root_folder),
+            dir: String(w.dir),
+            title: String(w.title),
+            circleId: Number(w.circle_id),
+            // nsfw 在 bun:sqlite 里是 0/1（可空）：真值 → 'r18'，假值/NULL → 'all'
+            ageRating: (w.nsfw ? 'r18' : 'all') as 'r18' | 'all',
+            release: (w.release as string | null) ?? null,
+            dlCount: (w.dl_count as number | null) ?? null,
+            price: (w.price as number | null) ?? null,
+            reviewCount: (w.review_count as number | null) ?? null,
+            rateCount: (w.rate_count as number | null) ?? null,
+            rateAverage2dp: (w.rate_average_2dp as number | null) ?? null,
+            rateCountDetail: rateCountDetail
+              ? JSON.stringify(rateCountDetail)
+              : null,
+            rank: rank ? JSON.stringify(rank) : null,
+          };
+        });
       if (workValues.length) {
         tx.insert(works).values(workValues).onConflictDoNothing().run();
         stats.works = workValues.length;

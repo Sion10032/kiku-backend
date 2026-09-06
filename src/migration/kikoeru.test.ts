@@ -176,6 +176,7 @@ describe('migrateFromKikoeru（元数据）', () => {
       where: { RAW: (t, op) => op.eq(t.id, 'VJ000200') },
     });
     expect(w2?.title).toBe('テスト作品2');
+    expect(w2?.ageRating).toBe('all'); // fixture nsfw=0 → 全年龄
 
     const circleRows = await db.select().from(circles);
     expect(circleRows).toHaveLength(1);
@@ -196,6 +197,33 @@ describe('migrateFromKikoeru（元数据）', () => {
     expect(vw[0]?.workId).toBe('VJ000200');
   });
 
+  it('nsfw=0 / nsfw=NULL → ageRating=all（旧库无 r15 信息，不判定 r15）', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'nsfw-mapping');
+    const old = makeOldDb(sub, 'vanilla');
+    old.exec(`
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
+        VALUES (700, 1, '同人音声', 'G/[RJ000700] 全年龄作品', '全年龄作品', 0);
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
+        VALUES (800, 1, '同人音声', 'H/[RJ000800] NULL作品', 'NULL作品', NULL);
+    `);
+    old.close();
+
+    const result = migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    expect(result.stats?.works).toBe(4);
+
+    const w700 = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000700') },
+    });
+    expect(w700?.ageRating).toBe('all');
+
+    const w800 = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000800') },
+    });
+    expect(w800?.ageRating).toBe('all');
+  });
+
   it('dir 无 RJ/VJ 码的作品跳过并计数', async () => {
     await cleanNewDb();
     const vanillaDir = join(dir, 'vanilla');
@@ -214,6 +242,75 @@ describe('migrateFromKikoeru（元数据）', () => {
         where: { RAW: (t, op) => op.eq(t.id, 'RJ000100') },
       }),
     ).toBeTruthy();
+  });
+});
+
+describe('migrateFromKikoeru（rate_count_detail / rank 归一化）', () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = join(tmpdir(), `kiku-mig-rate-${Date.now().toString(36)}`);
+  });
+  afterAll(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* WAL 句柄 */
+    }
+  });
+
+  it('DLsite 原始数组 JSON → kiku record 形状；畸形 JSON → null', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'rate');
+    const old = makeOldDb(sub, 'vanilla');
+    // 旧库存的是 DLsite AJAX 原始数组（含 ratio / rank_date，需丢弃）
+    old.exec(`
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
+        VALUES (400, 1, '同人音声', 'D/[RJ000400] 配信作品', '配信作品',
+          '[{"review_point":1,"count":18,"ratio":1},{"review_point":2,"count":21,"ratio":2},{"review_point":3,"count":35,"ratio":3}]',
+          '[{"term":"year","category":"all","rank":108,"rank_date":"2012"},{"term":"total","category":"voice","rank":427,"rank_date":"2012"}]');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
+        VALUES (500, 1, '同人音声', 'E/[RJ000500] 畸形作品', '畸形作品', 'not-json', '[{"term":"year","rank":1}]');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
+        VALUES (600, 1, '同人音声', 'F/[RJ000600] 空数组作品', '空数组作品', '[]', '[]');
+    `);
+    old.close();
+
+    const result = migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    expect(result.stats?.works).toBe(5);
+
+    const w400 = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000400') },
+    });
+    // rate_count_detail: [{review_point,count,ratio}] → {"1": count, ...}（丢弃 ratio）
+    expect(typeof w400?.rateCountDetail).toBe('string');
+    expect(JSON.parse(w400!.rateCountDetail!)).toEqual({
+      '1': 18,
+      '2': 21,
+      '3': 35,
+    });
+    // rank: [{term,category,rank,rank_date}] → {"term_category": rank}（丢弃 rank_date）
+    expect(typeof w400?.rank).toBe('string');
+    expect(JSON.parse(w400!.rank!)).toEqual({
+      year_all: 108,
+      total_voice: 427,
+    });
+
+    // 畸形 JSON → 解析失败写 null（迁移本身不失败）
+    const w500 = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000500') },
+    });
+    expect(w500?.rateCountDetail).toBeNull();
+    // rank 缺 category 的项被跳过 → 空对象按约定写 null
+    expect(w500?.rank).toBeNull();
+
+    // 空数组 → 空对象按约定写 null（与 scanner 空数据语义一致）
+    const w600 = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000600') },
+    });
+    expect(w600?.rateCountDetail).toBeNull();
+    expect(w600?.rank).toBeNull();
   });
 });
 
