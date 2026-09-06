@@ -20,6 +20,7 @@ import {
 } from '../infra/db/main/schema.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
 import type { TrackNode } from '../infra/fs/utils.js';
+import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
   getProgressByWorks,
@@ -48,7 +49,7 @@ export interface UpsertWorkInput {
   rateCount?: number;
   rateAverage2dp?: number;
   rateCountDetail?: Record<string, number>;
-  rank?: Record<string, number>;
+  rank?: WorkRankEntry[];
   tags?: string[];
   vas?: Array<{ id: string; name: string }>;
   series?: { id: string; name: string } | null;
@@ -126,7 +127,10 @@ export async function upsertWork(
           rateCountDetail: input.rateCountDetail
             ? JSON.stringify(input.rateCountDetail)
             : existing.rateCountDetail,
-          rank: input.rank ? JSON.stringify(input.rank) : existing.rank,
+          rank:
+            input.rank && input.rank.length > 0
+              ? JSON.stringify(input.rank)
+              : existing.rank,
           language: input.language ?? existing.language,
           sourceId: input.sourceId ?? existing.sourceId,
         })
@@ -221,7 +225,8 @@ export async function upsertWork(
         rateCountDetail: input.rateCountDetail
           ? JSON.stringify(input.rateCountDetail)
           : '{}',
-        rank: input.rank ? JSON.stringify(input.rank) : null,
+        rank:
+          input.rank && input.rank.length > 0 ? JSON.stringify(input.rank) : null,
         language: input.language ?? null,
         sourceId: input.sourceId ?? null,
         seriesId: newSeriesId,
@@ -350,7 +355,7 @@ export interface FormattedWork {
   rate_count: number | null;
   rate_average_2dp: number | null;
   rate_count_detail: Record<string, number>;
-  rank: Record<string, number> | null;
+  rank: WorkRankEntry[] | null;
   tags: Array<{ id: number; name: string }>;
   vas: Array<{ id: string; name: string }>;
   series: { id: string; name: string } | null;

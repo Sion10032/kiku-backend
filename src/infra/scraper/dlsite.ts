@@ -23,6 +23,14 @@ export interface ScrapedSeries {
   name: string;
 }
 
+/** 榜单成绩条目：与 DLsite AJAX 原始形状一致，rank_date 保留（缺省 ''）。 */
+export interface WorkRankEntry {
+  term: string;
+  category: string;
+  rank: number;
+  rank_date: string;
+}
+
 export interface DLsiteWorkInfo {
   id: string;
   title: string;
@@ -37,7 +45,7 @@ export interface DLsiteWorkInfo {
   rateCount: number;
   rateAverage: number;
   rateCountDetail: Record<string, number>;
-  rank: Record<string, number>;
+  rank: WorkRankEntry[];
   tags: string[];
   vas: Array<{ id: string; name: string }>;
   series: { id: string; name: string } | null;
@@ -287,7 +295,12 @@ interface DLsiteAjaxItem {
   rate_average_2dp?: string | number;
   review_count?: string | number;
   rate_count_detail?: Array<{ review_point: number; count: number }>;
-  rank?: Array<{ term: string; category: string; rank: number }>;
+  rank?: Array<{
+    term: string;
+    category: string;
+    rank: number;
+    rank_date?: string;
+  }>;
 }
 
 interface DynamicWorkInfo {
@@ -297,7 +310,7 @@ interface DynamicWorkInfo {
   rateCount: number;
   rateAverage: number;
   rateCountDetail: Record<string, number>;
-  rank: Record<string, number>;
+  rank: WorkRankEntry[];
 }
 
 /** 从 DLsite AJAX API 抓取动态元数据（销量、价格、评分等）。 */
@@ -320,10 +333,19 @@ async function scrapeDynamicWorkInfo(
     rateCountDetail[String(detail.review_point)] = detail.count;
   }
 
-  // 榜单成绩: [{ term, category, rank }] -> { 'day_all': n, ... }
-  const rank: Record<string, number> = {};
+  // 榜单成绩: 保留 DLsite AJAX 原始数组形状 [{ term, category, rank, rank_date }]，
+  // 逐项规范化（term/category 非空字符串、rank 数字才收；rank_date 缺省补 ''）
+  const rank: WorkRankEntry[] = [];
   for (const entry of item.rank || []) {
-    rank[`${entry.term}_${entry.category}`] = entry.rank;
+    if (typeof entry?.term !== 'string' || !entry.term) continue;
+    if (typeof entry?.category !== 'string' || !entry.category) continue;
+    if (typeof entry?.rank !== 'number') continue;
+    rank.push({
+      term: entry.term,
+      category: entry.category,
+      rank: entry.rank,
+      rank_date: typeof entry.rank_date === 'string' ? entry.rank_date : '',
+    });
   }
 
   return {
@@ -404,7 +426,7 @@ export async function searchDLsite(keyword: string): Promise<DLsiteWorkInfo[]> {
         rateCount: 0,
         rateAverage: 0,
         rateCountDetail: {},
-        rank: {},
+        rank: [],
         tags: [],
         vas: [],
         series: null,

@@ -264,7 +264,16 @@ describe('fetchDLsiteWorkInfo（VJ 作品）', () => {
               rate_count: 5,
               rate_average_2dp: 4.5,
               rate_count_detail: [],
-              rank: [],
+              rank: [
+                { term: 'year', category: 'all', rank: 108, rank_date: '2012' },
+                {
+                  term: 'total',
+                  category: 'voice',
+                  rank: 427,
+                  rank_date: '2018-10-11',
+                },
+                { term: 'day', category: 'all', rank: 3 },
+              ],
             },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -294,6 +303,12 @@ describe('fetchDLsiteWorkInfo（VJ 作品）', () => {
         ),
       ).toBe(true);
       expect(urls.every((u) => !u.includes('maniax'))).toBe(true);
+      // rank 保持 DLsite AJAX 原始数组形状（保留 rank_date，缺省补 ''，非法项跳过）
+      expect(info.rank).toEqual([
+        { term: 'year', category: 'all', rank: 108, rank_date: '2012' },
+        { term: 'total', category: 'voice', rank: 427, rank_date: '2018-10-11' },
+        { term: 'day', category: 'all', rank: 3, rank_date: '' },
+      ]);
     } finally {
       globalThis.fetch = realFetch;
       setConfigForTesting(saved);

@@ -11,6 +11,7 @@ import {
   vaWork,
   works,
 } from '../infra/db/main/schema.js';
+import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
 
 export interface UpdateResult {
   workId: string;
@@ -36,7 +37,7 @@ export async function updateWorkMetadata(
     rateCount?: number;
     rateAverage2dp?: number;
     rateCountDetail?: Record<string, number>;
-    rank?: Record<string, number>;
+    rank?: WorkRankEntry[];
   },
 ): Promise<UpdateResult> {
   try {
@@ -87,7 +88,8 @@ export async function updateWorkMetadata(
       updateData.rateAverage2dp = metadata.rateAverage2dp;
     if (metadata.rateCountDetail)
       updateData.rateCountDetail = JSON.stringify(metadata.rateCountDetail);
-    if (metadata.rank) updateData.rank = JSON.stringify(metadata.rank);
+    if (metadata.rank && metadata.rank.length > 0)
+      updateData.rank = JSON.stringify(metadata.rank);
 
     if (Object.keys(updateData).length > 0) {
       await db

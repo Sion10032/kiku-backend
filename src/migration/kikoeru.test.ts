@@ -259,26 +259,29 @@ describe('migrateFromKikoeru（rate_count_detail / rank 归一化）', () => {
     }
   });
 
-  it('DLsite 原始数组 JSON → kiku record 形状；畸形 JSON → null', async () => {
+  it('DLsite 原始数组 JSON → kiku 原始数组形状（保留 rank_date）；畸形 JSON → null', async () => {
     await cleanNewDb();
     const sub = join(dir, 'rate');
     const old = makeOldDb(sub, 'vanilla');
-    // 旧库存的是 DLsite AJAX 原始数组（含 ratio / rank_date，需丢弃）
+    // 旧库存的是 DLsite AJAX 原始数组：rate_count_detail 的 ratio 需丢弃；
+    // rank 与 kiku 新契约同形状，rank_date 需完整保留（缺省补 ''）
     old.exec(`
       INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
         VALUES (400, 1, '同人音声', 'D/[RJ000400] 配信作品', '配信作品',
           '[{"review_point":1,"count":18,"ratio":1},{"review_point":2,"count":21,"ratio":2},{"review_point":3,"count":35,"ratio":3}]',
-          '[{"term":"year","category":"all","rank":108,"rank_date":"2012"},{"term":"total","category":"voice","rank":427,"rank_date":"2012"}]');
+          '[{"term":"year","category":"all","rank":108,"rank_date":"2012"},{"term":"total","category":"voice","rank":427,"rank_date":"2018-10-11"}]');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
         VALUES (500, 1, '同人音声', 'E/[RJ000500] 畸形作品', '畸形作品', 'not-json', '[{"term":"year","rank":1}]');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
         VALUES (600, 1, '同人音声', 'F/[RJ000600] 空数组作品', '空数组作品', '[]', '[]');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
+        VALUES (700, 1, '同人音声', 'G/[RJ000700] 缺日期作品', '缺日期作品', NULL, '[{"term":"year","category":"all","rank":5}]');
     `);
     old.close();
 
     const result = migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
-    expect(result.stats?.works).toBe(5);
+    expect(result.stats?.works).toBe(6);
 
     const w400 = await db.query.works.findFirst({
       where: { RAW: (t, op) => op.eq(t.id, 'RJ000400') },
@@ -290,27 +293,35 @@ describe('migrateFromKikoeru（rate_count_detail / rank 归一化）', () => {
       '2': 21,
       '3': 35,
     });
-    // rank: [{term,category,rank,rank_date}] → {"term_category": rank}（丢弃 rank_date）
+    // rank: 原始数组形状原样保留（含 rank_date）
     expect(typeof w400?.rank).toBe('string');
-    expect(JSON.parse(w400!.rank!)).toEqual({
-      year_all: 108,
-      total_voice: 427,
-    });
+    expect(JSON.parse(w400!.rank!)).toEqual([
+      { term: 'year', category: 'all', rank: 108, rank_date: '2012' },
+      { term: 'total', category: 'voice', rank: 427, rank_date: '2018-10-11' },
+    ]);
 
     // 畸形 JSON → 解析失败写 null（迁移本身不失败）
     const w500 = await db.query.works.findFirst({
       where: { RAW: (t, op) => op.eq(t.id, 'RJ000500') },
     });
     expect(w500?.rateCountDetail).toBeNull();
-    // rank 缺 category 的项被跳过 → 空对象按约定写 null
+    // rank 缺 category 的项被跳过 → 空数组按约定写 null
     expect(w500?.rank).toBeNull();
 
-    // 空数组 → 空对象按约定写 null（与 scanner 空数据语义一致）
+    // 空数组 → 按约定写 null（与 scanner 空数据语义一致）
     const w600 = await db.query.works.findFirst({
       where: { RAW: (t, op) => op.eq(t.id, 'RJ000600') },
     });
     expect(w600?.rateCountDetail).toBeNull();
     expect(w600?.rank).toBeNull();
+
+    // 缺 rank_date 的项 → 规范化补 ''（与爬虫输出形状一致）
+    const w700 = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000700') },
+    });
+    expect(JSON.parse(w700!.rank!)).toEqual([
+      { term: 'year', category: 'all', rank: 5, rank_date: '' },
+    ]);
   });
 });
 

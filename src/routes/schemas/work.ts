@@ -44,7 +44,17 @@ export const formattedWorkSchema = z.object({
   rate_count: z.number().nullable(),
   rate_average_2dp: z.number().nullable(),
   rate_count_detail: z.record(z.string(), z.number()),
-  rank: z.record(z.string(), z.number()).nullable(),
+  /** DLsite 榜单成绩原始数组形状（与爬虫/迁移存储同形状，含 rank_date） */
+  rank: z
+    .array(
+      z.object({
+        term: z.string(),
+        category: z.string(),
+        rank: z.number(),
+        rank_date: z.string(),
+      }),
+    )
+    .nullable(),
   tags: z.array(z.object({ id: z.number(), name: z.string() })),
   vas: z.array(z.object({ id: z.string(), name: z.string() })),
   series: seriesSchema.nullable(),

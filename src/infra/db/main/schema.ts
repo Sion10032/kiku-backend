@@ -30,6 +30,7 @@ export const works = sqliteTable('t_work', {
   rateCount: integer('rate_count'),
   rateAverage2dp: real('rate_average_2dp'),
   rateCountDetail: text('rate_count_detail'),
+  /** DLsite 榜单成绩 JSON 数组（[{term,category,rank,rank_date}]，与爬虫原始形状一致、保留 rank_date；迁移按同形状归一化存储；null = 无数据）。 */
   rank: text('rank'),
   language: text('language'),
   sourceId: text('source_id'),

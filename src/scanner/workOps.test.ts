@@ -22,7 +22,7 @@ mock.module('../infra/scraper/dlsite.js', () => ({
     tags: [],
     vas: [],
     rateCountDetail: {},
-    rank: {},
+    rank: [],
   }),
 }));
 mock.module('../services/cover.service.js', () => ({

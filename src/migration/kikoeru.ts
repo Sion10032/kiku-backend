@@ -18,6 +18,7 @@ import {
   works,
 } from '../infra/db/main/schema.js';
 import { extractWorkCode } from '../utils/rjcode.js';
+import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
 
 /** kikoeru 旧数据目录（与 config.databaseFolderDir 同规则解析） */
 export function getOldDataDir(): string {
@@ -157,11 +158,11 @@ function normalizeRateCountDetail(raw: unknown): Record<string, number> | null {
 
 /**
  * kikoeru 旧库 rank 存的是 DLsite AJAX 原始数组 JSON：
- * [{ term, category, rank, rank_date }] → kiku 契约 record { "term_category": rank }
- * （丢弃 rank_date；term/category 缺失的项跳过）。
- * 解析失败 / 形状不符 / 空对象 → null。
+ * [{ term, category, rank, rank_date }]，kiku 契约为同形状原始数组（保留 rank_date）。
+ * 逐项规范化：term/category 非空 string、rank number 才收；rank_date 缺省补 ''。
+ * 解析失败 / 形状不符 / 空数组 → null。
  */
-function normalizeRank(raw: unknown): Record<string, number> | null {
+function normalizeRank(raw: unknown): WorkRankEntry[] | null {
   if (typeof raw !== 'string' || !raw) return null;
   let parsed: unknown;
   try {
@@ -170,17 +171,23 @@ function normalizeRank(raw: unknown): Record<string, number> | null {
     return null;
   }
   if (!Array.isArray(parsed)) return null;
-  const out: Record<string, number> = {};
+  const out: WorkRankEntry[] = [];
   for (const item of parsed) {
     const term = (item as { term?: unknown })?.term;
     const category = (item as { category?: unknown })?.category;
     const rank = (item as { rank?: unknown })?.rank;
+    const rankDate = (item as { rank_date?: unknown })?.rank_date;
     if (typeof term !== 'string' || !term) continue;
     if (typeof category !== 'string' || !category) continue;
     if (typeof rank !== 'number') continue;
-    out[`${term}_${category}`] = rank;
+    out.push({
+      term,
+      category,
+      rank,
+      rank_date: typeof rankDate === 'string' ? rankDate : '',
+    });
   }
-  return Object.keys(out).length > 0 ? out : null;
+  return out.length > 0 ? out : null;
 }
 
 /** 执行迁移：门禁校验 → 主库事务 → 封面导入 + config 副作用 */
@@ -271,7 +278,8 @@ export function migrateFromKikoeru(
 
       // 3) works：ageRating 按旧库 nsfw 布尔列映射（真值 → 'r18'，假值/NULL → 'all'；
       //    旧库无 r15 信息不判定）；rescan 后 DLsite 元数据仍回写更精确的真实分级。
-      //    rate_count_detail/rank 由 DLsite 原始数组 JSON 归一化为 kiku record 再存 JSON 串
+      //    rate_count_detail 归一化为 kiku record；rank 保留 DLsite 原始数组形状
+      //    （含 rank_date），各自存 JSON 串
       const workValues = oldWorks
         .filter((w) => idMap.has(Number(w.id)))
         .map((w) => {

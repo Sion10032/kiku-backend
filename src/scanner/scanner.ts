@@ -189,7 +189,7 @@ export async function* syncWorkMetadata(
       Object.keys(metadata.rateCountDetail).length > 0
         ? metadata.rateCountDetail
         : undefined,
-    rank: Object.keys(metadata.rank).length > 0 ? metadata.rank : undefined,
+    rank: metadata.rank.length > 0 ? metadata.rank : undefined,
     tags: metadata.tags,
     vas: metadata.vas,
     series: metadata.series,
