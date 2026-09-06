@@ -1,4 +1,6 @@
+import { sql } from 'drizzle-orm';
 import {
+  index,
   integer,
   primaryKey,
   real,
@@ -11,34 +13,54 @@ export const circles = sqliteTable('t_circle', {
   name: text('name').notNull(),
 });
 
-export const works = sqliteTable('t_work', {
-  id: text('id').primaryKey(),
-  rootFolder: text('root_folder').notNull(),
-  dir: text('dir').notNull(),
-  title: text('title').notNull(),
-  circleId: integer('circle_id')
-    .notNull()
-    .references(() => circles.id),
-  /** 年龄分级：all 全年龄 / r15 / r18。迁移按旧库 nsfw 映射（真值 → 'r18'，假值/NULL → 'all'），rescan 后由 DLsite 元数据回写真实分级。 */
-  ageRating: text('age_rating', { enum: ['all', 'r15', 'r18'] })
-    .notNull()
-    .default('r18'),
-  release: text('release'),
-  dlCount: integer('dl_count'),
-  price: integer('price'),
-  reviewCount: integer('review_count'),
-  rateCount: integer('rate_count'),
-  rateAverage2dp: real('rate_average_2dp'),
-  rateCountDetail: text('rate_count_detail'),
-  /** DLsite 榜单成绩 JSON 数组（[{term,category,rank,rank_date}]，与爬虫原始形状一致、保留 rank_date；迁移按同形状归一化存储；null = 无数据）。 */
-  rank: text('rank'),
-  language: text('language'),
-  sourceId: text('source_id'),
-  /** 所属系列（最多一个，可空）。普通 FK：不级联删除（系列表不会被删除）。 */
-  seriesId: text('series_id').references(() => series.id),
-  /** 软删除标记（ISO 时间串，null = 正常）。源文件缺失时置位，超过宽限期后物理清理。 */
-  deletedAt: text('deleted_at'),
-});
+export const works = sqliteTable(
+  't_work',
+  {
+    id: text('id').primaryKey(),
+    rootFolder: text('root_folder').notNull(),
+    dir: text('dir').notNull(),
+    title: text('title').notNull(),
+    circleId: integer('circle_id')
+      .notNull()
+      .references(() => circles.id),
+    /** 年龄分级：all 全年龄 / r15 / r18。迁移按旧库 nsfw 映射（真值 → 'r18'，假值/NULL → 'all'），rescan 后由 DLsite 元数据回写真实分级。 */
+    ageRating: text('age_rating', { enum: ['all', 'r15', 'r18'] })
+      .notNull()
+      .default('r18'),
+    release: text('release'),
+    dlCount: integer('dl_count'),
+    price: integer('price'),
+    reviewCount: integer('review_count'),
+    rateCount: integer('rate_count'),
+    rateAverage2dp: real('rate_average_2dp'),
+    rateCountDetail: text('rate_count_detail'),
+    /** DLsite 榜单成绩 JSON 数组（[{term,category,rank,rank_date}]，与爬虫原始形状一致、保留 rank_date；迁移按同形状归一化存储；null = 无数据）。 */
+    rank: text('rank'),
+    language: text('language'),
+    sourceId: text('source_id'),
+    /** 所属系列（最多一个，可空）。普通 FK：不级联删除（系列表不会被删除）。 */
+    seriesId: text('series_id').references(() => series.id),
+    /** 软删除标记（ISO 时间串，null = 正常）。源文件缺失时置位，超过宽限期后物理清理。 */
+    deletedAt: text('deleted_at'),
+  },
+  (t) => [
+    // 列表端点按这些列排序且恒带 deleted_at IS NULL，用部分索引精确匹配查询形状；
+    // 排序索引让 SQLite 流式输出、取满一页即停（配合关系表索引消除逐行全表扫描）。
+    index('t_work_release_idx')
+      .on(t.release)
+      .where(sql`${t.deletedAt} is null`),
+    index('t_work_dl_count_idx')
+      .on(t.dlCount)
+      .where(sql`${t.deletedAt} is null`),
+    index('t_work_price_idx').on(t.price).where(sql`${t.deletedAt} is null`),
+    index('t_work_rate_average_2dp_idx')
+      .on(t.rateAverage2dp)
+      .where(sql`${t.deletedAt} is null`),
+    index('t_work_review_count_idx')
+      .on(t.reviewCount)
+      .where(sql`${t.deletedAt} is null`),
+  ],
+);
 
 export const tags = sqliteTable('t_tag', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -65,7 +87,12 @@ export const tagWork = sqliteTable(
       .notNull()
       .references(() => works.id, { onDelete: 'cascade' }),
   },
-  (t) => [primaryKey({ columns: [t.tagId, t.workId] })],
+  (t) => [
+    primaryKey({ columns: [t.tagId, t.workId] }),
+    // 关系列表按 work_id 过滤（drizzle 关系子查询 where d0.id = work_id）；
+    // 主键 (tag_id, work_id) 的第二列无法服务该查询，缺索引会逐行全表扫描。
+    index('r_tag_work_work_id_idx').on(t.workId),
+  ],
 );
 
 export const vaWork = sqliteTable(
@@ -78,7 +105,11 @@ export const vaWork = sqliteTable(
       .notNull()
       .references(() => works.id, { onDelete: 'cascade' }),
   },
-  (t) => [primaryKey({ columns: [t.vaId, t.workId] })],
+  (t) => [
+    primaryKey({ columns: [t.vaId, t.workId] }),
+    // 同 r_tag_work：主键第二列 work_id 无法服务按作品查声优的关联子查询。
+    index('r_va_work_work_id_idx').on(t.workId),
+  ],
 );
 
 export const users = sqliteTable('t_user', {
