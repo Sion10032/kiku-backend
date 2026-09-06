@@ -89,7 +89,7 @@ export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // 已迁移过（如上次提交迁移成功但初始化中断）→ 跳过迁移幂等收尾，
       // 避免「已迁移」门禁 409 永久挡住初始化
       if (request.body.migrateFromKikoeru && !getConfig().kikoeruMigratedAt) {
-        const migration = migrateFromKikoeru(getOldDataDir());
+        const migration = await migrateFromKikoeru(getOldDataDir());
         if (!migration.ok || !migration.stats) {
           return reply
             .status(409)
@@ -142,7 +142,7 @@ export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const result = migrateFromKikoeru(getOldDataDir());
+      const result = await migrateFromKikoeru(getOldDataDir());
       if (!result.ok || !result.stats) {
         return reply.status(409).send({ error: result.error ?? '迁移失败' });
       }

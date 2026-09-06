@@ -175,7 +175,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     old.close();
     writeOldConfig(forkDir);
 
-    const result = migrateFromKikoeru(forkDir);
+    const result = await migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
     expect(result.stats?.works).toBe(2);
     expect(result.stats?.worksSkipped).toBe(0);
@@ -227,7 +227,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     old.close();
     writeOldConfig(sub);
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
     expect(result.stats?.works).toBe(4);
 
@@ -252,7 +252,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     old.close();
     writeOldConfig(vanillaDir);
 
-    const result = migrateFromKikoeru(vanillaDir);
+    const result = await migrateFromKikoeru(vanillaDir);
     expect(result.ok).toBe(true);
     expect(result.stats?.works).toBe(2);
     expect(result.stats?.worksSkipped).toBe(1);
@@ -299,7 +299,7 @@ describe('migrateFromKikoeru（rate_count_detail / rank 归一化）', () => {
     old.close();
     writeOldConfig(sub);
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
     expect(result.stats?.works).toBe(6);
 
@@ -366,7 +366,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     old.close();
     writeOldConfig(forkDir);
 
-    const result = migrateFromKikoeru(forkDir);
+    const result = await migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
 
     const userRows = await db.select().from(users);
@@ -396,7 +396,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     old.close();
     writeOldConfig(forkDir);
 
-    const result = migrateFromKikoeru(forkDir);
+    const result = await migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
     expect(result.stats?.users).toBe(1);
     expect(result.stats?.usersSkipped).toBe(1);
@@ -414,7 +414,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     old.close();
     writeOldConfig(vanillaDir);
 
-    const result = migrateFromKikoeru(vanillaDir);
+    const result = await migrateFromKikoeru(vanillaDir);
     expect(result.ok).toBe(true);
     expect(result.stats?.readStates).toBe(0);
     expect(await db.select().from(readStates)).toHaveLength(0);
@@ -430,7 +430,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     old.close();
     writeOldConfig(vanillaDir);
 
-    const result = migrateFromKikoeru(vanillaDir);
+    const result = await migrateFromKikoeru(vanillaDir);
     expect(result.ok).toBe(true);
     expect(result.stats?.reviews).toBe(1);
     expect(result.stats?.reviewsSkipped).toBe(1);
@@ -465,11 +465,11 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const old = makeOldDb(sub, 'vanilla');
     old.close();
     writeOldConfig(sub);
-    expect(migrateFromKikoeru(sub).ok).toBe(true);
+    expect((await migrateFromKikoeru(sub)).ok).toBe(true);
 
     // 第二次：清空 works 模拟「新库已空但标记还在」→ 仍应被门禁 1 拒绝
     await db.delete(works);
-    const again = migrateFromKikoeru(sub);
+    const again = await migrateFromKikoeru(sub);
     expect(again.ok).toBe(false);
     expect(again.error).toContain('已迁移');
   });
@@ -484,7 +484,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const old = makeOldDb(sub, 'vanilla');
     old.close();
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(false);
     expect(result.error).toContain('非空');
     // 清理占位
@@ -503,7 +503,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     writeFileSync(join(coversDir, 'RJ000100_img_main.jpg'), Buffer.from('jpeg-bytes'));
     writeFileSync(join(coversDir, 'readme.txt'), 'not a cover');
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
     expect(result.stats?.coversImported).toBe(1);
 
@@ -538,7 +538,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
       'utf-8',
     );
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
 
     const cfg = getConfig();
@@ -560,7 +560,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const old = makeOldDb(sub, 'vanilla');
     old.close();
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(false);
     expect(result.error).toContain('config/config.json');
     // 拒绝发生在任何写入之前：新库无数据，config 无迁移标记
@@ -576,7 +576,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     mkdirSync(join(sub, 'config'), { recursive: true });
     writeFileSync(join(sub, 'config', 'config.json'), '{ broken json', 'utf-8');
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(false);
     expect(result.error).toContain('config/config.json');
     // 拒绝发生在任何写入之前：新库无数据，config 无迁移标记
@@ -606,7 +606,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
       'utf-8',
     );
 
-    const result = migrateFromKikoeru(sub);
+    const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
 
     const cfg = getConfig();
@@ -616,5 +616,64 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     expect(cfg.rootFolders.find((r) => r.name === 'bad')).toBeUndefined();
 
     rmSync(join(sub, 'config'), { recursive: true, force: true });
+  });
+});
+
+describe('migrateFromKikoeru 分批封面导入', () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = join(tmpdir(), `kiku-mig-batch-${Date.now().toString(36)}`);
+  });
+  afterAll(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* WAL 句柄 */
+    }
+  });
+
+  it('250 张封面分多批导入,进度单调递增且终值正确', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'batch');
+    const old = makeOldDb(sub, 'vanilla');
+    old.close();
+    writeOldConfig(sub);
+    // 单独 mkdir covers 写 250 张 1KB 封面（200/批 → 至少两批）
+    const coversDir = join(sub, 'covers');
+    mkdirSync(coversDir, { recursive: true });
+    const kb = Buffer.alloc(1024, 1);
+    for (let i = 1; i <= 250; i++) {
+      writeFileSync(join(coversDir, `RJ${String(i).padStart(6, '0')}_img_full.jpg`), kb);
+    }
+
+    const progress: { imported: number; total: number }[] = [];
+    const result = await migrateFromKikoeru(sub, (p) => progress.push({ ...p }));
+    expect(result.ok).toBe(true);
+    expect(result.stats?.coversImported).toBe(250);
+    expect(progress.length).toBeGreaterThanOrEqual(2); // 200/批 → 至少两批
+    expect(progress.at(-1)).toEqual({ imported: 250, total: 250 });
+    expect(
+      progress.every((p, i) => {
+        const prev = progress[i - 1];
+        return (
+          p.total === 250 && (i === 0 || (prev !== undefined && p.imported > prev.imported))
+        );
+      }),
+    ).toBe(true);
+    expect(getBlob('cover', 'RJ000100_full')).not.toBeNull(); // 首批
+    rmSync(coversDir, { recursive: true, force: true });
+  });
+
+  it('门禁失败（无旧 config）时进度回调零调用', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'gate-no-progress');
+    const old = makeOldDb(sub, 'vanilla');
+    old.close();
+
+    const progress: unknown[] = [];
+    const result = await migrateFromKikoeru(sub, (p) => progress.push(p));
+    expect(result.ok).toBe(false);
+    expect(progress.length).toBe(0);
   });
 });

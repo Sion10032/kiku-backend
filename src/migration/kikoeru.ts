@@ -1,11 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { getConfig, updateConfig } from '../infra/config/index.js';
 import type { Config } from '../infra/config/schema.js';
 import { db } from '../infra/db/main/index.js';
-import { putBlob } from '../infra/db/blob/index.js';
+import { putBlobs } from '../infra/db/blob/index.js';
+import type { BlobPut } from '../infra/db/blob/index.js';
 import {
   circles,
   readStates,
@@ -190,10 +192,21 @@ function normalizeRank(raw: unknown): WorkRankEntry[] | null {
   return out.length > 0 ? out : null;
 }
 
+/** 封面分批导入：每批最多 200 张或 32MB（先到为准），单事务写入，批间让出事件循环 */
+const COVER_BATCH_MAX_FILES = 200;
+const COVER_BATCH_MAX_BYTES = 32 * 1024 * 1024;
+const COVER_FILE_RE = /^((?:RJ|VJ)\d+)_img_(\w+)\.jpe?g$/i;
+
+export interface MigrationProgress {
+  imported: number;
+  total: number;
+}
+
 /** 执行迁移：门禁校验 → 主库事务 → 封面导入 + config 副作用 */
-export function migrateFromKikoeru(
+export async function migrateFromKikoeru(
   oldDataDir: string,
-): KikoeruMigrationResult {
+  onProgress?: (p: MigrationProgress) => void,
+): Promise<KikoeruMigrationResult> {
   const detection = detectKikoeruData(oldDataDir);
   if (!detection) {
     return {
@@ -426,15 +439,40 @@ export function migrateFromKikoeru(
 
     });
 
-    // 封面导入（独立于主库事务；putBlob 幂等 upsert）
+    // 封面导入（独立于主库事务；putBlobs 幂等 upsert，分批提交避免每张一次 fsync）
     const coversDir = join(oldDataDir, 'covers');
     if (existsSync(coversDir)) {
-      for (const f of readdirSync(coversDir)) {
-        const m = f.match(/^((?:RJ|VJ)\d+)_img_(\w+)\.jpe?g$/i);
+      const files = readdirSync(coversDir).filter((f) => COVER_FILE_RE.test(f));
+      let batch: BlobPut[] = [];
+      let batchBytes = 0;
+      const flush = async (): Promise<void> => {
+        putBlobs(batch);
+        stats.coversImported += batch.length;
+        batch = [];
+        batchBytes = 0;
+        onProgress?.({ imported: stats.coversImported, total: files.length });
+        // 让出事件循环：批间 flush SSE 事件，保持服务响应
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      };
+      for (const f of files) {
+        const m = f.match(COVER_FILE_RE);
         if (!m) continue;
-        putBlob('cover', `${m[1]}_${m[2]}`, readFileSync(join(coversDir, f)), 'image/jpeg');
-        stats.coversImported++;
+        const data = await readFile(join(coversDir, f));
+        batch.push({
+          namespace: 'cover',
+          key: `${m[1]}_${m[2]}`,
+          data,
+          mimeType: 'image/jpeg',
+        });
+        batchBytes += data.byteLength;
+        if (
+          batch.length >= COVER_BATCH_MAX_FILES ||
+          batchBytes >= COVER_BATCH_MAX_BYTES
+        ) {
+          await flush();
+        }
       }
+      if (batch.length > 0) await flush();
     }
 
     // config 副作用：md5secret 覆盖（保旧密码可用）+ rootFolders 按 name 合并 + 迁移标记

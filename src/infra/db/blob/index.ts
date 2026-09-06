@@ -49,6 +49,29 @@ export interface BlobRecord {
   size: number;
 }
 
+/** putBlob/putBlobs 共用的单条 upsert（db 可为主连接或事务） */
+function upsertBlob(
+  exec: Pick<typeof blobDb, 'insert'>,
+  namespace: string,
+  key: string,
+  data: Buffer,
+  mimeType: string | null,
+): void {
+  exec
+    .insert(blobs)
+    .values({ namespace, key, data, mimeType, size: data.byteLength })
+    .onConflictDoUpdate({
+      target: [blobs.namespace, blobs.key],
+      set: {
+        data,
+        mimeType,
+        size: data.byteLength,
+        createdAt: sql`(datetime('now'))`,
+      },
+    })
+    .run();
+}
+
 /**
  * 写入（或覆盖）一条二进制记录
  * @param namespace 命名空间（如 'cover'）
@@ -62,20 +85,24 @@ export function putBlob(
   data: Buffer,
   mimeType?: string,
 ): void {
-  const mime = mimeType ?? null;
-  blobDb
-    .insert(blobs)
-    .values({ namespace, key, data, mimeType: mime, size: data.byteLength })
-    .onConflictDoUpdate({
-      target: [blobs.namespace, blobs.key],
-      set: {
-        data,
-        mimeType: mime,
-        size: data.byteLength,
-        createdAt: sql`(datetime('now'))`,
-      },
-    })
-    .run();
+  upsertBlob(blobDb, namespace, key, data, mimeType ?? null);
+}
+
+export interface BlobPut {
+  namespace: string;
+  key: string;
+  data: Buffer;
+  mimeType?: string;
+}
+
+/** 批量写入：单事务逐条 upsert（迁移封面分批导入用，避免每张一次 commit/fsync） */
+export function putBlobs(entries: BlobPut[]): void {
+  if (entries.length === 0) return;
+  blobDb.transaction((tx) => {
+    for (const e of entries) {
+      upsertBlob(tx, e.namespace, e.key, e.data, e.mimeType ?? null);
+    }
+  });
 }
 
 /**
