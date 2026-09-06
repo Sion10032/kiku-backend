@@ -31,11 +31,10 @@ export interface JwtPayload {
 /** 私有模式下匿名可访问的白名单路径 */
 const PUBLIC_PATHS = [
   '/api/auth/login',
-  '/api/auth/setup',
   '/api/auth/register',
   '/api/health',
   '/api/config/shared',
-  '/api/setup/migration',
+  '/api/setup',
 ];
 
 /** token 提取：Authorization header → URL 查询参数 token（媒体资源等无法带 header 的场景） */

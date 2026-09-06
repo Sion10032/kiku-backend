@@ -22,7 +22,7 @@ import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
 import { scannerRoutes } from './routes/scanner.js';
 import { settingsBackupRoutes } from './routes/settingsBackup.js';
-import { setupMigrationRoutes } from './routes/setupMigration.js';
+import { setupRoutes } from './routes/setup.js';
 import { versionRoutes } from './routes/version.js';
 import { workAdminRoutes } from './routes/workAdmin.js';
 
@@ -58,7 +58,7 @@ export async function buildApp() {
   await app.register(configRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
   await app.register(scannerRoutes, { prefix: '/api/scanner' });
-  await app.register(setupMigrationRoutes, { prefix: '/api/setup/migration' });
+  await app.register(setupRoutes, { prefix: '/api/setup' });
 
   return app;
 }

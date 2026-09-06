@@ -1,11 +1,30 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { signToken } from '../auth/utils.js';
 import { getConfig } from '../infra/config/index.js';
 import {
   detectKikoeruData,
   getOldDataDir,
   migrateFromKikoeru,
 } from '../migration/kikoeru.js';
+import { setupInstance } from '../services/auth.service.js';
+import { getUsers } from '../services/user.service.js';
+
+const loginSchema = z.object({
+  name: z.string().min(4),
+  password: z.string().min(5),
+});
+
+const setupSchema = loginSchema.extend({
+  instanceMode: z.enum(['private', 'public']),
+  allowRegistration: z.boolean(),
+});
+
+const authResponseSchema = z.object({
+  token: z.string(),
+  name: z.string(),
+  group: z.string(),
+});
 
 const statsSchema = z.object({
   works: z.number(),
@@ -32,10 +51,47 @@ const migrationStatsSchema = z.object({
   coversImported: z.number(),
 });
 
-/** Setup 向导迁移步骤：status 探测 + run 执行（均白名单免鉴权，仅空库有意义） */
-export const setupMigrationRoutes: FastifyPluginAsyncZod = async (fastify) => {
+/** Setup 首次部署向导：守卫 / 提交 / 旧数据迁移（均免鉴权，白名单收敛到 /api/setup） */
+export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // Setup 状态守卫：用户表是否为空
   fastify.get(
-    '/status',
+    '/',
+    {
+      schema: {
+        response: {
+          200: z.object({ needed: z.boolean() }),
+        },
+      },
+    },
+    async () => {
+      const existing = await getUsers();
+      return { needed: existing.length === 0 };
+    },
+  );
+
+  // Setup 提交：创建管理员 + 写入实例配置，返回登录态
+  fastify.post(
+    '/',
+    {
+      schema: {
+        body: setupSchema,
+        response: {
+          200: authResponseSchema,
+          403: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const result = await setupInstance(request.body);
+      if (!result)
+        return reply.status(403).send({ error: 'Setup already completed' });
+      return { token: signToken(fastify, result), ...result };
+    },
+  );
+
+  // 旧数据迁移：status 探测
+  fastify.get(
+    '/migration/status',
     {
       schema: {
         response: {
@@ -60,8 +116,9 @@ export const setupMigrationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // 旧数据迁移：run 执行
   fastify.post(
-    '/run',
+    '/migration/run',
     {
       schema: {
         response: {

@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import { buildApp } from '../app.js';
 import { getConfig, setConfigForTesting } from '../infra/config/index.js';
 import { db } from '../infra/db/main/index.js';
+import { users } from '../infra/db/main/schema.js';
 import { makeOldDb } from '../migration/kikoeru.test.js';
 
 setupTestEnvironment();
@@ -63,5 +64,47 @@ describe('setup migration routes', () => {
       url: '/api/setup/migration/status',
     });
     expect(res.statusCode).not.toBe(401);
+  });
+
+  it('GET /api/setup：空库 → needed=true；POST 创建管理员返回登录态；重复提交 403', async () => {
+    // 清空用户表回到未初始化状态（reviews/readStates 对 t_user 级联删除）
+    await db.delete(users);
+    setConfigForTesting({
+      ...getConfig(),
+      kikoeruMigratedAt: undefined,
+      kikoeruSetupConsumed: undefined,
+    });
+
+    const before = await app.inject({ method: 'GET', url: '/api/setup' });
+    expect(before.statusCode).toBe(200);
+    expect(before.json().needed).toBe(true);
+
+    const input = {
+      name: 'admin',
+      password: 'admin-password',
+      instanceMode: 'private',
+      allowRegistration: false,
+    };
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/setup',
+      payload: input,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(typeof body.token).toBe('string');
+    expect(body.name).toBe('admin');
+    expect(body.group).toBe('administrator');
+
+    const after = await app.inject({ method: 'GET', url: '/api/setup' });
+    expect(after.json().needed).toBe(false);
+
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/setup',
+      payload: input,
+    });
+    expect(again.statusCode).toBe(403);
+    expect(again.json().error).toBe('Setup already completed');
   });
 });

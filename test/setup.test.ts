@@ -61,16 +61,16 @@ describe('Setup / Register / Private-mode', () => {
     await app.close();
   });
 
-  it('GET /api/auth/setup：空库 → needed = true', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/auth/setup' });
+  it('GET /api/setup：空库 → needed = true', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/setup' });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.payload)).toEqual({ needed: true });
   });
 
-  it('POST /api/auth/setup：创建管理员 + 写配置 + 返回登录态', async () => {
+  it('POST /api/setup：创建管理员 + 写配置 + 返回登录态', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/auth/setup',
+      url: '/api/setup',
       payload: {
         name: ADMIN,
         password: 'admin-pass-123',
@@ -91,13 +91,13 @@ describe('Setup / Register / Private-mode', () => {
     expect(getConfig().allowRegistration).toBe(true);
   });
 
-  it('GET /api/auth/setup：非空库 → needed = false；重复 POST → 403', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/auth/setup' });
+  it('GET /api/setup：非空库 → needed = false；重复 POST → 403', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/setup' });
     expect(JSON.parse(res.payload)).toEqual({ needed: false });
 
     const post = await app.inject({
       method: 'POST',
-      url: '/api/auth/setup',
+      url: '/api/setup',
       payload: {
         name: `other_${RUN}`,
         password: 'whatever-123',

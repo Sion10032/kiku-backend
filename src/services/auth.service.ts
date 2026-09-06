@@ -81,7 +81,7 @@ export async function setupInstance(input: {
   updateConfig({
     instanceMode: input.instanceMode,
     allowRegistration: input.allowRegistration,
-    // 迁移分支的一次性消费：此后 /api/auth/setup 对迁移用户永久关闭
+    // 迁移分支的一次性消费：此后 /api/setup 对迁移用户永久关闭
     kikoeruSetupConsumed: true,
   });
   return { name: input.name, group: 'administrator' };
