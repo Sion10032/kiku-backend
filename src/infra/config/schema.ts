@@ -46,6 +46,8 @@ export const configSchema = sharedConfigSchema.extend({
   httpsCert: z.string().default('kikoeru.crt'),
   httpsPort: z.number().default(8443),
   skipCleanup: z.boolean().default(false),
+  /** kikoeru 旧数据迁移完成时刻（ISO 8601）；存在即不再迁移。 */
+  kikoeruMigratedAt: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

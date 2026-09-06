@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { type Config, configSchema, sharedConfigSchema } from './schema.js';
@@ -7,10 +8,8 @@ const CONFIG_PATH = process.env.CONFIG_PATH || './data/config.json';
 let config: Config;
 
 function generateSecret(): string {
-  return (
-    Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15)
-  );
+  // 与 kikoeru 一致：64 位 hex、加密安全随机（原 Math.random 拼接非加密安全）
+  return randomBytes(32).toString('hex');
 }
 
 function loadConfig(): Config {
