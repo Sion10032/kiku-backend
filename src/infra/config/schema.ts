@@ -48,6 +48,8 @@ export const configSchema = sharedConfigSchema.extend({
   skipCleanup: z.boolean().default(false),
   /** kikoeru 旧数据迁移完成时刻（ISO 8601）；存在即不再迁移。 */
   kikoeruMigratedAt: z.string().optional(),
+  /** 迁移后向导管理员创建已消费；不放 sharedConfigSchema */
+  kikoeruSetupConsumed: z.boolean().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

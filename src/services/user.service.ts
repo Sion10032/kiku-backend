@@ -32,6 +32,10 @@ export async function createUser(data: {
   return getUserByName(data.name);
 }
 
+export async function updateUserGroup(name: string, group: string) {
+  await db.update(users).set({ group }).where(eq(users.name, name));
+}
+
 export async function updateUserPassword(name: string, newPassword: string) {
   await db
     .update(users)

@@ -430,4 +430,36 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     expect(result.ok).toBe(true);
     expect(getConfig().kikoeruMigratedAt).toBeTruthy();
   });
+
+  it('旧 config 畸形值（path 非字符串 / md5secret 非字符串）按不存在跳过，不砖死迁移', async () => {
+    await cleanNewDb();
+    // 预置基线 md5secret，断言畸形值未覆盖（前一用例可能已改写 config）
+    setConfigForTesting({ ...getConfig(), md5secret: 'baseline-md5' });
+    const sub = join(dir, 'malformed-config');
+    const old = makeOldDb(sub, 'vanilla');
+    old.close();
+    mkdirSync(join(sub, 'config'), { recursive: true });
+    writeFileSync(
+      join(sub, 'config', 'config.json'),
+      JSON.stringify({
+        md5secret: 12345, // 非字符串 → 不并入
+        rootFolders: [
+          { name: 'bad', path: 123 }, // path 非字符串 → 丢弃
+          { name: 'good', path: '/valid/path' }, // 合法 → 并入
+        ],
+      }),
+      'utf-8',
+    );
+
+    const result = migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+
+    const cfg = getConfig();
+    expect(cfg.kikoeruMigratedAt).toBeTruthy();
+    expect(cfg.md5secret).toBe('baseline-md5'); // 畸形 md5secret 未并入
+    expect(cfg.rootFolders.find((r) => r.name === 'good')?.path).toBe('/valid/path');
+    expect(cfg.rootFolders.find((r) => r.name === 'bad')).toBeUndefined();
+
+    rmSync(join(sub, 'config'), { recursive: true, force: true });
+  });
 });

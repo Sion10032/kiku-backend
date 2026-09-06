@@ -1,6 +1,12 @@
 import { hashPassword, verifyPassword } from '../auth/utils.js';
 import { getConfig, updateConfig } from '../infra/config/index.js';
-import { createUser, getUserByName, getUsers } from './user.service.js';
+import {
+  createUser,
+  getUserByName,
+  getUsers,
+  updateUserGroup,
+  updateUserPassword,
+} from './user.service.js';
 
 export interface AuthUser {
   name: string;
@@ -36,7 +42,10 @@ export async function register(
   return { ok: true, user: { name, group: 'user' } };
 }
 
-/** 首次初始化：建管理员 + 写实例配置；已初始化返回 null（route 映射 403） */
+/** 首次初始化：建管理员 + 写实例配置。
+ * 用户表空 → 新建；非空但来自 kikoeru 迁移（config 有标记且未消费）→ 同名改密提权 / 不同名新建，
+ * 成功后写入 kikoeruSetupConsumed，此后迁移分支不可再用（一次性消费，防无限期重置提权）；
+ * 其余（真已初始化 / 已消费）返回 null（route 映射 403）。 */
 export async function setupInstance(input: {
   name: string;
   password: string;
@@ -44,15 +53,36 @@ export async function setupInstance(input: {
   allowRegistration: boolean;
 }): Promise<AuthUser | null> {
   const existing = await getUsers();
-  if (existing.length > 0) return null;
-  await createUser({
-    name: input.name,
-    password: hashPassword(input.password),
-    group: 'administrator',
-  });
+  if (existing.length === 0) {
+    await createUser({
+      name: input.name,
+      password: hashPassword(input.password),
+      group: 'administrator',
+    });
+  } else if (
+    getConfig().kikoeruMigratedAt && !getConfig().kikoeruSetupConsumed
+  ) {
+    const same = await getUserByName(input.name);
+    if (same) {
+      await updateUserPassword(input.name, hashPassword(input.password));
+      if (same.group !== 'administrator') {
+        await updateUserGroup(input.name, 'administrator');
+      }
+    } else {
+      await createUser({
+        name: input.name,
+        password: hashPassword(input.password),
+        group: 'administrator',
+      });
+    }
+  } else {
+    return null;
+  }
   updateConfig({
     instanceMode: input.instanceMode,
     allowRegistration: input.allowRegistration,
+    // 迁移分支的一次性消费：此后 /api/auth/setup 对迁移用户永久关闭
+    kikoeruSetupConsumed: true,
   });
   return { name: input.name, group: 'administrator' };
 }

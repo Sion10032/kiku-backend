@@ -355,18 +355,29 @@ export function migrateFromKikoeru(
     const oldConfigPath = join(oldDataDir, 'config', 'config.json');
     if (existsSync(oldConfigPath)) {
       try {
+        // 旧 config.json 是用户可手改的文件：值类型畸形按「不存在」跳过，
+        // 避免 updateConfig 内 configSchema.parse 在主库事务提交后抛错 → 返回
+        // ok=false 且门禁 2（works 非空）从此永久拒绝重跑（迁移砖死）
         const oldConfig = JSON.parse(readFileSync(oldConfigPath, 'utf-8')) as {
-          md5secret?: string;
-          rootFolders?: { name: string; path: string }[];
+          md5secret?: unknown;
+          rootFolders?: unknown;
         };
-        if (oldConfig.md5secret) updates.md5secret = oldConfig.md5secret;
+        if (typeof oldConfig.md5secret === 'string' && oldConfig.md5secret) {
+          updates.md5secret = oldConfig.md5secret;
+        }
         if (Array.isArray(oldConfig.rootFolders)) {
           const existingNames = new Set(
             getConfig().rootFolders.map((r) => r.name),
           );
-          const additions = oldConfig.rootFolders.filter(
-            (r) => !existingNames.has(r.name),
-          );
+          const additions = (oldConfig.rootFolders as unknown[])
+            .filter(
+              (r): r is { name: string; path: string } =>
+                !!r &&
+                typeof (r as { name?: unknown }).name === 'string' &&
+                !!(r as { name?: unknown }).name &&
+                typeof (r as { path?: unknown }).path === 'string',
+            )
+            .filter((r) => !existingNames.has(r.name));
           if (additions.length) {
             updates.rootFolders = [...getConfig().rootFolders, ...additions];
           }
