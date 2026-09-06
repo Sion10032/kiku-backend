@@ -18,6 +18,7 @@ const loginSchema = z.object({
 const setupSchema = loginSchema.extend({
   instanceMode: z.enum(['private', 'public']),
   allowRegistration: z.boolean(),
+  migrateFromKikoeru: z.boolean().optional(),
 });
 
 const authResponseSchema = z.object({
@@ -69,7 +70,7 @@ export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Setup 提交：创建管理员 + 写入实例配置，返回登录态
+  // Setup 提交：可选迁移 kikoeru 旧数据 + 创建管理员 + 写入实例配置，返回登录态
   fastify.post(
     '/',
     {
@@ -78,10 +79,23 @@ export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: authResponseSchema,
           403: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
         },
       },
     },
     async (request, reply) => {
+      // 迁移随初始化一并执行：先迁移（写入 kikoeruMigratedAt 与用户），
+      // setupInstance 的迁移分支天然接管同名改密/新建管理员。
+      // 已迁移过（如上次提交迁移成功但初始化中断）→ 跳过迁移幂等收尾，
+      // 避免「已迁移」门禁 409 永久挡住初始化
+      if (request.body.migrateFromKikoeru && !getConfig().kikoeruMigratedAt) {
+        const migration = migrateFromKikoeru(getOldDataDir());
+        if (!migration.ok || !migration.stats) {
+          return reply
+            .status(409)
+            .send({ error: migration.error ?? 'Migration failed' });
+        }
+      }
       const result = await setupInstance(request.body);
       if (!result)
         return reply.status(403).send({ error: 'Setup already completed' });

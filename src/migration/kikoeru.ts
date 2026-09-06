@@ -211,6 +211,23 @@ export function migrateFromKikoeru(
   if ((workCount?.c ?? 0) > 0) {
     return { ok: false, error: '当前数据库非空，仅支持在空库上执行迁移' };
   }
+  // 门禁 3：旧 config.json 必须存在且可解析——没有旧配置就拿不到 md5secret，
+  // 迁移后全部旧账号密码会失效（「迁一半」的坏状态），故直接拒绝。
+  // 读取解析在门禁处做一次，后续 config 副作用直接用解析结果。
+  const oldConfigPath = join(oldDataDir, 'config', 'config.json');
+  let oldConfig: { md5secret?: unknown; rootFolders?: unknown };
+  try {
+    oldConfig = JSON.parse(readFileSync(oldConfigPath, 'utf-8')) as {
+      md5secret?: unknown;
+      rootFolders?: unknown;
+    };
+  } catch {
+    return {
+      ok: false,
+      error:
+        'old-data 缺少可解析的 config/config.json，无法迁移（需要旧配置中的密钥与根目录设置）',
+    };
+  }
 
   const old = openOldDb(oldDataDir);
   if (!old) return { ok: false, error: '旧数据库无法打开' };
@@ -421,41 +438,28 @@ export function migrateFromKikoeru(
     }
 
     // config 副作用：md5secret 覆盖（保旧密码可用）+ rootFolders 按 name 合并 + 迁移标记
+    // （oldConfig 已在门禁 3 解析成功；这里只做值级容错：旧 config.json 是用户可
+    // 手改的文件，md5secret/rootFolders 值类型畸形按「不存在」跳过，避免
+    // updateConfig 内 configSchema.parse 抛错 → ok=false 且门禁 2 从此永久拒绝重跑）
     const updates: Partial<Config> = {
       kikoeruMigratedAt: new Date().toISOString(),
     };
-    const oldConfigPath = join(oldDataDir, 'config', 'config.json');
-    if (existsSync(oldConfigPath)) {
-      try {
-        // 旧 config.json 是用户可手改的文件：值类型畸形按「不存在」跳过，
-        // 避免 updateConfig 内 configSchema.parse 在主库事务提交后抛错 → 返回
-        // ok=false 且门禁 2（works 非空）从此永久拒绝重跑（迁移砖死）
-        const oldConfig = JSON.parse(readFileSync(oldConfigPath, 'utf-8')) as {
-          md5secret?: unknown;
-          rootFolders?: unknown;
-        };
-        if (typeof oldConfig.md5secret === 'string' && oldConfig.md5secret) {
-          updates.md5secret = oldConfig.md5secret;
-        }
-        if (Array.isArray(oldConfig.rootFolders)) {
-          const existingNames = new Set(
-            getConfig().rootFolders.map((r) => r.name),
-          );
-          const additions = (oldConfig.rootFolders as unknown[])
-            .filter(
-              (r): r is { name: string; path: string } =>
-                !!r &&
-                typeof (r as { name?: unknown }).name === 'string' &&
-                !!(r as { name?: unknown }).name &&
-                typeof (r as { path?: unknown }).path === 'string',
-            )
-            .filter((r) => !existingNames.has(r.name));
-          if (additions.length) {
-            updates.rootFolders = [...getConfig().rootFolders, ...additions];
-          }
-        }
-      } catch {
-        // 旧 config 损坏不阻断迁移，仅跳过 config 副作用
+    if (typeof oldConfig.md5secret === 'string' && oldConfig.md5secret) {
+      updates.md5secret = oldConfig.md5secret;
+    }
+    if (Array.isArray(oldConfig.rootFolders)) {
+      const existingNames = new Set(getConfig().rootFolders.map((r) => r.name));
+      const additions = (oldConfig.rootFolders as unknown[])
+        .filter(
+          (r): r is { name: string; path: string } =>
+            !!r &&
+            typeof (r as { name?: unknown }).name === 'string' &&
+            !!(r as { name?: unknown }).name &&
+            typeof (r as { path?: unknown }).path === 'string',
+        )
+        .filter((r) => !existingNames.has(r.name));
+      if (additions.length) {
+        updates.rootFolders = [...getConfig().rootFolders, ...additions];
       }
     }
     updateConfig(updates);

@@ -80,6 +80,22 @@ export function makeOldDb(
   return db;
 }
 
+/** 写一份合法的旧 config.json（成功迁移必需：门禁要求可解析出 md5secret 等旧配置） */
+export function writeOldConfig(
+  oldDataDir: string,
+  config: Record<string, unknown> = {
+    version: '0.6.14',
+    md5secret: 'old-md5-secret',
+  },
+) {
+  mkdirSync(join(oldDataDir, 'config'), { recursive: true });
+  writeFileSync(
+    join(oldDataDir, 'config', 'config.json'),
+    JSON.stringify(config),
+    'utf-8',
+  );
+}
+
 describe('detectKikoeruData', () => {
   let dir: string;
 
@@ -157,6 +173,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     const forkDir = join(dir, 'fork');
     const old = makeOldDb(forkDir, 'number178-fork');
     old.close();
+    writeOldConfig(forkDir);
 
     const result = migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
@@ -208,6 +225,7 @@ describe('migrateFromKikoeru（元数据）', () => {
         VALUES (800, 1, '同人音声', 'H/[RJ000800] NULL作品', 'NULL作品', NULL);
     `);
     old.close();
+    writeOldConfig(sub);
 
     const result = migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
@@ -232,6 +250,7 @@ describe('migrateFromKikoeru（元数据）', () => {
       `INSERT INTO t_work (id, circle_id, root_folder, dir, title) VALUES (300, 1, '同人音声', 'C/提取不出码的作品', 'x')`,
     );
     old.close();
+    writeOldConfig(vanillaDir);
 
     const result = migrateFromKikoeru(vanillaDir);
     expect(result.ok).toBe(true);
@@ -278,6 +297,7 @@ describe('migrateFromKikoeru（rate_count_detail / rank 归一化）', () => {
         VALUES (700, 1, '同人音声', 'G/[RJ000700] 缺日期作品', '缺日期作品', NULL, '[{"term":"year","category":"all","rank":5}]');
     `);
     old.close();
+    writeOldConfig(sub);
 
     const result = migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
@@ -344,6 +364,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     const forkDir = join(dir, 'fork4');
     const old = makeOldDb(forkDir, 'number178-fork');
     old.close();
+    writeOldConfig(forkDir);
 
     const result = migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
@@ -373,6 +394,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     const forkDir = join(dir, 'fork-skip');
     const old = makeOldDb(forkDir, 'number178-fork');
     old.close();
+    writeOldConfig(forkDir);
 
     const result = migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
@@ -390,6 +412,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     const vanillaDir = join(dir, 'vanilla-rs');
     const old = makeOldDb(vanillaDir, 'vanilla');
     old.close();
+    writeOldConfig(vanillaDir);
 
     const result = migrateFromKikoeru(vanillaDir);
     expect(result.ok).toBe(true);
@@ -405,6 +428,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
       `INSERT INTO t_review (user_name, work_id, rating, review_text) VALUES ('user1', '999', 3, '孤儿评论')`,
     );
     old.close();
+    writeOldConfig(vanillaDir);
 
     const result = migrateFromKikoeru(vanillaDir);
     expect(result.ok).toBe(true);
@@ -440,6 +464,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const sub = join(dir, 'gate1');
     const old = makeOldDb(sub, 'vanilla');
     old.close();
+    writeOldConfig(sub);
     expect(migrateFromKikoeru(sub).ok).toBe(true);
 
     // 第二次：清空 works 模拟「新库已空但标记还在」→ 仍应被门禁 1 拒绝
@@ -472,6 +497,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const sub = join(dir, 'covers');
     const old = makeOldDb(sub, 'vanilla');
     old.close();
+    writeOldConfig(sub);
     const coversDir = join(sub, 'covers');
     mkdirSync(coversDir, { recursive: true });
     writeFileSync(join(coversDir, 'RJ000100_img_main.jpg'), Buffer.from('jpeg-bytes'));
@@ -528,15 +554,36 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     rmSync(join(sub, 'config'), { recursive: true, force: true });
   });
 
-  it('old-data 无 config.json 也能迁移（仅写标记）', async () => {
+  it('old-data 无 config.json → 拒绝迁移（需旧配置迁移密钥与根目录）', async () => {
     await cleanNewDb();
     const sub = join(dir, 'no-config');
     const old = makeOldDb(sub, 'vanilla');
     old.close();
 
     const result = migrateFromKikoeru(sub);
-    expect(result.ok).toBe(true);
-    expect(getConfig().kikoeruMigratedAt).toBeTruthy();
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('config/config.json');
+    // 拒绝发生在任何写入之前：新库无数据，config 无迁移标记
+    expect(await db.select().from(works)).toHaveLength(0);
+    expect(getConfig().kikoeruMigratedAt).toBeUndefined();
+  });
+
+  it('config.json 存在但 JSON 损坏 → 同样拒绝迁移', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'corrupt-config');
+    const old = makeOldDb(sub, 'vanilla');
+    old.close();
+    mkdirSync(join(sub, 'config'), { recursive: true });
+    writeFileSync(join(sub, 'config', 'config.json'), '{ broken json', 'utf-8');
+
+    const result = migrateFromKikoeru(sub);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('config/config.json');
+    // 拒绝发生在任何写入之前：新库无数据，config 无迁移标记
+    expect(await db.select().from(works)).toHaveLength(0);
+    expect(getConfig().kikoeruMigratedAt).toBeUndefined();
+
+    rmSync(join(sub, 'config'), { recursive: true, force: true });
   });
 
   it('旧 config 畸形值（path 非字符串 / md5secret 非字符串）按不存在跳过，不砖死迁移', async () => {
