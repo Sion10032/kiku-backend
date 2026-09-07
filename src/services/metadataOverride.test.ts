@@ -21,6 +21,8 @@ import {
   workMetaOverride,
 } from '../infra/db/main/schema.js';
 import {
+  applyEffective,
+  type EffectiveWork,
   getOverride,
   OverrideNotFoundError,
   resetField,
@@ -136,5 +138,84 @@ describe('saveOverride / getOverride', () => {
     expect(saveOverride('RJ99999999', { title: 'x' })).rejects.toThrow(
       OverrideNotFoundError,
     );
+  });
+});
+
+describe('applyEffective', () => {
+  it('空数组直接返回；无覆盖的作品零改动', async () => {
+    await applyEffective([]);
+    const items: EffectiveWork[] = [
+      {
+        id: OVR.w2,
+        title: `标题乙_${OVR.base}`,
+        circle: { id: 1, name: OVR.circleA },
+        series: null,
+        ageRating: 'all',
+        tags: [],
+        vas: [],
+      },
+    ];
+    await applyEffective(items);
+    expect(items[0]?.title).toBe(`标题乙_${OVR.base}`);
+    expect(items[0]?.overriddenFields).toBeUndefined();
+  });
+
+  it('标量替换 + tags delta 合并（原列表 − remove + add 追加）', async () => {
+    await saveOverride(OVR.w1, {
+      title: `标题_override_${OVR.base}`,
+      removeTagIds: [await tagIdByName(OVR.tagX)],
+      addTags: [`标签Z_${OVR.base}`],
+    });
+    const items: EffectiveWork[] = [
+      {
+        id: OVR.w1,
+        title: `标题甲_${OVR.base}`,
+        circle: { id: 1, name: OVR.circleA },
+        series: null,
+        ageRating: 'all',
+        tags: [
+          { id: await tagIdByName(OVR.tagX), name: OVR.tagX },
+          { id: await tagIdByName(OVR.tagY), name: OVR.tagY },
+        ],
+        vas: [],
+      },
+      {
+        id: OVR.w2,
+        title: `标题乙_${OVR.base}`,
+        circle: { id: 1, name: OVR.circleA },
+        series: null,
+        ageRating: 'all',
+        tags: [],
+        vas: [],
+      },
+    ];
+    await applyEffective(items);
+    expect(items[0]?.title).toBe(`标题_override_${OVR.base}`);
+    expect(items[0]?.tags.map((t) => t.name)).toEqual([
+      OVR.tagY,
+      `标签Z_${OVR.base}`,
+    ]);
+    expect(items[0]?.overriddenFields).toEqual(['title', 'tags']);
+    expect(items[1]?.overriddenFields).toBeUndefined(); // 无覆盖行 → 未标记未改动
+  });
+
+  it('cleared=1：生效 tags 只剩 add 行', async () => {
+    await saveOverride(OVR.w1, {
+      tagsCleared: true,
+      addTags: [`标签Z_${OVR.base}`],
+    });
+    const items: EffectiveWork[] = [
+      {
+        id: OVR.w1,
+        title: 't',
+        circle: { id: 1, name: 'c' },
+        series: null,
+        ageRating: 'all',
+        tags: [{ id: await tagIdByName(OVR.tagX), name: OVR.tagX }],
+        vas: [],
+      },
+    ];
+    await applyEffective(items);
+    expect(items[0]?.tags.map((t) => t.name)).toEqual([`标签Z_${OVR.base}`]);
   });
 });

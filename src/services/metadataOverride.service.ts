@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
 import {
   circles,
@@ -557,4 +557,146 @@ export async function getOverride(
     },
     overriddenFields,
   };
+}
+
+// ---------- 页内展示合并（高频路径的 service 侧合并；RQB with 不能查视图/按关系行过滤） ----------
+
+/** FormattedWork 的结构子集；applyEffective 原地修改并回填 overriddenFields。 */
+export type EffectiveWork = {
+  id: string;
+  title: string;
+  circle: OverrideEntityRef<number>;
+  series: OverrideEntityRef<string> | null;
+  ageRating: string;
+  tags: Array<OverrideEntityRef<number>>;
+  vas: Array<OverrideEntityRef<string>>;
+  overriddenFields?: MetadataField[];
+};
+
+/** 页内批量合并：3 个索引小查询（页大小有限，非 N+1）；无覆盖行时直接返回。 */
+export async function applyEffective(items: EffectiveWork[]): Promise<void> {
+  if (items.length === 0) return;
+  const ids = items.map((i) => i.id);
+  const [metaRows, tagRows, vaRows] = await Promise.all([
+    db
+      .select()
+      .from(workMetaOverride)
+      .where(inArray(workMetaOverride.workId, ids)),
+    db
+      .select({
+        workId: tagWorkOverride.workId,
+        action: tagWorkOverride.action,
+        id: tags.id,
+        name: tags.name,
+      })
+      .from(tagWorkOverride)
+      .innerJoin(tags, eq(tagWorkOverride.tagId, tags.id))
+      .where(inArray(tagWorkOverride.workId, ids)),
+    db
+      .select({
+        workId: vaWorkOverride.workId,
+        action: vaWorkOverride.action,
+        id: vas.id,
+        name: vas.name,
+      })
+      .from(vaWorkOverride)
+      .innerJoin(vas, eq(vaWorkOverride.vaId, vas.id))
+      .where(inArray(vaWorkOverride.workId, ids)),
+  ]);
+  if (metaRows.length === 0) return; // 99.9% 请求在此返回
+
+  // 被覆盖 circle/series 的名字解析（FK 保证行存在）
+  const circleIds = metaRows
+    .map((m) => m.circleId)
+    .filter((x): x is number => x !== null);
+  const seriesIds = metaRows
+    .map((m) => m.seriesId)
+    .filter((x): x is string => x !== null);
+  const [circleRows, seriesRows] = await Promise.all([
+    circleIds.length > 0
+      ? db.select().from(circles).where(inArray(circles.id, circleIds))
+      : Promise.resolve([]),
+    seriesIds.length > 0
+      ? db.select().from(series).where(inArray(series.id, seriesIds))
+      : Promise.resolve([]),
+  ]);
+  const circleName = new Map(circleRows.map((c) => [c.id, c.name]));
+  const seriesName = new Map(seriesRows.map((s) => [s.id, s.name]));
+
+  const metaById = new Map(metaRows.map((m) => [m.workId, m]));
+  const tagRowsByWork = new Map<
+    string,
+    Array<{ action: 'add' | 'remove'; id: number; name: string }>
+  >();
+  for (const r of tagRows) {
+    const list = tagRowsByWork.get(r.workId) ?? [];
+    list.push(r);
+    tagRowsByWork.set(r.workId, list);
+  }
+  const vaRowsByWork = new Map<
+    string,
+    Array<{ action: 'add' | 'remove'; id: string; name: string }>
+  >();
+  for (const r of vaRows) {
+    const list = vaRowsByWork.get(r.workId) ?? [];
+    list.push(r);
+    vaRowsByWork.set(r.workId, list);
+  }
+
+  for (const item of items) {
+    const meta = metaById.get(item.id);
+    if (!meta) continue;
+    const fields: MetadataField[] = [];
+    if (meta.title !== null) {
+      item.title = meta.title;
+      fields.push('title');
+    }
+    if (meta.circleId !== null) {
+      item.circle = {
+        id: meta.circleId,
+        name: circleName.get(meta.circleId) ?? '',
+      };
+      fields.push('circle');
+    }
+    if (meta.seriesId !== null) {
+      item.series = {
+        id: meta.seriesId,
+        name: seriesName.get(meta.seriesId) ?? '',
+      };
+      fields.push('series');
+    }
+    if (meta.ageRating !== null) {
+      item.ageRating = meta.ageRating;
+      fields.push('ageRating');
+    }
+    const tRows = tagRowsByWork.get(item.id) ?? [];
+    if (meta.tagsCleared === 1 || tRows.length > 0) {
+      const removed = new Set(
+        tRows.filter((r) => r.action === 'remove').map((r) => r.id),
+      );
+      const adds = tRows
+        .filter((r) => r.action === 'add')
+        .map((r) => ({ id: r.id, name: r.name }));
+      item.tags =
+        meta.tagsCleared === 1
+          ? adds
+          : [...item.tags.filter((t) => !removed.has(t.id)), ...adds];
+      fields.push('tags');
+    }
+    const vRows = vaRowsByWork.get(item.id) ?? [];
+    if (meta.vasCleared === 1 || vRows.length > 0) {
+      const removed = new Set(
+        vRows.filter((r) => r.action === 'remove').map((r) => r.id),
+      );
+      const adds = vRows
+        .filter((r) => r.action === 'add')
+        .map((r) => ({ id: r.id, name: r.name }));
+      item.vas =
+        meta.vasCleared === 1
+          ? adds
+          : [...item.vas.filter((v) => !removed.has(v.id)), ...adds];
+      fields.push('vas');
+    }
+    item.overriddenFields = fields;
+  }
 }
