@@ -66,6 +66,10 @@ export const formattedWorkSchema = z.object({
   duration: z.number().nullable(),
   language: z.string().nullable(),
   sourceId: z.string().nullable(),
+  /** 被管理员覆盖的字段（无覆盖时缺省） */
+  overriddenFields: z
+    .array(z.enum(['title', 'circle', 'series', 'ageRating', 'tags', 'vas']))
+    .optional(),
 });
 
 export const paginationSchema = z.object({

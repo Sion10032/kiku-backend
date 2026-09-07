@@ -23,6 +23,10 @@ import type { TrackNode } from '../infra/fs/utils.js';
 import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
+  applyEffective,
+  type MetadataField,
+} from './metadataOverride.service.js';
+import {
   getProgressByWorks,
   getReadWorkIds,
   type WorkProgressSummary,
@@ -226,7 +230,9 @@ export async function upsertWork(
           ? JSON.stringify(input.rateCountDetail)
           : '{}',
         rank:
-          input.rank && input.rank.length > 0 ? JSON.stringify(input.rank) : null,
+          input.rank && input.rank.length > 0
+            ? JSON.stringify(input.rank)
+            : null,
         language: input.language ?? null,
         sourceId: input.sourceId ?? null,
         seriesId: newSeriesId,
@@ -358,6 +364,8 @@ export interface FormattedWork {
   rank: WorkRankEntry[] | null;
   tags: Array<{ id: number; name: string }>;
   vas: Array<{ id: string; name: string }>;
+  /** 被管理员覆盖的字段（列表/详情徽标用；无覆盖时缺省） */
+  overriddenFields?: MetadataField[];
   series: { id: string; name: string } | null;
   userRating: number | null;
   /** 当前用户播放进度聚合（null = 未读/未登录） */
@@ -474,6 +482,7 @@ export async function getWorkById(id: string, username?: string) {
   });
   if (!row) throw new Error(`Work ${id} not found`);
   const work = formatWork(row);
+  await applyEffective([work]);
   await attachUserData([work], username);
   return work;
 }
@@ -510,6 +519,7 @@ export async function getWorksByIdsOrdered(
     .map((id) => byId.get(id))
     .filter((r) => r != null)
     .map((r) => formatWork(r));
+  await applyEffective(items);
 
   await attachUserData(items, username);
   return items;
@@ -597,6 +607,7 @@ export async function queryWorks(
         .where(sql`${works.deletedAt} IS NULL`),
     ]);
     const formatted = items.map((item) => formatWork(item));
+    await applyEffective(formatted);
     await attachUserData(formatted, username);
     return {
       works: formatted,
@@ -639,6 +650,7 @@ export async function queryWorks(
     db.select({ count: sql<number>`count(*)` }).from(works).where(countWhere),
   ]);
   const formatted = items.map((item) => formatWork(item));
+  await applyEffective(formatted);
   await attachUserData(formatted, username);
   return {
     works: formatted,
