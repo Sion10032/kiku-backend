@@ -5,6 +5,7 @@ import {
   primaryKey,
   real,
   sqliteTable,
+  sqliteView,
   text,
 } from 'drizzle-orm/sqlite-core';
 
@@ -263,3 +264,121 @@ export type NewFavourite = typeof favourites.$inferInsert;
 
 export type SettingsBackup = typeof settingsBackups.$inferSelect;
 export type NewSettingsBackup = typeof settingsBackups.$inferInsert;
+
+// —— 元数据覆盖层（A' 方案：标量 takeover + 关系 delta，见 plans/2026-09-03-metadata-override.md）——
+
+/** 标量覆盖：NULL = 该字段未覆盖。tags/vas 的 cleared 标记表达「稳定空列表」（对 rescan 未来新增免疫）。 */
+export const workMetaOverride = sqliteTable('t_work_meta_override', {
+  workId: text('work_id')
+    .primaryKey()
+    .references(() => works.id, { onDelete: 'cascade' }),
+  title: text('title'),
+  circleId: integer('circle_id').references(() => circles.id),
+  seriesId: text('series_id').references(() => series.id),
+  ageRating: text('age_rating').$type<'all' | 'r15' | 'r18'>(),
+  tagsCleared: integer('tags_cleared').notNull().default(0),
+  vasCleared: integer('vas_cleared').notNull().default(0),
+  updatedBy: text('updated_by'),
+  updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+/** 关系覆盖（delta）：仅被编辑的作品有行；add = 覆盖新增，remove = 屏蔽原始关系。 */
+export const tagWorkOverride = sqliteTable(
+  'r_tag_work_override',
+  {
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+    tagId: integer('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+    action: text('action').$type<'add' | 'remove'>().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workId, t.tagId] }),
+    // 生效探针按 work_id 前缀扫描；tag:/裸词 的 add 分支按 tag_id 探测（性能结论回填）
+    index('r_tag_work_override_work_id_idx').on(t.workId),
+    index('r_tag_work_override_tag_id_idx').on(t.tagId),
+  ],
+);
+
+export const vaWorkOverride = sqliteTable(
+  'r_va_work_override',
+  {
+    workId: text('work_id')
+      .notNull()
+      .references(() => works.id, { onDelete: 'cascade' }),
+    vaId: text('va_id')
+      .notNull()
+      .references(() => vas.id, { onDelete: 'cascade' }),
+    action: text('action').$type<'add' | 'remove'>().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workId, t.vaId] }),
+    index('r_va_work_override_work_id_idx').on(t.workId),
+    index('r_va_work_override_va_id_idx').on(t.vaId),
+  ],
+);
+
+// —— 生效视图（低频路径专用：编辑回显 / getOverride；高频过滤不查视图）——
+
+/** 生效标量：LEFT JOIN + COALESCE（无 NULL 陷阱；陷阱只存在于「COALESCE 放进带 WHERE 的标量子查询」形态）。 */
+export const vWork = sqliteView('v_work', {
+  workId: text('work_id'),
+  title: text('title'),
+  circleId: integer('circle_id'),
+  seriesId: text('series_id'),
+  ageRating: text('age_rating'),
+}).as(sql`
+  SELECT w.id AS work_id,
+         COALESCE(m.title, w.title) AS title,
+         COALESCE(m.circle_id, w.circle_id) AS circle_id,
+         COALESCE(m.series_id, w.series_id) AS series_id,
+         COALESCE(m.age_rating, w.age_rating) AS age_rating
+    FROM t_work w
+    LEFT JOIN t_work_meta_override m ON m.work_id = w.id
+   WHERE w.deleted_at IS NULL
+`);
+
+/** 生效标签 = add 行 ∪ (原始 − remove 行；cleared=1 时整体屏蔽)。 */
+export const vTagWork = sqliteView('v_tag_work', {
+  workId: text('work_id'),
+  tagId: integer('tag_id'),
+}).as(sql`
+  SELECT o.work_id AS work_id, o.tag_id AS tag_id
+    FROM r_tag_work_override o
+   WHERE o.action = 'add'
+  UNION
+  SELECT w.work_id AS work_id, w.tag_id AS tag_id
+    FROM r_tag_work w
+   WHERE NOT EXISTS (
+           SELECT 1 FROM t_work_meta_override m
+            WHERE m.work_id = w.work_id AND m.tags_cleared = 1
+         )
+     AND NOT EXISTS (
+           SELECT 1 FROM r_tag_work_override o
+            WHERE o.work_id = w.work_id AND o.tag_id = w.tag_id
+              AND o.action = 'remove'
+         )
+`);
+
+export const vVaWork = sqliteView('v_va_work', {
+  workId: text('work_id'),
+  vaId: text('va_id'),
+}).as(sql`
+  SELECT o.work_id AS work_id, o.va_id AS va_id
+    FROM r_va_work_override o
+   WHERE o.action = 'add'
+  UNION
+  SELECT w.work_id AS work_id, w.va_id AS va_id
+    FROM r_va_work w
+   WHERE NOT EXISTS (
+           SELECT 1 FROM t_work_meta_override m
+            WHERE m.work_id = w.work_id AND m.vas_cleared = 1
+         )
+     AND NOT EXISTS (
+           SELECT 1 FROM r_va_work_override o
+            WHERE o.work_id = w.work_id AND o.va_id = w.va_id
+              AND o.action = 'remove'
+         )
+`);
