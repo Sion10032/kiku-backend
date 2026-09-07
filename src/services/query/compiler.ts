@@ -2,15 +2,7 @@ import { type AnyColumn, eq, inArray, or, type SQL, sql } from 'drizzle-orm';
 import type { LiqeQuery, TagToken } from 'liqe';
 import { db } from '../../infra/db/main/index.js';
 import type { AgeRating } from '../../infra/db/main/schema.js';
-import {
-  circles,
-  series,
-  tags,
-  tagWork,
-  vas,
-  vaWork,
-  works,
-} from '../../infra/db/main/schema.js';
+import { circles, series, works } from '../../infra/db/main/schema.js';
 import { extractWorkCode } from '../../utils/rjcode.js';
 import { QueryParseError } from './parser.js';
 
@@ -100,45 +92,151 @@ function compileTag(node: TagToken, t: typeof works): SQL | undefined {
   }
 
   switch (field.name) {
-    case 'circle':
-      return nameCondition(expression, 'circle', (nameCond) =>
-        inArray(
-          t.circleId,
-          db.select({ id: circles.id }).from(circles).where(nameCond),
-        ),
+    case 'circle': {
+      const { text, wildcard } = stringValue(expression, 'circle');
+      return circleProbe(
+        t,
+        wildcard ? { like: likePattern(text) } : { exact: text },
       );
-    case 'tag':
-      return nameCondition(expression, 'tag', (nameCond) =>
-        inArray(
-          t.id,
-          db
-            .select({ workId: tagWork.workId })
-            .from(tagWork)
-            .innerJoin(tags, eq(tagWork.tagId, tags.id))
-            .where(nameCond),
-        ),
+    }
+    case 'tag': {
+      const { text, wildcard } = stringValue(expression, 'tag');
+      return relationProbe(
+        'tag',
+        t,
+        wildcard ? { like: likePattern(text) } : { exact: text },
       );
-    case 'va':
-      return nameCondition(expression, 'va', (nameCond) =>
-        inArray(
-          t.id,
-          db
-            .select({ workId: vaWork.workId })
-            .from(vaWork)
-            .innerJoin(vas, eq(vaWork.vaId, vas.id))
-            .where(nameCond),
-        ),
+    }
+    case 'va': {
+      const { text, wildcard } = stringValue(expression, 'va');
+      return relationProbe(
+        'va',
+        t,
+        wildcard ? { like: likePattern(text) } : { exact: text },
       );
-    case 'series':
-      return nameCondition(expression, 'series', (nameCond) =>
-        inArray(
-          t.seriesId,
-          db.select({ id: series.id }).from(series).where(nameCond),
-        ),
+    }
+    case 'series': {
+      const { text, wildcard } = stringValue(expression, 'series');
+      return seriesProbe(
+        t,
+        wildcard ? { like: likePattern(text) } : { exact: text },
       );
+    }
     case 'age':
       return ageRatingCondition(expression, t);
   }
+}
+
+// ---------- 生效值探针（高频过滤不查视图，编译为 EXISTS 组合；性能结论回填） ----------
+
+/** 名称匹配口径：{ like } 模糊（已含 % 通配的完整模式），{ exact } 精确等值。 */
+type NameMatch = { exact: string } | { like: string };
+
+function nameMatch(x: string, m: NameMatch): SQL {
+  return 'like' in m
+    ? sql`${sql.raw(x)}.name LIKE ${m.like} ESCAPE '\\'`
+    : sql`${sql.raw(x)}.name = ${m.exact}`;
+}
+
+/**
+ * tag/va 生效匹配：
+ * 生效 = (原始关系未被屏蔽) OR (覆盖 add 行)
+ * 原始关系被屏蔽 = 该作品 tags/vas 被清空 OR 该 (work, 维度) 有 remove 行。
+ */
+function relationProbe(
+  kind: 'tag' | 'va',
+  t: typeof works,
+  match: NameMatch,
+): SQL {
+  const rel = kind === 'tag' ? 'r_tag_work' : 'r_va_work';
+  const ovr = kind === 'tag' ? 'r_tag_work_override' : 'r_va_work_override';
+  const dim = kind === 'tag' ? 't_tag' : 't_va';
+  const fk = kind === 'tag' ? 'tag_id' : 'va_id';
+  const clearedCol = kind === 'tag' ? 'tags_cleared' : 'vas_cleared';
+  return sql`(
+    EXISTS (
+      SELECT 1 FROM ${sql.raw(rel)} tw
+        join ${sql.raw(dim)} x ON x.id = tw.${sql.raw(fk)}
+       WHERE tw.work_id = ${t.id} AND ${nameMatch('x', match)}
+         AND NOT EXISTS (
+           SELECT 1 FROM t_work_meta_override m
+            WHERE m.work_id = ${t.id}
+              AND (m.${sql.raw(clearedCol)} = 1
+               OR EXISTS (
+                    SELECT 1 FROM ${sql.raw(ovr)} o
+                     WHERE o.work_id = m.work_id
+                       AND o.${sql.raw(fk)} = tw.${sql.raw(fk)}
+                       AND o.action = 'remove'
+                  ))
+         )
+    ) OR EXISTS (
+      SELECT 1 FROM ${sql.raw(ovr)} o
+        join ${sql.raw(dim)} x ON x.id = o.${sql.raw(fk)}
+       WHERE o.work_id = ${t.id} AND o.action = 'add'
+         AND ${nameMatch('x', match)}
+    )
+  )`;
+}
+
+function circleProbe(t: typeof works, match: NameMatch): SQL {
+  const baseCond =
+    'like' in match
+      ? likeSql(circles.name, match.like)
+      : eq(circles.name, match.exact);
+  return sql`(
+    (
+      ${inArray(
+        t.circleId,
+        db.select({ id: circles.id }).from(circles).where(baseCond),
+      )}
+      AND NOT EXISTS (
+        SELECT 1 FROM t_work_meta_override m
+         WHERE m.work_id = ${t.id} AND m.circle_id IS NOT NULL
+      )
+    ) OR EXISTS (
+      SELECT 1 FROM t_work_meta_override m
+        join t_circle c ON c.id = m.circle_id
+       WHERE m.work_id = ${t.id} AND ${nameMatch('c', match)}
+    )
+  )`;
+}
+
+function seriesProbe(t: typeof works, match: NameMatch): SQL {
+  const baseCond =
+    'like' in match
+      ? likeSql(series.name, match.like)
+      : eq(series.name, match.exact);
+  return sql`(
+    (
+      ${inArray(
+        t.seriesId,
+        db.select({ id: series.id }).from(series).where(baseCond),
+      )}
+      AND NOT EXISTS (
+        SELECT 1 FROM t_work_meta_override m
+         WHERE m.work_id = ${t.id} AND m.series_id IS NOT NULL
+      )
+    ) OR EXISTS (
+      SELECT 1 FROM t_work_meta_override m
+        join t_series s ON s.id = m.series_id
+       WHERE m.work_id = ${t.id} AND ${nameMatch('s', match)}
+    )
+  )`;
+}
+
+function ageRatingProbe(value: AgeRating, t: typeof works): SQL {
+  return sql`(
+    (
+      ${t.ageRating} = ${value}
+      AND NOT EXISTS (
+        SELECT 1 FROM t_work_meta_override m
+         WHERE m.work_id = ${t.id} AND m.age_rating IS NOT NULL
+      )
+    ) OR EXISTS (
+      SELECT 1 FROM t_work_meta_override m
+       WHERE m.work_id = ${t.id} AND m.age_rating = ${value}
+    )
+  )`;
 }
 
 // ---------- 值提取 ----------
@@ -160,26 +258,6 @@ function stringValue(
   return { text: value, wildcard: !quoted && /[*?]/.test(value) };
 }
 
-function nameCondition(
-  expression: TagToken['expression'] & { type: 'LiteralExpression' },
-  fieldName: string,
-  wrap: (nameCond: SQL) => SQL,
-): SQL {
-  const { text, wildcard } = stringValue(expression, fieldName);
-  // 精确：等值；模糊：LIKE（字面 % _ \ 转义 + * → %、? → _）
-  const cond = wildcard
-    ? likeSql(nameColumn(fieldName), likePattern(text))
-    : eq(nameColumn(fieldName), text);
-  return wrap(cond);
-}
-
-function nameColumn(fieldName: string) {
-  if (fieldName === 'circle') return circles.name;
-  if (fieldName === 'tag') return tags.name;
-  if (fieldName === 'series') return series.name;
-  return vas.name;
-}
-
 function ageRatingCondition(
   expression: TagToken['expression'] & { type: 'LiteralExpression' },
   t: typeof works,
@@ -191,7 +269,7 @@ function ageRatingCondition(
   if (!(['all', 'r15', 'r18'] as const).includes(value as AgeRating)) {
     throw new QueryParseError('字段 "age" 需要 all/r15/r18 之一');
   }
-  return eq(t.ageRating, value as AgeRating);
+  return ageRatingProbe(value as AgeRating, t);
 }
 
 // ---------- 裸词（自由文本） ----------
@@ -209,28 +287,18 @@ function compileBareTerm(
   const rj = extractWorkCode(text);
   if (rj) return eq(t.id, rj);
 
+  // 裸词含语义：标题用生效值（COALESCE 必须在子查询外——放进子查询内是静默错误）
   const pattern = `%${escapeLike(text)}%`;
-  const circleIds = db
-    .select({ id: circles.id })
-    .from(circles)
-    .where(likeSql(circles.name, pattern));
-  const tagWorkIds = db
-    .select({ workId: tagWork.workId })
-    .from(tagWork)
-    .innerJoin(tags, eq(tagWork.tagId, tags.id))
-    .where(likeSql(tags.name, pattern));
-  const vaWorkIds = db
-    .select({ workId: vaWork.workId })
-    .from(vaWork)
-    .innerJoin(vas, eq(vaWork.vaId, vas.id))
-    .where(likeSql(vas.name, pattern));
-
+  const match: NameMatch = { like: pattern };
   const combined = or(
-    likeSql(t.title, pattern),
+    sql`COALESCE(
+          (SELECT m.title FROM t_work_meta_override m WHERE m.work_id = ${t.id}),
+          ${t.title}
+        ) LIKE ${pattern} ESCAPE '\\'`,
     likeSql(t.id, pattern),
-    inArray(t.circleId, circleIds),
-    inArray(t.id, tagWorkIds),
-    inArray(t.id, vaWorkIds),
+    circleProbe(t, match),
+    relationProbe('tag', t, match),
+    relationProbe('va', t, match),
   );
   // biome-ignore lint/style/noNonNullAssertion: drizzle 的 or() 返回 SQL | undefined，RAW where 需要 SQL
   return combined!;
