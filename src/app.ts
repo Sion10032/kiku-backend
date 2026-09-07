@@ -17,6 +17,7 @@ import { favouriteRoutes } from './routes/favourite.js';
 import { healthRoutes } from './routes/health.js';
 import { mediaRoutes } from './routes/media.js';
 import { metadataRoutes } from './routes/metadata.js';
+import { metadataOverrideRoutes } from './routes/metadataOverride.js';
 import { authPlugin } from './routes/plugins/auth.js';
 import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
@@ -49,6 +50,7 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(metadataRoutes, { prefix: '/api' });
   await app.register(workAdminRoutes, { prefix: '/api' });
+  await app.register(metadataOverrideRoutes, { prefix: '/api' });
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
   await app.register(reviewRoutes, { prefix: '/api' });

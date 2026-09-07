@@ -125,13 +125,14 @@ afterAll(async () => {
 });
 
 describe('管理员单作品端点', () => {
-  it('非管理员 token / 匿名 → 401', async () => {
+  it('非管理员 token → 403 / 匿名 → 401', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/api/work/${ID}/refresh`,
       headers: { authorization: `Bearer ${userToken}` },
     });
-    expect(res.statusCode).toBe(401);
+    // authenticateAdmin 修正后：非管理员不再是 401，而是明确的 403
+    expect(res.statusCode).toBe(403);
 
     const anon = await app.inject({
       method: 'DELETE',

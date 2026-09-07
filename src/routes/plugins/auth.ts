@@ -91,13 +91,12 @@ async function plugin(fastify: FastifyInstance) {
   fastify.decorate(
     'authenticateAdmin',
     async (request: FastifyRequest, _reply: FastifyReply) => {
-      try {
-        const decoded = await request.jwtVerify<JwtPayload>();
-        if (decoded.group !== 'administrator') {
-          throw fastify.httpErrors.forbidden();
-        }
-      } catch {
+      // jwt 失败 → 401；jwt 成功但非管理员 → 403（不能让 catch 吞掉 forbidden）
+      const decoded = await request.jwtVerify<JwtPayload>().catch(() => {
         throw fastify.httpErrors.unauthorized();
+      });
+      if (decoded.group !== 'administrator') {
+        throw fastify.httpErrors.forbidden();
       }
     },
   );
