@@ -35,6 +35,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 
 /data
+/old-data
 
 # test-generated config
 config.json
