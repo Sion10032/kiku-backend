@@ -55,8 +55,12 @@ export const formattedWorkSchema = z.object({
       }),
     )
     .nullable(),
-  tags: z.array(z.object({ id: z.number(), name: z.string() })),
-  vas: z.array(z.object({ id: z.string(), name: z.string() })),
+  tags: z.array(
+    z.object({ id: z.number(), name: z.string(), overridden: z.boolean().optional() }),
+  ),
+  vas: z.array(
+    z.object({ id: z.string(), name: z.string(), overridden: z.boolean().optional() }),
+  ),
   series: seriesSchema.nullable(),
   userRating: z.number().nullable(),
   userProgress: userProgressSchema.nullable(),

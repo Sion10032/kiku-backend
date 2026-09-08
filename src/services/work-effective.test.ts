@@ -64,4 +64,24 @@ describe('列表/详情返回生效值', () => {
     expect(work.tags.map((t) => t.name)).toContain(`标签Z_${OVR.base}`);
     expect(work.overriddenFields).toEqual(['title', 'tags']);
   });
+
+  it('tag/va 元素级 overridden 标记：override 新增带标记，原始项不带', async () => {
+    await saveOverride(OVR.w1, {
+      addTags: [`标签Z_${OVR.base}`],
+      addVas: [{ name: `声优Z_${OVR.base}` }],
+    });
+    const work = await getWorkById(OVR.w1);
+    expect(work.tags.find((t) => t.name === `标签Z_${OVR.base}`)?.overridden).toBe(true);
+    expect(work.vas.find((v) => v.name === `声优Z_${OVR.base}`)?.overridden).toBe(true);
+    expect(work.tags.find((t) => t.name === OVR.tagX)?.overridden).toBeUndefined();
+
+    // 列表端点同样携带标记；cleared 后仅剩 override 新增，全带标记
+    await saveOverride(OVR.w1, {
+      tagsCleared: true,
+      addTags: [`标签Y2_${OVR.base}`],
+    });
+    const r = await queryWorks(undefined, undefined, { pageSize: 500 });
+    const w1 = r.works.find((w) => w.id === OVR.w1);
+    expect(w1?.tags.every((t) => t.overridden === true)).toBe(true);
+  });
 });

@@ -676,7 +676,7 @@ export async function applyEffective(items: EffectiveWork[]): Promise<void> {
       );
       const adds = tRows
         .filter((r) => r.action === 'add')
-        .map((r) => ({ id: r.id, name: r.name }));
+        .map((r) => ({ id: r.id, name: r.name, overridden: true }));
       item.tags =
         meta.tagsCleared === 1
           ? adds
@@ -690,7 +690,7 @@ export async function applyEffective(items: EffectiveWork[]): Promise<void> {
       );
       const adds = vRows
         .filter((r) => r.action === 'add')
-        .map((r) => ({ id: r.id, name: r.name }));
+        .map((r) => ({ id: r.id, name: r.name, overridden: true }));
       item.vas =
         meta.vasCleared === 1
           ? adds

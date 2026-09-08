@@ -362,9 +362,10 @@ export interface FormattedWork {
   rate_average_2dp: number | null;
   rate_count_detail: Record<string, number>;
   rank: WorkRankEntry[] | null;
-  tags: Array<{ id: number; name: string }>;
-  vas: Array<{ id: string; name: string }>;
-  /** 被管理员覆盖的字段（列表/详情徽标用；无覆盖时缺省） */
+  tags: Array<{ id: number; name: string; overridden?: boolean }>;
+  vas: Array<{ id: string; name: string; overridden?: boolean }>;
+  /** 被管理员覆盖的字段（列表/详情徽标用；无覆盖时缺省）。
+   * tag/va 元素级：applyEffective 合并后，override 新增的元素带 overridden: true（原始项缺省） */
   overriddenFields?: MetadataField[];
   series: { id: string; name: string } | null;
   userRating: number | null;
