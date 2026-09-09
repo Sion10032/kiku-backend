@@ -17,7 +17,6 @@ import { favouriteRoutes } from './routes/favourite.js';
 import { healthRoutes } from './routes/health.js';
 import { mediaRoutes } from './routes/media.js';
 import { metadataRoutes } from './routes/metadata.js';
-import { metadataOverrideRoutes } from './routes/metadataOverride.js';
 import { authPlugin } from './routes/plugins/auth.js';
 import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
@@ -26,6 +25,7 @@ import { settingsBackupRoutes } from './routes/settingsBackup.js';
 import { setupRoutes } from './routes/setup.js';
 import { versionRoutes } from './routes/version.js';
 import { workAdminRoutes } from './routes/workAdmin.js';
+import { worksRoutes } from './routes/works.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
@@ -48,9 +48,9 @@ export async function buildApp() {
   // Register routes
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
-  await app.register(metadataRoutes, { prefix: '/api' });
+  await app.register(worksRoutes, { prefix: '/api' });
   await app.register(workAdminRoutes, { prefix: '/api' });
-  await app.register(metadataOverrideRoutes, { prefix: '/api' });
+  await app.register(metadataRoutes, { prefix: '/api' });
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(credentialsRoutes, { prefix: '/api/credentials' });
   await app.register(reviewRoutes, { prefix: '/api' });

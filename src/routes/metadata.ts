@@ -1,295 +1,161 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
-  type CoverType,
-  getCover,
-  getCoverWithFallback,
-} from '../services/cover.service.js';
-import { QueryParseError } from '../services/query/parser.js';
-import {
-  getCircles,
-  getSeries,
-  getTags,
-  getVas,
-  getWorkById,
-  getWorkTracks,
-  queryWorks,
-} from '../services/work.service.js';
-import {
-  circleSchema,
-  formattedWorkSchema,
-  paginationSchema,
-  seriesSchema,
-  tagSchema,
-  vaSchema,
-} from './schemas/work.js';
+  getOverride,
+  OVERRIDE_FIELDS,
+  OverrideNotFoundError,
+  resetField,
+  saveOverride,
+} from '../services/metadataOverride.service.js';
 
-const idParamsSchema = z.object({
+const idParamsSchema = z.object({ id: z.string() });
+
+const saveBodySchema = z
+  .object({
+    title: z.string().min(1).max(500).nullable().optional(),
+    circleName: z.string().min(1).max(200).nullable().optional(),
+    seriesName: z.string().min(1).max(300).nullable().optional(),
+    ageRating: z.enum(['all', 'r15', 'r18']).nullable().optional(),
+    tagsCleared: z.boolean().optional(),
+    vasCleared: z.boolean().optional(),
+    addTags: z.array(z.string().min(1).max(100)).max(100).optional(),
+    removeTagIds: z.array(z.number().int()).max(200).optional(),
+    addVas: z
+      .array(
+        z.object({
+          id: z.string().max(100).optional(),
+          name: z.string().min(1).max(200),
+        }),
+      )
+      .max(100)
+      .optional(),
+    removeVaIds: z.array(z.string()).max(200).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: '空覆盖请求' });
+
+const fieldParamsSchema = z.object({
   id: z.string(),
+  field: z.enum(OVERRIDE_FIELDS),
 });
 
-const worksQuerySchema = z.object({
-  /** LQL 查询文本（空/省略 = 全量）。语法：tag:催眠 -tag:百合 circle:"xx" va:x age:r18 裸词 */
-  q: z.string().optional(),
-  page: z.coerce.number().default(1),
-  order: z
-    .enum([
-      'id',
-      'release',
-      'dl_count',
-      'price',
-      'rate_average_2dp',
-      'review_count',
-      'random',
-      'betterRandom',
-    ])
-    .default('release'),
-  sort: z.enum(['asc', 'desc']).default('desc'),
-  seed: z.coerce.number().optional(),
+const circleEntitySchema = z.object({ id: z.number(), name: z.string() });
+const seriesEntitySchema = z.object({ id: z.string(), name: z.string() });
+const tagEntitySchema = z.object({ id: z.number(), name: z.string() });
+const vaEntitySchema = z.object({ id: z.string(), name: z.string() });
+const tagActionSchema = tagEntitySchema.extend({
+  action: z.enum(['add', 'remove']),
+});
+const vaActionSchema = vaEntitySchema.extend({
+  action: z.enum(['add', 'remove']),
 });
 
+/** original / effective 共用形状 */
+const detailShape = {
+  title: z.string(),
+  circle: circleEntitySchema.nullable(),
+  series: seriesEntitySchema.nullable(),
+  ageRating: z.string(),
+  tags: z.array(tagEntitySchema),
+  vas: z.array(vaEntitySchema),
+};
+
+const overrideDetailSchema = z.object({
+  original: z.object(detailShape),
+  effective: z.object(detailShape),
+  override: z.object({
+    title: z.string().nullable(),
+    circle: circleEntitySchema.nullable(),
+    series: seriesEntitySchema.nullable(),
+    ageRating: z.string().nullable(),
+    tagsCleared: z.boolean(),
+    vasCleared: z.boolean(),
+    tagActions: z.array(tagActionSchema),
+    vaActions: z.array(vaActionSchema),
+    updatedBy: z.string().nullable(),
+    updatedAt: z.string().nullable(),
+  }),
+  overriddenFields: z.array(z.enum(OVERRIDE_FIELDS)),
+});
+
+/**
+ * 元数据覆盖（管理员专用）。与 works.ts 公开浏览端点相对，同 workAdmin.ts 模式。
+ */
 export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // 可选鉴权：携带合法 token 则解析 request.user（works 列表/详情注入
-  // userRating/userProgress）；匿名请求静默放行（公开浏览）。
-  // 未验证时 request.user 为 undefined，各 handler 用 as { name?: string } 容错。
-  fastify.addHook('onRequest', async (request) => {
-    await request.jwtVerify().catch(() => {});
-  });
-
-  fastify.get(
-    '/works',
+  // PATCH /api/work/:id/metadata — 保存覆盖（标量为最终值；tags/vas 为动作列表）
+  fastify.patch(
+    '/work/:id/metadata',
     {
+      preHandler: [fastify.authenticateAdmin],
       schema: {
-        querystring: worksQuerySchema,
+        params: idParamsSchema,
+        body: saveBodySchema,
         response: {
-          200: z.object({
-            works: z.array(formattedWorkSchema),
-            pagination: paginationSchema,
-          }),
-          400: z.object({ error: z.string() }),
+          200: z.object({ success: z.boolean() }),
+          401: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
         },
       },
     },
     async (request, reply) => {
-      const { q, page, order, sort } = request.query;
-      // onRequest 匿名放行，运行时 user 可为 undefined，可选链必需
-      const user = request.user?.name;
       try {
-        return await queryWorks(q, user, {
-          page,
-          orderBy: order,
-          sortDir: sort,
+        await saveOverride(request.params.id, {
+          ...request.body,
+          updatedBy: request.user?.name,
         });
+        return { success: true };
       } catch (err) {
-        if (err instanceof QueryParseError) {
-          return reply.status(400).send({ error: err.message });
+        if (err instanceof OverrideNotFoundError) {
+          return reply.status(404).send({ error: err.message });
         }
         throw err;
       }
     },
   );
 
+  // GET /api/work/:id/metadata/override — 编辑回显（原始 + 覆盖状态 + 生效）
   fastify.get(
-    '/work/:id',
+    '/work/:id/metadata/override',
     {
+      preHandler: [fastify.authenticateAdmin],
       schema: {
         params: idParamsSchema,
         response: {
-          200: formattedWorkSchema,
+          200: overrideDetailSchema,
+          401: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
           404: z.object({ error: z.string() }),
         },
       },
     },
     async (request, reply) => {
-      const { id } = request.params;
-      // onRequest 匿名放行，运行时 user 可为 undefined，可选链必需
-      const user = request.user?.name;
-
-      try {
-        return await getWorkById(id, user);
-      } catch {
-        return reply.status(404).send({ error: `Work ${id} not found` });
-      }
-    },
-  );
-
-  fastify.get(
-    '/tracks/:id',
-    {
-      schema: {
-        params: idParamsSchema,
-        response: {
-          200: z.array(
-            z.union([
-              z.object({
-                type: z.literal('folder'),
-                title: z.string(),
-                children: z.lazy(() => z.array(z.any())),
-              }),
-              z.object({
-                type: z.literal('audio'),
-                title: z.string(),
-                hash: z.string(),
-                lyrics: z
-                  .object({
-                    hash: z.string(),
-                    type: z.enum(['lrc', 'vtt']),
-                  })
-                  .optional(),
-                // 播放时长（秒）；未知/探测失败为 null（service 层总会带键）
-                durationSec: z.number().nullable().optional(),
-              }),
-              z.object({
-                type: z.enum(['text', 'image', 'other']),
-                title: z.string(),
-                hash: z.string(),
-                lyrics: z
-                  .object({
-                    hash: z.string(),
-                    type: z.enum(['lrc', 'vtt']),
-                  })
-                  .optional(),
-              }),
-            ]),
-          ),
-          404: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-
-      try {
-        const result = await getWorkTracks(id);
-        if (!result.ok) {
-          const error =
-            result.reason === 'work-not-found'
-              ? `Work ${id} not found`
-              : `Root folder "${result.rootFolder}" not found`;
-          return reply.status(404).send({ error });
-        }
-        return result.tracks;
-      } catch {
-        return reply.status(500).send({ error: 'Failed to get track list' });
-      }
-    },
-  );
-
-  fastify.get(
-    '/cover/:id',
-    {
-      schema: {
-        params: idParamsSchema,
-        querystring: z.object({
-          type: z.enum(['main', 'sam', '240x240', '360x360']).default('main'),
-        }),
-        response: {
-          200: z.object({
-            url: z.string(),
-            type: z.string(),
-            exists: z.boolean(),
-          }),
-          404: z.object({ error: z.string() }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      const { type } = request.query as { type: CoverType };
-      const result = await getCover(id, type);
-      if (
-        result.status === 'work-not-found' ||
-        result.status === 'cover-not-found'
-      ) {
-        return reply.status(404).send({
-          error:
-            result.status === 'work-not-found'
-              ? `Work ${id} not found`
-              : `Cover for work ${id} not found`,
-        });
-      }
-      return reply.send({ url: result.url, type: result.type, exists: true });
-    },
-  );
-
-  fastify.get(
-    '/cover/:id/file',
-    {
-      schema: {
-        params: idParamsSchema,
-        querystring: z.object({
-          type: z.enum(['main', 'sam', '240x240', '360x360']).default('main'),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      const { type } = request.query as { type: CoverType };
-      const cover = getCoverWithFallback(id, type);
-      if (!cover) {
+      const detail = await getOverride(request.params.id);
+      if (!detail) {
         return reply
           .status(404)
-          .send({ error: `Cover for work ${id} not found` });
+          .send({ error: `Work ${request.params.id} not found` });
       }
-
-      return reply.type(cover.mimeType ?? 'image/jpeg').send(cover.data);
+      return detail;
     },
   );
 
-  fastify.get(
-    '/circles/',
+  // DELETE /api/work/:id/metadata/:field — 单字段恢复原始
+  fastify.delete(
+    '/work/:id/metadata/:field',
     {
+      preHandler: [fastify.authenticateAdmin],
       schema: {
+        params: fieldParamsSchema,
         response: {
-          200: z.array(circleSchema),
+          200: z.object({ success: z.boolean() }),
+          401: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
         },
       },
     },
-    async () => {
-      return getCircles();
-    },
-  );
-
-  fastify.get(
-    '/tags/',
-    {
-      schema: {
-        response: {
-          200: z.array(tagSchema),
-        },
-      },
-    },
-    async () => {
-      return getTags();
-    },
-  );
-
-  fastify.get(
-    '/vas/',
-    {
-      schema: {
-        response: {
-          200: z.array(vaSchema),
-        },
-      },
-    },
-    async () => {
-      return getVas();
-    },
-  );
-
-  fastify.get(
-    '/series/',
-    {
-      schema: {
-        response: {
-          200: z.array(seriesSchema),
-        },
-      },
-    },
-    async () => {
-      return getSeries();
+    async (request) => {
+      await resetField(request.params.id, request.params.field);
+      return { success: true };
     },
   );
 };
