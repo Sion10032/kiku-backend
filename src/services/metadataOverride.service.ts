@@ -160,6 +160,78 @@ function pruneIfEmpty(tx: Tx, workId: string): void {
 }
 
 /**
+ * 标量覆盖补丁：仅出现的键生效（缺席 = 沿用 prev；显式 null = 恢复该字段）。
+ * 不含 tags/vas 动作行与 prune——prune 时序敏感（动作行未写前会误删仅有
+ * tags/vas 覆盖的主行），由外层保存器写完全部内容后统一调用。
+ */
+export type ScalarOverridePatch = {
+  title?: string | null;
+  circleName?: string | null;
+  seriesName?: string | null;
+  ageRating?: 'all' | 'r15' | 'r18' | null;
+  tagsCleared?: boolean;
+  vasCleared?: boolean;
+  updatedBy?: string;
+};
+
+/** 事务内主行读-改-写（仅标量字段；调用方须保证 workId 存在）。 */
+export function applyScalarOverrideInTx(
+  tx: Tx,
+  workId: string,
+  patch: ScalarOverridePatch,
+): void {
+  const prev = tx
+    .select()
+    .from(workMetaOverride)
+    .where(eq(workMetaOverride.workId, workId))
+    .get();
+  const circleId =
+    'circleName' in patch && patch.circleName != null
+      ? upsertCircleByName(tx, patch.circleName)
+      : 'circleName' in patch
+        ? null
+        : (prev?.circleId ?? null);
+  const seriesId =
+    'seriesName' in patch && patch.seriesName != null
+      ? upsertSeriesByName(tx, patch.seriesName)
+      : 'seriesName' in patch
+        ? null
+        : (prev?.seriesId ?? null);
+  const next = {
+    workId,
+    title: 'title' in patch ? (patch.title ?? null) : (prev?.title ?? null),
+    circleId,
+    seriesId,
+    ageRating:
+      'ageRating' in patch
+        ? (patch.ageRating ?? null)
+        : (prev?.ageRating ?? null),
+    tagsCleared:
+      'tagsCleared' in patch
+        ? patch.tagsCleared
+          ? 1
+          : 0
+        : (prev?.tagsCleared ?? 0),
+    vasCleared:
+      'vasCleared' in patch
+        ? patch.vasCleared
+          ? 1
+          : 0
+        : (prev?.vasCleared ?? 0),
+    updatedBy: patch.updatedBy ?? prev?.updatedBy ?? null,
+    updatedAt: new Date().toISOString(),
+  };
+  if (prev) {
+    tx.update(workMetaOverride)
+      .set(next)
+      .where(eq(workMetaOverride.workId, workId))
+      .run();
+  } else {
+    tx.insert(workMetaOverride).values(next).run();
+  }
+}
+
+/**
  * 保存覆盖（单事务）：
  * 0) 清理失效 remove 行（原始关系已被 rescan 删除 → 行退化为 no-op）
  * 1) 主行读-改-写（只更新请求中出现的键）
@@ -189,55 +261,7 @@ export async function saveOverride(
          AND va_id NOT IN (SELECT va_id FROM r_va_work WHERE work_id = ${workId})
     `);
 
-    const prev = tx
-      .select()
-      .from(workMetaOverride)
-      .where(eq(workMetaOverride.workId, workId))
-      .get();
-    const circleId =
-      'circleName' in input && input.circleName != null
-        ? upsertCircleByName(tx, input.circleName)
-        : 'circleName' in input
-          ? null
-          : (prev?.circleId ?? null);
-    const seriesId =
-      'seriesName' in input && input.seriesName != null
-        ? upsertSeriesByName(tx, input.seriesName)
-        : 'seriesName' in input
-          ? null
-          : (prev?.seriesId ?? null);
-    const next = {
-      workId,
-      title: 'title' in input ? (input.title ?? null) : (prev?.title ?? null),
-      circleId,
-      seriesId,
-      ageRating:
-        'ageRating' in input
-          ? (input.ageRating ?? null)
-          : (prev?.ageRating ?? null),
-      tagsCleared:
-        'tagsCleared' in input
-          ? input.tagsCleared
-            ? 1
-            : 0
-          : (prev?.tagsCleared ?? 0),
-      vasCleared:
-        'vasCleared' in input
-          ? input.vasCleared
-            ? 1
-            : 0
-          : (prev?.vasCleared ?? 0),
-      updatedBy: input.updatedBy ?? prev?.updatedBy ?? null,
-      updatedAt: new Date().toISOString(),
-    };
-    if (prev) {
-      tx.update(workMetaOverride)
-        .set(next)
-        .where(eq(workMetaOverride.workId, workId))
-        .run();
-    } else {
-      tx.insert(workMetaOverride).values(next).run();
-    }
+    applyScalarOverrideInTx(tx, workId, input);
 
     const originalTagIds = new Set(
       tx
