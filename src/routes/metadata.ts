@@ -7,6 +7,11 @@ import {
   resetField,
   saveOverride,
 } from '../services/metadataOverride.service.js';
+import { QueryParseError } from '../services/query/parser.js';
+import {
+  InvalidRegexError,
+  sanitizeTitles,
+} from '../services/title-sanitize.service.js';
 
 const idParamsSchema = z.object({ id: z.string() });
 
@@ -36,6 +41,28 @@ const saveBodySchema = z
 const fieldParamsSchema = z.object({
   id: z.string(),
   field: z.enum(OVERRIDE_FIELDS),
+});
+
+const sanitizeBodySchema = z.object({
+  pattern: z.string().min(1).max(500),
+  replacement: z.string().max(500),
+  q: z.string().max(2000).optional(),
+  dryRun: z.boolean(),
+});
+
+const sanitizeSampleSchema = z.object({
+  id: z.string(),
+  before: z.string(),
+  after: z.string(),
+  overridden: z.boolean(),
+});
+
+// dryRun=true → 含 samples；false → success + 计数。单一 schema 宽容两形态。
+const sanitizeResponseSchema = z.object({
+  success: z.boolean().optional(),
+  matched: z.number().int(),
+  overridden: z.number().int(),
+  samples: z.array(sanitizeSampleSchema).optional(),
 });
 
 const circleEntitySchema = z.object({ id: z.number(), name: z.string() });
@@ -156,6 +183,39 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       await resetField(request.params.id, request.params.field);
       return { success: true };
+    },
+  );
+
+  // POST /api/work/metadata/sanitize-titles — 标题净化（批量正则替换；dryRun 预览先行）
+  fastify.post(
+    '/work/metadata/sanitize-titles',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        body: sanitizeBodySchema,
+        response: {
+          200: sanitizeResponseSchema,
+          400: z.object({ error: z.string() }),
+          401: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return await sanitizeTitles({
+          ...request.body,
+          updatedBy: request.user?.name,
+        });
+      } catch (err) {
+        if (
+          err instanceof QueryParseError ||
+          err instanceof InvalidRegexError
+        ) {
+          return reply.status(400).send({ error: err.message });
+        }
+        throw err;
+      }
     },
   );
 };

@@ -9,6 +9,7 @@ import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/utils.js';
 import { db } from '../infra/db/main/index.js';
 import { users } from '../infra/db/main/schema.js';
+import { saveOverride } from '../services/metadataOverride.service.js';
 
 setupTestEnvironment();
 
@@ -135,5 +136,97 @@ describe('元数据覆盖路由', () => {
       url: `/api/work/${OVR.w1}/metadata/override`,
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('标题净化路由', () => {
+  it('POST 无 token → 401；非管理员 → 403', async () => {
+    const payload = { pattern: '^标题', replacement: '', dryRun: true };
+    const anon = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      payload,
+    });
+    expect(anon.statusCode).toBe(401);
+    const user = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      headers: auth(userToken),
+      payload,
+    });
+    expect(user.statusCode).toBe(403);
+  });
+
+  it('dryRun 预览 → 200：计数与 samples 正确且不落库', async () => {
+    await saveOverride(OVR.w2, { title: `手工改过_${OVR.base}` });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      headers: auth(adminToken),
+      payload: {
+        pattern: '^标题乙',
+        replacement: '乙',
+        q: `circle:${OVR.circleA}`,
+        dryRun: true,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.matched).toBe(1);
+    expect(body.overridden).toBe(1);
+    expect(body.samples[0]?.overridden).toBe(true);
+    expect(body.samples[0]?.after).toBe(`乙_${OVR.base}`);
+  });
+
+  it('dryRun=false 执行 → 覆盖落库，updatedBy = 管理员名', async () => {
+    await saveOverride(OVR.w2, { title: `手工改过_${OVR.base}` });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      headers: auth(adminToken),
+      payload: {
+        pattern: '^标题乙',
+        replacement: '乙',
+        q: `circle:${OVR.circleA}`,
+        dryRun: false,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ success: true, matched: 1, overridden: 1 });
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/work/${OVR.w2}/metadata/override`,
+      headers: auth(adminToken),
+    });
+    expect(detail.json().effective.title).toBe(`乙_${OVR.base}`);
+    expect(detail.json().override.updatedBy).toBe('meta-admin');
+  });
+
+  it('非法正则 → 400；非法 LQL → 400', async () => {
+    const badRegex = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      headers: auth(adminToken),
+      payload: { pattern: '(', replacement: '', dryRun: true },
+    });
+    expect(badRegex.statusCode).toBe(400);
+    expect(typeof badRegex.json().error).toBe('string');
+    const badLql = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      headers: auth(adminToken),
+      payload: { pattern: 'a', replacement: '', q: 'price:1', dryRun: true },
+    });
+    expect(badLql.statusCode).toBe(400);
+  });
+
+  it('pattern 空串 → 400（zod min(1)）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/work/metadata/sanitize-titles',
+      headers: auth(adminToken),
+      payload: { pattern: '', replacement: '', dryRun: true },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
