@@ -6,7 +6,14 @@ import { circles, series, works } from '../../infra/db/main/schema.js';
 import { extractWorkCode } from '../../utils/rjcode.js';
 import { QueryParseError } from './parser.js';
 
-const FIELD_WHITELIST = ['circle', 'tag', 'va', 'series', 'age'] as const;
+const FIELD_WHITELIST = [
+  'circle',
+  'tag',
+  'va',
+  'series',
+  'age',
+  'overridden',
+] as const;
 type FieldName = (typeof FIELD_WHITELIST)[number];
 
 /**
@@ -124,6 +131,8 @@ function compileTag(node: TagToken, t: typeof works): SQL | undefined {
     }
     case 'age':
       return ageRatingCondition(expression, t);
+    case 'overridden':
+      return overriddenProbe(expression, t);
   }
 }
 
@@ -237,6 +246,34 @@ function ageRatingProbe(value: AgeRating, t: typeof works): SQL {
        WHERE m.work_id = ${t.id} AND m.age_rating = ${value}
     )
   )`;
+}
+
+/** 覆盖存在性探针：overridden:title|any（否定由外层 UnaryOperator → NOT 表达）。 */
+function overriddenProbe(
+  expression: TagToken['expression'],
+  t: typeof works,
+): SQL {
+  if (
+    expression.type !== 'LiteralExpression' ||
+    typeof expression.value !== 'string'
+  ) {
+    throw new QueryParseError('字段 "overridden" 需要 title/any 之一');
+  }
+  const field = expression.value.toLowerCase();
+  if (field === 'title') {
+    return sql`EXISTS (
+      SELECT 1 FROM t_work_meta_override m
+       WHERE m.work_id = ${t.id} AND m.title IS NOT NULL
+    )`;
+  }
+  if (field === 'any') {
+    // pruneIfEmpty 保证覆盖主行存在即有有效覆盖内容
+    return sql`EXISTS (
+      SELECT 1 FROM t_work_meta_override m
+       WHERE m.work_id = ${t.id}
+    )`;
+  }
+  throw new QueryParseError('字段 "overridden" 需要 title/any 之一');
 }
 
 // ---------- 值提取 ----------

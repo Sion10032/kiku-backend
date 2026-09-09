@@ -135,3 +135,60 @@ describe('LQL 命中生效值', () => {
     expect(ids(r)).toEqual([OVR.w1, OVR.w2, OVR.w3]);
   });
 });
+
+describe('LQL overridden 谓词', () => {
+  it('overridden:title 只命中已覆盖标题的作品（圈定在社团A内做精确断言）', async () => {
+    await saveOverride(OVR.w2, { title: `标题_override_${OVR.base}` });
+    const hit = await queryWorks(
+      `circle:${OVR.circleA} overridden:title`,
+      undefined,
+      { pageSize: 500 },
+    );
+    expect(ids(hit)).toEqual([OVR.w2]);
+  });
+
+  it('-overridden:title 排除已覆盖标题的作品', async () => {
+    await saveOverride(OVR.w2, { title: `标题_override_${OVR.base}` });
+    const r = await queryWorks(
+      `circle:${OVR.circleA} -overridden:title`,
+      undefined,
+      { pageSize: 500 },
+    );
+    expect(ids(r)).toEqual([OVR.w1]);
+  });
+
+  it('overridden:any 命中标量覆盖（circle）', async () => {
+    // 圈定用 circleA：w3 的 circle 已被覆盖为 circleA，circle:circleA 经覆盖路径
+    // 命中它（circle:circleB 会因覆盖屏蔽原始社团而落空）；any 探针命中的正是
+    // 这条 circleName 标量覆盖
+    await saveOverride(OVR.w3, { circleName: OVR.circleA });
+    const hit = await queryWorks(
+      `circle:${OVR.circleA} overridden:any`,
+      undefined,
+      { pageSize: 500 },
+    );
+    expect(ids(hit)).toEqual([OVR.w3]);
+  });
+
+  it('overridden:any 命中 tags-only 覆盖（cleared 也算）', async () => {
+    await saveOverride(OVR.w3, { tagsCleared: true });
+    const hit = await queryWorks(
+      `circle:${OVR.circleB} overridden:any`,
+      undefined,
+      { pageSize: 500 },
+    );
+    expect(ids(hit)).toEqual([OVR.w3]);
+  });
+
+  it('overridden:title 基准是覆盖状态而非生效标题：覆盖后的标题值不影响命中', async () => {
+    await saveOverride(OVR.w2, { title: '完全不同的标题' });
+    const hit = await queryWorks(
+      `circle:${OVR.circleA} overridden:title`,
+      undefined,
+      {
+        pageSize: 500,
+      },
+    );
+    expect(ids(hit)).toEqual([OVR.w2]);
+  });
+});

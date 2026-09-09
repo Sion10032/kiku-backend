@@ -148,3 +148,28 @@ describe('compileQuery：空查询', () => {
     expect(compileQuery(ast)).toBeUndefined();
   });
 });
+
+describe('compileQuery：overridden 覆盖探针', () => {
+  it('overridden:title → EXISTS 主行 title 非空', () => {
+    const s = compile('overridden:title');
+    expect(s?.sql).toContain('EXISTS');
+    expect(s?.sql).toContain('t_work_meta_override');
+    expect(s?.sql).toContain('title IS NOT NULL');
+  });
+
+  it('overridden:any → EXISTS 主行存在（prune 保证存在即有覆盖）', () => {
+    const s = compile('overridden:any');
+    expect(s?.sql).toContain('EXISTS');
+    expect(s?.sql).toContain('t_work_meta_override');
+    expect(s?.sql).not.toContain('IS NOT NULL');
+  });
+
+  it('-overridden:title → NOT 包裹（否定零改动）', () => {
+    const s = compile('-overridden:title');
+    expect(s?.sql).toContain('NOT');
+  });
+
+  it('非法值 → QueryParseError', () => {
+    expect(() => compile('overridden:vas')).toThrow(QueryParseError);
+  });
+});
