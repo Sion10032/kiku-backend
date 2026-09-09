@@ -29,8 +29,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { name, password } = request.body;
       const user = await login(name, password);
-      if (!user)
-        return reply.status(401).send({ error: 'Invalid credentials' });
+      if (!user) return reply.fail(401, 'errors.auth.invalid-credentials');
       return { token: signToken(fastify, user), ...user };
     },
   );

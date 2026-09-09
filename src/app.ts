@@ -18,6 +18,7 @@ import { healthRoutes } from './routes/health.js';
 import { mediaRoutes } from './routes/media.js';
 import { metadataRoutes } from './routes/metadata.js';
 import { authPlugin } from './routes/plugins/auth.js';
+import { i18nPlugin } from './routes/plugins/i18n.js';
 import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
 import { scannerRoutes } from './routes/scanner.js';
@@ -38,6 +39,7 @@ export async function buildApp() {
   initializeDirectories();
 
   app.register(sensible);
+  app.register(i18nPlugin);
 
   // 环境变量管理员初始化（注册路由前）
   await initAdminFromEnv();

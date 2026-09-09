@@ -64,9 +64,9 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await createUserAccount(name, password, group);
       if (!result.ok) {
         if (result.reason === 'conflict') {
-          return reply.status(409).send({ error: 'User already exists' });
+          return reply.fail(409, 'errors.user.exists');
         }
-        return reply.status(500).send({ error: 'Failed to create user' });
+        return reply.fail(500, 'errors.user.create-failed');
       }
 
       return { name: result.user.name, group: result.user.group };
@@ -89,7 +89,7 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { name, newPassword } = request.body;
       const result = await changePassword(name, newPassword);
       if (result === 'not-found') {
-        return reply.status(404).send({ error: 'User not found' });
+        return reply.fail(404, 'errors.user.not-found');
       }
 
       return { message: 'Password updated' };
