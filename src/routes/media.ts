@@ -53,7 +53,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const source = await openWorkMedia(id, index);
         if (!source || !(await source.has(index))) {
-          return reply.status(404).send({ error: 'File not found' });
+          return reply.fail(404, 'errors.media.file-not-found');
         }
 
         const size = await source.size(index);
@@ -88,7 +88,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .header('Content-Length', size)
           .send(stream);
       } catch {
-        return reply.status(404).send({ error: 'Work not found' });
+        return reply.fail(404, 'errors.media.work-not-found');
       }
     },
   );
@@ -106,7 +106,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const source = await openWorkMedia(id, index);
         if (!source || !(await source.has(index))) {
-          return reply.status(404).send({ error: 'File not found' });
+          return reply.fail(404, 'errors.media.file-not-found');
         }
 
         const size = await source.size(index);
@@ -120,7 +120,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .header('Content-Disposition', `attachment; filename="${index}"`)
           .send(stream);
       } catch {
-        return reply.status(404).send({ error: 'Work not found' });
+        return reply.fail(404, 'errors.media.work-not-found');
       }
     },
   );

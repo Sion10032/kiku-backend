@@ -133,7 +133,9 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return { success: true };
       } catch (err) {
         if (err instanceof OverrideNotFoundError) {
-          return reply.status(404).send({ error: err.message });
+          return reply.fail(404, 'errors.work.not-found', {
+            id: request.params.id,
+          });
         }
         throw err;
       }
@@ -158,9 +160,9 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const detail = await getOverride(request.params.id);
       if (!detail) {
-        return reply
-          .status(404)
-          .send({ error: `Work ${request.params.id} not found` });
+        return reply.fail(404, 'errors.work.not-found', {
+          id: request.params.id,
+        });
       }
       return detail;
     },
@@ -208,11 +210,13 @@ export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
           updatedBy: request.user?.name,
         });
       } catch (err) {
-        if (
-          err instanceof QueryParseError ||
-          err instanceof InvalidRegexError
-        ) {
-          return reply.status(400).send({ error: err.message });
+        if (err instanceof QueryParseError) {
+          return reply.fail(400, err.key, err.params);
+        }
+        if (err instanceof InvalidRegexError) {
+          return reply.fail(400, 'errors.query.invalid-regex', {
+            detail: err.message,
+          });
         }
         throw err;
       }

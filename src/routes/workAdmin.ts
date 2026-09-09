@@ -38,14 +38,12 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const result = await refreshWorkMetadata(id, getConfig());
         if (!result.ok) {
-          return reply
-            .status(result.reason === 'work-not-found' ? 404 : 500)
-            .send({
-              error:
-                result.reason === 'work-not-found'
-                  ? `Work ${id} not found`
-                  : `Root folder not configured for work ${id}`,
-            });
+          if (result.reason === 'work-not-found') {
+            return reply.fail(404, 'errors.media.work-not-found');
+          }
+          return reply.fail(500, 'errors.work-admin.failed', {
+            reason: result.reason,
+          });
         }
         return { title: result.title, tracks: result.tracks };
       } catch (err) {
@@ -76,14 +74,12 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const result = await syncWorkDurations(id, getConfig());
         if (!result.ok) {
-          return reply
-            .status(result.reason === 'work-not-found' ? 404 : 500)
-            .send({
-              error:
-                result.reason === 'work-not-found'
-                  ? `Work ${id} not found`
-                  : `Root folder not configured for work ${id}`,
-            });
+          if (result.reason === 'work-not-found') {
+            return reply.fail(404, 'errors.media.work-not-found');
+          }
+          return reply.fail(500, 'errors.work-admin.failed', {
+            reason: result.reason,
+          });
         }
         return { tracks: result.tracks };
       } catch (err) {
@@ -111,7 +107,7 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       if (!(await workExists(id))) {
-        return reply.status(404).send({ error: `Work ${id} not found` });
+        return reply.fail(404, 'errors.work.not-found', { id });
       }
       await softDeleteWork(id);
       return { success: true };

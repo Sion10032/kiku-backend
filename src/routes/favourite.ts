@@ -96,9 +96,9 @@ export const favouriteRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { targetType, targetId } = request.body;
       const ok = await addFavourite(user.name, targetType, targetId);
       if (!ok) {
-        return reply
-          .status(404)
-          .send({ error: `Target ${targetId} not found` });
+        return reply.fail(404, 'errors.favourite.target-not-found', {
+          id: targetId,
+        });
       }
       return { favourited: true };
     },

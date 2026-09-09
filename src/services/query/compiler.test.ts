@@ -122,7 +122,7 @@ describe('compileQuery：裸词', () => {
 describe('compileQuery：不支持构造 → QueryParseError', () => {
   it.each([
     ['price:100', '不支持的筛选字段 "price"'],
-    ['tag.name:x', '不支持的字段'],
+    ['tag.name:x', '不支持的筛选字段'],
     ['tag:<5', '暂不支持比较运算符'],
     ['price:[100 TO 500]', '不支持的筛选字段 "price"'],
     ['tag:/催.眠/', '暂不支持正则'],

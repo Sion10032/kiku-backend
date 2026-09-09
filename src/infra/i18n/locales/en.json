@@ -1,5 +1,6 @@
 {
   "errors.auth.invalid-credentials": "Invalid credentials",
+  "errors.auth.registration-disabled": "Registration is not allowed",
   "errors.user.exists": "User already exists",
   "errors.user.create-failed": "Failed to create user",
   "errors.user.not-found": "User not found",

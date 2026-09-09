@@ -69,12 +69,10 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const result = await register(request.body.name, request.body.password);
       if (!result.ok) {
-        const status = result.reason === 'registration-disabled' ? 403 : 409;
-        const error =
-          result.reason === 'registration-disabled'
-            ? 'Registration is not allowed'
-            : 'Username already exists';
-        return reply.status(status).send({ error });
+        if (result.reason === 'registration-disabled') {
+          return reply.fail(403, 'errors.auth.registration-disabled');
+        }
+        return reply.fail(409, 'errors.user.exists');
       }
       return { token: signToken(fastify, result.user), ...result.user };
     },

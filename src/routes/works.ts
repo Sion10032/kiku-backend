@@ -82,7 +82,7 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } catch (err) {
         if (err instanceof QueryParseError) {
-          return reply.status(400).send({ error: err.message });
+          return reply.fail(400, err.key, err.params);
         }
         throw err;
       }
@@ -108,7 +108,7 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         return await getWorkById(id, user);
       } catch {
-        return reply.status(404).send({ error: `Work ${id} not found` });
+        return reply.fail(404, 'errors.work.not-found', { id });
       }
     },
   );
@@ -163,15 +163,16 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const result = await getWorkTracks(id);
         if (!result.ok) {
-          const error =
-            result.reason === 'work-not-found'
-              ? `Work ${id} not found`
-              : `Root folder "${result.rootFolder}" not found`;
-          return reply.status(404).send({ error });
+          if (result.reason === 'work-not-found') {
+            return reply.fail(404, 'errors.work.not-found', { id });
+          }
+          return reply.fail(404, 'errors.work.root-folder-not-found', {
+            folder: result.rootFolder ?? '',
+          });
         }
         return result.tracks;
       } catch {
-        return reply.status(500).send({ error: 'Failed to get track list' });
+        return reply.fail(500, 'errors.work.track-list-failed');
       }
     },
   );
@@ -202,12 +203,10 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
         result.status === 'work-not-found' ||
         result.status === 'cover-not-found'
       ) {
-        return reply.status(404).send({
-          error:
-            result.status === 'work-not-found'
-              ? `Work ${id} not found`
-              : `Cover for work ${id} not found`,
-        });
+        if (result.status === 'work-not-found') {
+          return reply.fail(404, 'errors.work.not-found', { id });
+        }
+        return reply.fail(404, 'errors.media.cover-not-found', { id });
       }
       return reply.send({ url: result.url, type: result.type, exists: true });
     },
@@ -228,9 +227,7 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { type } = request.query as { type: CoverType };
       const cover = getCoverWithFallback(id, type);
       if (!cover) {
-        return reply
-          .status(404)
-          .send({ error: `Cover for work ${id} not found` });
+        return reply.fail(404, 'errors.media.cover-not-found', { id });
       }
 
       return reply.type(cover.mimeType ?? 'image/jpeg').send(cover.data);

@@ -155,6 +155,7 @@ describe('setup routes', () => {
     const again = await app.inject({
       method: 'POST',
       url: '/api/setup',
+      headers: { 'accept-language': 'en' },
       payload: input,
     });
     expect(again.statusCode).toBe(403);

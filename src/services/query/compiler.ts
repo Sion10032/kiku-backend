@@ -64,38 +64,41 @@ function compileTag(node: TagToken, t: typeof works): SQL | undefined {
 
   if (field.type === 'Field') {
     if (field.path && field.path.length > 1) {
-      throw new QueryParseError(
-        `不支持的字段 "${field.name}"（可用：${FIELD_WHITELIST.join(', ')}）`,
-      );
+      // 路径过深并入同一 key：中文统一为「不支持的筛选字段」版本，语义相同
+      throw new QueryParseError('errors.query.unsupported-field', {
+        field: field.name,
+        available: FIELD_WHITELIST.join(', '),
+      });
     }
     if (!FIELD_WHITELIST.includes(field.name as FieldName)) {
-      throw new QueryParseError(
-        `不支持的筛选字段 "${field.name}"（可用：${FIELD_WHITELIST.join(', ')}）`,
-      );
+      throw new QueryParseError('errors.query.unsupported-field', {
+        field: field.name,
+        available: FIELD_WHITELIST.join(', '),
+      });
     }
   }
 
   if (expression.type === 'EmptyExpression') {
     if (field.type === 'Field') {
-      throw new QueryParseError(`字段 "${field.name}" 缺少值`);
+      throw new QueryParseError('errors.query.missing-value', {
+        field: field.name,
+      });
     }
     return undefined;
   }
   if (expression.type === 'RangeExpression') {
-    throw new QueryParseError(
-      '暂不支持范围查询（如 price:[100 TO 500]），后续版本支持',
-    );
+    throw new QueryParseError('errors.query.range-unsupported');
   }
   if (expression.type === 'RegexExpression') {
-    throw new QueryParseError('暂不支持正则查询');
+    throw new QueryParseError('errors.query.regex-unsupported');
   }
   // 裸词（ImplicitField）运行时省略 operator，且语义上恒为 ':'，先于运算符检查处理
   if (field.type === 'ImplicitField') return compileBareTerm(expression, t);
 
   if (operator.operator !== ':' && operator.operator !== ':=') {
-    throw new QueryParseError(
-      `暂不支持比较运算符 "${operator.operator}:"（数值范围筛选后续版本支持）`,
-    );
+    throw new QueryParseError('errors.query.comparison-unsupported', {
+      op: operator.operator,
+    });
   }
 
   switch (field.name) {
@@ -257,7 +260,7 @@ function overriddenProbe(
     expression.type !== 'LiteralExpression' ||
     typeof expression.value !== 'string'
   ) {
-    throw new QueryParseError('字段 "overridden" 需要 title/any 之一');
+    throw new QueryParseError('errors.query.overridden-value');
   }
   const field = expression.value.toLowerCase();
   if (field === 'title') {
@@ -273,7 +276,7 @@ function overriddenProbe(
        WHERE m.work_id = ${t.id}
     )`;
   }
-  throw new QueryParseError('字段 "overridden" 需要 title/any 之一');
+  throw new QueryParseError('errors.query.overridden-value');
 }
 
 // ---------- 值提取 ----------
@@ -285,12 +288,14 @@ function stringValue(
 ): { text: string; wildcard: boolean } {
   const { value, quoted } = expression;
   if (typeof value === 'boolean' || value === null) {
-    throw new QueryParseError(`字段 "${fieldName}" 需要文本值`);
+    throw new QueryParseError('errors.query.text-required', {
+      field: fieldName,
+    });
   }
   if (typeof value === 'number') {
-    throw new QueryParseError(
-      `字段 "${fieldName}" 需要文本值（数值筛选后续版本支持）`,
-    );
+    throw new QueryParseError('errors.query.text-required-numeric', {
+      field: fieldName,
+    });
   }
   return { text: value, wildcard: !quoted && /[*?]/.test(value) };
 }
@@ -300,11 +305,11 @@ function ageRatingCondition(
   t: typeof works,
 ): SQL {
   if (typeof expression.value !== 'string') {
-    throw new QueryParseError('字段 "age" 需要 all/r15/r18 之一');
+    throw new QueryParseError('errors.query.age-value');
   }
   const value = expression.value.toLowerCase();
   if (!(['all', 'r15', 'r18'] as const).includes(value as AgeRating)) {
-    throw new QueryParseError('字段 "age" 需要 all/r15/r18 之一');
+    throw new QueryParseError('errors.query.age-value');
   }
   return ageRatingProbe(value as AgeRating, t);
 }
@@ -316,9 +321,11 @@ function compileBareTerm(
   t: typeof works,
 ): SQL {
   const { value } = expression;
-  if (value === null) throw new QueryParseError('查询词不能为空');
+  if (value === null) throw new QueryParseError('errors.query.empty-term');
   if (typeof value === 'boolean') {
-    throw new QueryParseError(`不支持的查询词 "${value}"`);
+    throw new QueryParseError('errors.query.unsupported-term', {
+      value: String(value),
+    });
   }
   const text = String(value);
   const rj = extractWorkCode(text);

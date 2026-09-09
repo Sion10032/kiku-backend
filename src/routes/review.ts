@@ -64,9 +64,7 @@ export const reviewRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return getReviewsByUsername(username);
       }
 
-      return reply
-        .status(400)
-        .send({ error: 'work_id or username is required' });
+      return reply.fail(400, 'errors.review.target-required');
     },
   );
 

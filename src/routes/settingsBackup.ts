@@ -99,7 +99,7 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const user = request.user;
       const backup = await getSettingBackup(user.name, request.params.name);
       if (!backup) {
-        return reply.status(404).send({ error: '备份不存在' });
+        return reply.fail(404, 'errors.backup.not-found');
       }
       return backup;
     },
@@ -116,7 +116,10 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (request.body as { payload?: unknown } | undefined)?.payload,
         );
         if (raw !== undefined && raw.length > PAYLOAD_MAX_SIZE) {
-          return reply.status(400).send({ error: '备份内容过大（上限 4KB）' });
+          // hook 内发送响应必须 return reply：reply.fail 返回 void，
+          // 返回 undefined 会令 Fastify 在已发送的 reply 上继续错误处理而崩溃
+          reply.fail(400, 'errors.backup.too-large');
+          return reply;
         }
       },
       schema: {
@@ -141,7 +144,7 @@ export const settingsBackupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (result === 'limit-reached') {
         // 新建时已达每用户上限（覆盖更新不受限，不会走到这里）
-        return reply.status(409).send({ error: '最多保留 10 条备份' });
+        return reply.fail(409, 'errors.backup.limit-reached');
       }
       return { name: result.name, updatedAt: result.updatedAt };
     },

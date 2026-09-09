@@ -68,8 +68,7 @@ export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const result = await setupInstance(request.body);
-      if (!result)
-        return reply.status(403).send({ error: 'Setup already completed' });
+      if (!result) return reply.fail(403, 'errors.setup.already-completed');
       // 初始化成功即消费旧终态：下次迁移（如有）从干净状态开始
       migration.reset();
       return { token: signToken(fastify, result), ...result };
@@ -116,7 +115,7 @@ export const setupRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (_request, reply) => {
       if (!migration.start()) {
-        return reply.status(409).send({ error: '迁移正在进行中' });
+        return reply.fail(409, 'errors.setup.migration-in-progress');
       }
       return { started: true };
     },

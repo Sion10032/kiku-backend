@@ -64,10 +64,10 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
         duration,
       });
       if (outcome === 'user-missing') {
-        return reply.status(401).send({ error: 'User not found' });
+        return reply.fail(401, 'errors.user.not-found');
       }
       if (outcome === 'work-missing') {
-        return reply.status(404).send({ error: `Work ${work_id} not found` });
+        return reply.fail(404, 'errors.work.not-found', { id: work_id });
       }
       return { success: true };
     },
@@ -92,7 +92,7 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { workId } = request.params;
       const outcome = await markWorkRead(user.name, workId);
       if (outcome === 'work-missing') {
-        return reply.status(404).send({ error: `Work ${workId} not found` });
+        return reply.fail(404, 'errors.work.not-found', { id: workId });
       }
       return { success: true };
     },
