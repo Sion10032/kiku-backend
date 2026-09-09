@@ -35,6 +35,7 @@
     "fastify": "^5.8.5",
     "fastify-plugin": "^6.0.0",
     "fastify-type-provider-zod": "^6.1.0",
+    "i18next": "^26.4.2",
     "liqe": "^3.8.7",
     "music-metadata": "^11.15.0",
     "strtok3": "^10.3.5",
