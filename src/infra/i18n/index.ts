@@ -12,6 +12,9 @@ export {
 
 export type TranslateParams = Record<string, string | number>;
 
+/** 字典 key 字面量联合，拼错/未登记的 key 编译期报错。 */
+export type TranslateKey = keyof typeof zhCN;
+
 /** 独立实例（不动全局单例）；扁平 dotted key 关闭路径拆分；插值/复数与前端同规则。 */
 const i18n = createInstance();
 await i18n.init({
@@ -29,7 +32,7 @@ await i18n.init({
 /** 取翻译；缺失回退 zh-CN、再回显 key。插值 {{name}}；params 含 count 时触发复数后缀。 */
 export function translate(
   locale: Locale,
-  key: string,
+  key: TranslateKey,
   params?: TranslateParams,
 ): string {
   return i18n.t(key, { lng: locale, ...params });

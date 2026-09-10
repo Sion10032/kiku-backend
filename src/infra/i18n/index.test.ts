@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { translate } from './index.js';
+import { type TranslateKey, translate } from './index.js';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
 
@@ -14,7 +14,8 @@ describe('translate', () => {
   });
 
   it('key 缺失时回退 zh-CN，再缺失回显 key', () => {
-    expect(translate('en', 'errors.nonexistent-key')).toBe(
+    // cast 是刻意的：该用例验证的就是非字典 key 的运行时回退路径
+    expect(translate('en', 'errors.nonexistent-key' as TranslateKey)).toBe(
       'errors.nonexistent-key',
     );
   });

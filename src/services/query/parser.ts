@@ -1,11 +1,11 @@
 import type { LiqeQuery } from 'liqe';
 import { parse } from 'liqe';
-import { translate } from '../../infra/i18n/index.js';
+import { type TranslateKey, translate } from '../../infra/i18n/index.js';
 
 /** 查询语言错误：以字典 key+params 携带翻译素材，由路由层映射为 400 并本地化。 */
 export class QueryParseError extends Error {
   constructor(
-    readonly key: string,
+    readonly key: TranslateKey,
     readonly params?: Record<string, string | number>,
   ) {
     // message 固定为 zh-CN 字典值：既有 compiler/parser 测试的中文断言零改动；

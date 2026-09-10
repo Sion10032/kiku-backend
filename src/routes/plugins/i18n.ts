@@ -3,7 +3,12 @@ import fastifyPlugin from 'fastify-plugin';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { en as zodEn, zhCN as zodZhCN } from 'zod/locales';
-import { type Locale, negotiate, translate } from '../../infra/i18n/index.js';
+import {
+  type Locale,
+  negotiate,
+  type TranslateKey,
+  translate,
+} from '../../infra/i18n/index.js';
 
 /** 支持语言对应的 zod 内置 locale（issue 消息在 safeParse 时生成）。 */
 const ZOD_LOCALES = { 'zh-CN': zodZhCN, en: zodEn } as const;
@@ -17,7 +22,7 @@ declare module 'fastify' {
     /** 返回统一 { error: <本地化消息> } 错误体，消息来自 infra/i18n 字典。 */
     fail(
       statusCode: number,
-      errorKey: string,
+      errorKey: TranslateKey,
       params?: Record<string, string | number>,
     ): void;
   }
@@ -40,7 +45,7 @@ async function plugin(fastify: FastifyInstance) {
     function (
       this: FastifyReply,
       statusCode: number,
-      errorKey: string,
+      errorKey: TranslateKey,
       params?: Record<string, string | number>,
     ) {
       this.status(statusCode).send({
