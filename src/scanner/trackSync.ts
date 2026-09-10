@@ -14,8 +14,9 @@ import {
 
 /**
  * 音轨行同步：size diff → 仅对新增/变更条目探测时长 → upsert/delete。
- * 挂接点：唯一挂接在 update 模式（scanner.ts performUpdate）；scan 模式
- * （含新作品入库）不触发，新作品由下次 update metadata 统一同步回填。
+ * 挂接点：scan 任务分支与 update 模式共用（scanner.ts
+ * syncWorkMetadataAndTracks，新作品入库即时同步），已扫描跳过的作品仍由
+ * update 模式统一回填；另有 workOps 单作品运维直接调用。
  * 变更条目 revalidate=true（本计划仅计入 updated；姊妹计划在该标记上挂响度失效）。
  * 探测失败 durationSec=null 不阻塞。
  */

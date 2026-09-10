@@ -239,8 +239,55 @@ export async function* syncWorkMetadata(
 }
 
 /**
+ * 单作品完整同步：DLsite 元数据（upsert + 补封面）+ 音轨时长 diff 回填。
+ * scan 任务分支与 update 模式共用的动作集合；音轨同步失败仅记 warning 日志，
+ * 不判任务失败（DLsite 元数据已保存）。
+ */
+async function* syncWorkMetadataAndTracks(
+  rjCode: string,
+  rootFolder: string,
+  relativePath: string,
+  config: Config,
+  signal: AbortSignal,
+): AsyncGenerator<ScanEvent, { title: string; created: boolean }> {
+  const metaGen = syncWorkMetadata(rjCode, rootFolder, relativePath, signal);
+  let r = await metaGen.next();
+  while (!r.done) {
+    yield r.value;
+    r = await metaGen.next();
+  }
+
+  // 音轨行回填：size diff → 仅对新增/变更条目探测时长；失败不判任务失败
+  try {
+    const rootPath = config.rootFolders.find(
+      (f) => f.name === rootFolder,
+    )?.path;
+    if (!rootPath) {
+      yield* emitLog(
+        'warning',
+        `Track sync skipped, root folder not found: ${rootFolder}`,
+      );
+    } else {
+      const source = await openWorkSource(rootPath, relativePath);
+      await syncWorkTracks(rjCode, source, await source.buildTree());
+    }
+  } catch (err) {
+    yield* emitLog(
+      'warning',
+      `Track sync failed for ${rjCode}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  return r.value;
+}
+
+/**
  * Async generator that performs a scan, yielding events as it progresses.
  * Checks the abort signal between operations so the scan can be terminated.
+ * 任务分支（新作品/路径变更）走完整同步流程（元数据 + 音轨时长）；
+ * 已扫描跳过的作品不同步，由 update 模式统一回填兜底。
  */
 export async function* performScan(
   config: Config,
@@ -399,11 +446,12 @@ export async function* performScan(
       task.status = 'scanning';
       yield { type: 'SCAN_TASK', task: stripTask(task) };
 
-      // 抓元数据 → 入库 → 补封面：事件流逐条转发（日志即时推送），return 值计数
-      const gen = syncWorkMetadata(
+      // 元数据 + 音轨时长：事件流逐条转发（日志即时推送），return 值计数
+      const gen = syncWorkMetadataAndTracks(
         task.rjCode,
         task.rootFolder,
         task.relativePath,
+        config,
         signal,
       );
       let r = await gen.next();
@@ -495,8 +543,8 @@ export async function* performScan(
 
 /**
  * update 模式：遍历数据库已有作品，重新抓取 DLsite 元数据并更新，
- * 并顺带做音轨行 diff 回填（音轨时长同步的唯一触发点；scan 模式不做任何
- * 音轨同步，含新作品，新作品由下次 update metadata 统一补齐）。
+ * 并顺带做音轨行 diff 回填（与 scan 任务分支共用 syncWorkMetadataAndTracks；
+ * 已扫描跳过的作品由本模式统一回填兜底）。
  * 对齐原版 PERFORM_UPDATE（updater.js --refreshAll）语义，不扫描文件系统。
  * 导出供测试直接驱动（对齐 performScan）。
  */
@@ -530,7 +578,13 @@ export async function* performUpdate(
     yield { type: 'SCAN_TASK', task: stripTask(task) };
 
     try {
-      const gen = syncWorkMetadata(ref.id, ref.rootFolder, ref.dir, signal);
+      const gen = syncWorkMetadataAndTracks(
+        ref.id,
+        ref.rootFolder,
+        ref.dir,
+        config,
+        signal,
+      );
       let r = await gen.next();
       while (!r.done) {
         yield r.value;
@@ -542,30 +596,6 @@ export async function* performUpdate(
       } else {
         updated++;
         yield* emitLog('info', `Updated: ${ref.id} - ${r.value.title}`);
-      }
-
-      // 音轨行回填：update 模式是音轨时长同步的唯一触发点——全库作品
-      // （含 scan 新入库）在此做 diff 同步，失败不判任务失败（DLsite 元数据已保存）
-      try {
-        const rootPath = config.rootFolders.find(
-          (f) => f.name === ref.rootFolder,
-        )?.path;
-        if (!rootPath) {
-          yield* emitLog(
-            'warning',
-            `Track sync skipped, root folder not found: ${ref.rootFolder}`,
-          );
-        } else {
-          const source = await openWorkSource(rootPath, ref.dir);
-          await syncWorkTracks(ref.id, source, await source.buildTree());
-        }
-      } catch (err) {
-        yield* emitLog(
-          'warning',
-          `Track sync failed for ${ref.id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
       }
 
       task.status = 'completed';

@@ -50,7 +50,7 @@ const sine = readFileSync(
 // RJ 后必须恰好 6 或 8 位纯数字
 const base = 300000 + Math.floor(Math.random() * 600000);
 const ID = `RJ${base}`;
-/** 不入库的新作品：验证 scan 不触发音轨同步、update 统一补齐 */
+/** 不入库的新作品：验证 scan 即时回填音轨时长 */
 const ID2 = `RJ${base + 1}`;
 const CIRCLE = '回填测试社团';
 
@@ -129,8 +129,8 @@ describe('performUpdate（音轨回填）', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('scan 不触发音轨同步；update metadata 统一补齐（含新作品）', async () => {
-    // scan：新作品目录被完整扫描入库，但不写音轨行
+  it('scan 即时同步新作品音轨时长；update 重复执行零动作', async () => {
+    // scan：新作品目录被完整扫描入库，并即时回填音轨时长
     const scanEvents: ScanEvent[] = [];
     for await (const ev of performScan(
       getConfig(),
@@ -145,13 +145,13 @@ describe('performUpdate（音轨回填）', () => {
         ev.task.status === 'completed',
     );
     expect(newWorkTask).toBeDefined();
-    expect(await getTrackRows(ID2)).toHaveLength(0);
+    const scanRows = await getTrackRows(ID2);
+    expect(scanRows).toHaveLength(1);
+    expect(scanRows[0]?.mediaIndex).toBe('sine.wav');
+    expect(scanRows[0]?.durationSec ?? 0).toBeGreaterThan(0.7);
 
-    // update metadata：全库遍历统一补齐（含 scan 新入库作品）
+    // update metadata：size 未变 → 零动作，不产生重复行
     await runUpdate();
-    const rows = await getTrackRows(ID2);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.mediaIndex).toBe('sine.wav');
-    expect(rows[0]?.durationSec ?? 0).toBeGreaterThan(0.7);
+    expect(await getTrackRows(ID2)).toHaveLength(1);
   });
 });
