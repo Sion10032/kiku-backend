@@ -269,7 +269,7 @@ export async function scrapeStaticWorkInfo(
     new RegExp(`(${WORK_CODE_SOURCE})_img_main\\.jpg`),
   );
   if (coverMatch) {
-    sourceId = coverMatch[1];
+    sourceId = coverMatch[1] ?? '';
   }
 
   return {

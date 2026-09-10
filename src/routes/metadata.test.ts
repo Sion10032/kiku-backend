@@ -77,7 +77,7 @@ describe('元数据覆盖路由', () => {
       },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ success: true });
+    expect(res.json<{ success: boolean }>()).toEqual({ success: true });
     const detail = await app.inject({
       method: 'GET',
       url: `/api/work/${OVR.w1}/metadata/override`,
@@ -192,7 +192,9 @@ describe('标题净化路由', () => {
       },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ success: true, matched: 1, overridden: 1 });
+    expect(
+      res.json<{ success: boolean; matched: number; overridden: number }>(),
+    ).toEqual({ success: true, matched: 1, overridden: 1 });
     const detail = await app.inject({
       method: 'GET',
       url: `/api/work/${OVR.w2}/metadata/override`,

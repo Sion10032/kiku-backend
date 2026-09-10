@@ -287,6 +287,7 @@ describe('fetchDLsiteWorkInfo（VJ 作品）', () => {
       // scanner-*.test.ts 会用 mock.module 覆盖 dlsite 模块的 fetchDLsiteWorkInfo，
       // 且 bun 的模块 mock 在同进程内跨测试文件生效。加 query 绕开缓存，
       // 拿到未被 mock 的真实模块实例。
+      // @ts-expect-error - 带查询串的模块路径 tsc 无法解析
       const { fetchDLsiteWorkInfo } = await import('./dlsite?vj-test');
       const info = await fetchDLsiteWorkInfo('VJ01003042');
 
@@ -306,7 +307,12 @@ describe('fetchDLsiteWorkInfo（VJ 作品）', () => {
       // rank 保持 DLsite AJAX 原始数组形状（保留 rank_date，缺省补 ''，非法项跳过）
       expect(info.rank).toEqual([
         { term: 'year', category: 'all', rank: 108, rank_date: '2012' },
-        { term: 'total', category: 'voice', rank: 427, rank_date: '2018-10-11' },
+        {
+          term: 'total',
+          category: 'voice',
+          rank: 427,
+          rank_date: '2018-10-11',
+        },
         { term: 'day', category: 'all', rank: 3, rank_date: '' },
       ]);
     } finally {

@@ -39,7 +39,7 @@ export function parseWorkCode(
   id: string,
 ): { prefix: WorkCodePrefix; digits: string } | null {
   const match = id.match(/^([Rr][Jj]|[Vv][Jj])(\d{8}|\d{6})$/);
-  if (!match) return null;
+  if (!match?.[1] || !match[2]) return null;
   return { prefix: match[1].toUpperCase() as WorkCodePrefix, digits: match[2] };
 }
 
