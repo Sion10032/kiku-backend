@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
+import { configSchema } from '../src/infra/config/schema';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
@@ -42,6 +43,22 @@ describe('Config Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('Loudness Config Schema', () => {
+    it('响度均衡配置键使用默认值', () => {
+      const cfg = configSchema.parse({ md5secret: 'a', jwtsecret: 'b' });
+      expect(cfg.autoLoudnessAnalysis).toBe(false);
+      expect(cfg.ffmpegPath).toBe('ffmpeg');
+      expect(cfg.analysisParallelism).toBe(2);
+    });
+
+    it('响度配置越界被拒绝', () => {
+      const base = { md5secret: 'a', jwtsecret: 'b' };
+      expect(() =>
+        configSchema.parse({ ...base, analysisParallelism: 9 }),
+      ).toThrow();
     });
   });
 });

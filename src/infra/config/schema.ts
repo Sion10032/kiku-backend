@@ -11,6 +11,7 @@ export const sharedConfigSchema = z.object({
   offloadMedia: z.boolean().default(false),
   offloadStreamPath: z.string().default('/media/stream/'),
   offloadDownloadPath: z.string().default('/media/download/'),
+  autoLoudnessAnalysis: z.boolean().default(false),
 });
 
 export const configSchema = sharedConfigSchema.extend({
@@ -50,6 +51,8 @@ export const configSchema = sharedConfigSchema.extend({
   kikoeruMigratedAt: z.string().optional(),
   /** 迁移后向导管理员创建已消费；不放 sharedConfigSchema */
   kikoeruSetupConsumed: z.boolean().optional(),
+  ffmpegPath: z.string().default('ffmpeg'),
+  analysisParallelism: z.number().min(1).max(8).default(2),
 });
 
 export type Config = z.infer<typeof configSchema>;
