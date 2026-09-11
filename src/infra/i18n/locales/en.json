@@ -10,6 +10,7 @@
   "errors.work.not-found": "Work {{id}} not found",
   "errors.work.root-folder-not-found": "Root folder \"{{folder}}\" not found",
   "errors.work.track-list-failed": "Failed to get track list",
+  "errors.work.track-not-found": "Track \"{{mediaIndex}}\" not found",
   "errors.work-admin.failed": "Operation failed: {{reason}}",
   "errors.review.target-required": "work_id or username is required",
   "errors.favourite.target-not-found": "Target {{id}} not found",

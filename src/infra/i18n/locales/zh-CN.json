@@ -10,6 +10,7 @@
   "errors.work.not-found": "作品 {{id}} 不存在",
   "errors.work.root-folder-not-found": "根目录 \"{{folder}}\" 不存在",
   "errors.work.track-list-failed": "获取音轨列表失败",
+  "errors.work.track-not-found": "音轨 \"{{mediaIndex}}\" 不存在",
   "errors.work-admin.failed": "操作失败：{{reason}}",
   "errors.review.target-required": "必须提供 work_id 或 username",
   "errors.favourite.target-not-found": "目标 {{id}} 不存在",

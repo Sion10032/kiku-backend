@@ -68,6 +68,8 @@ export const formattedWorkSchema = z.object({
   read: z.boolean(),
   /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
   duration: z.number().nullable(),
+  /** 作品整合响度（LUFS，已分析音轨按时长加权）；null = 未分析 */
+  loudnessLufs: z.number().nullable(),
   language: z.string().nullable(),
   sourceId: z.string().nullable(),
   /** 被管理员覆盖的字段（无覆盖时缺省） */

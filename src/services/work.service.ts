@@ -375,11 +375,16 @@ export interface FormattedWork {
   read: boolean;
   /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
   duration: number | null;
+  /** 作品整合响度（LUFS，已分析音轨按时长加权）；null = 未分析 */
+  loudnessLufs: number | null;
   language: string | null;
   sourceId: string | null;
 }
 
 function formatWork(row: WorkWithRelations): FormattedWork {
+  // 响度：有分析数据即下发；目标响度/最大增益/均衡开关均在客户端，
+  // gainDb 由前端按用户设置计算（服务端零转码，不做增益应用）
+  const loudnessLufs = row.loudnessLufs ?? null;
   return {
     id: row.id,
     rootFolder: row.rootFolder,
@@ -403,6 +408,7 @@ function formatWork(row: WorkWithRelations): FormattedWork {
     userProgress: null,
     read: false,
     duration: null,
+    loudnessLufs,
     language: row.language,
     sourceId: row.sourceId,
   };
@@ -724,14 +730,19 @@ export async function getWorkTracks(id: string): Promise<WorkTracksResult> {
 
   const source = await openWorkSource(rootFolder.path, row.dir);
   const tree = await source.buildTree();
-  // API 层职责：文件系统 TrackNode 保持纯净，时长在返回前按 mediaIndex 附加
+  // API 层职责：文件系统 TrackNode 保持纯净，时长/响度在返回前按 mediaIndex 附加
   // （库内无行的轨/探测失败的轨 → null）。
   const rows = await getTrackRows(id);
   const dur = new Map(rows.map((r) => [r.mediaIndex, r.durationSec]));
+  const lufs = new Map(rows.map((r) => [r.mediaIndex, r.loudnessLufs]));
   const attach = (nodes: TrackNode[]): TrackNode[] =>
     nodes.map((n) =>
       n.type === 'audio'
-        ? { ...n, durationSec: dur.get(n.hash) ?? null }
+        ? {
+            ...n,
+            durationSec: dur.get(n.hash) ?? null,
+            loudnessLufs: lufs.get(n.hash) ?? null,
+          }
         : n.type === 'folder'
           ? { ...n, children: attach(n.children) }
           : n,

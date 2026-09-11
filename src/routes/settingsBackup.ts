@@ -37,6 +37,9 @@ const payloadSchema = z.object({
   dynamicColor: z.boolean().optional(),
   colorMode: z.enum(['light', 'dark', 'auto']).optional(),
   mediaNotification: z.boolean().optional(),
+  loudnessNormalization: z.boolean().optional(),
+  loudnessTargetLufs: z.number().optional(),
+  loudnessMaxGainDb: z.number().optional(),
   floatingLyrics: z
     .object({
       enabled: z.boolean(),

@@ -6,6 +6,7 @@ import {
   getCoverWithFallback,
 } from '../services/cover.service.js';
 import { QueryParseError } from '../services/query/parser.js';
+import { getTrackRows } from '../services/track.service.js';
 import {
   getCircles,
   getSeries,
@@ -138,6 +139,8 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   .optional(),
                 // 播放时长（秒）；未知/探测失败为 null（service 层总会带键）
                 durationSec: z.number().nullable().optional(),
+                // 整合响度（LUFS）；未分析为 null（与 durationSec 同构）
+                loudnessLufs: z.number().nullable().optional(),
               }),
               z.object({
                 type: z.enum(['text', 'image', 'other']),
@@ -174,6 +177,43 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         return reply.fail(500, 'errors.work.track-list-failed');
       }
+    },
+  );
+
+  // 响度曲线按需返回（单条响应可达数十 KB，不进 /work 与 /tracks 树）；
+  // mediaIndex 含子目录路径，用 query 而非路径参数
+  fastify.get(
+    '/work/:id/loudness-curve',
+    {
+      schema: {
+        params: idParamsSchema,
+        querystring: z.object({ mediaIndex: z.string() }),
+        response: {
+          200: z.object({
+            mediaIndex: z.string(),
+            intervalSec: z.literal(1),
+            curve: z.array(z.number().nullable()).nullable(),
+          }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { mediaIndex } = request.query;
+      const row = (await getTrackRows(id)).find(
+        (r) => r.mediaIndex === mediaIndex,
+      );
+      if (!row) {
+        return reply.fail(404, 'errors.work.track-not-found', { mediaIndex });
+      }
+      return {
+        mediaIndex,
+        intervalSec: 1 as const,
+        curve: row.loudnessCurve
+          ? (JSON.parse(row.loudnessCurve) as Array<number | null>)
+          : null,
+      };
     },
   );
 
