@@ -750,3 +750,27 @@ export async function getAllWorkRefs(): Promise<
     .from(works)
     .where(isNull(works.deletedAt));
 }
+
+/**
+ * 分析用原始行：rootFolder 名 + 相对 dir 定位作品源，title 供任务事件展示。
+ * 过滤软删（软删作品不参与响度分析）；不存在返回 null。
+ * 现有 getWorkById 返回 formatted 对象非原始行，不能复用。
+ */
+export async function getWorkRow(id: string): Promise<{
+  id: string;
+  rootFolder: string;
+  dir: string;
+  title: string;
+} | null> {
+  const rows = await db
+    .select({
+      id: works.id,
+      rootFolder: works.rootFolder,
+      dir: works.dir,
+      title: works.title,
+    })
+    .from(works)
+    .where(and(eq(works.id, id), isNull(works.deletedAt)))
+    .limit(1);
+  return rows[0] ?? null;
+}
