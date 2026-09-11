@@ -132,7 +132,7 @@ describe('响度 API 输出', () => {
     };
   });
 
-  it('work 带 loudness（有分析数据即下发）', async () => {
+  it('work 带 loudness/truePeak（有分析数据即下发）', async () => {
     // 准备：rootFolder + RJ00000004 目录 + sine.wav → syncWorkTracks 填行 +
     // setTrackLoudness(-20, tp=-6) + computeWorkLoudness；gainDb 由前端按用户设置计算，服务端不下发
     await seedLoudness(-6);
@@ -144,6 +144,7 @@ describe('响度 API 输出', () => {
       })
     ).json();
     expect(work.loudnessLufs).toBeCloseTo(-20, 5);
+    expect(work.loudnessTruePeakDb).toBeCloseTo(-6, 5);
   });
 
   it('未分析作品 → loudness 均为 null', async () => {
@@ -172,6 +173,7 @@ describe('响度 API 输出', () => {
         })
       ).json();
       expect(work.loudnessLufs).toBeNull();
+      expect(work.loudnessTruePeakDb).toBeNull();
     } finally {
       await db.delete(tracks).where(eq(tracks.workId, id));
       await db.delete(works).where(eq(works.id, id));
