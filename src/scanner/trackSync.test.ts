@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { memorySource } from '@test/helpers/memorySource.js';
 import { setupTestEnvironment } from '@test/helpers/setup.js';
 import { entriesToTrackTree } from '../infra/fs/source/tree.js';
-import { getTrackRows } from '../services/track.service.js';
+import { getTrackRows, setTrackLoudness } from '../services/track.service.js';
 import { upsertWork } from '../services/work.service.js';
 import { syncWorkTracks } from './trackSync.js';
 
@@ -62,4 +62,27 @@ test('size 变化 → 重探测更新；消失 → 删行', async () => {
   );
   expect(r2.removed).toBe(1);
   expect(await getTrackRows(WORK)).toEqual([]);
+});
+
+test('size 变化 → 重探测并使响度失效', async () => {
+  const wav = readFileSync(
+    join(import.meta.dir, '../../test/fixtures/audio/sine.wav'),
+  );
+  const tree = entriesToTrackTree(['a.wav']);
+  await syncWorkTracks(WORK, memorySource({ 'a.wav': wav }), tree);
+  await setTrackLoudness(WORK, 'a.wav', {
+    lufs: -18,
+    truePeakDb: -1,
+    curve: [-70, -18.1],
+  });
+
+  // 内容变长（两个 wav 拼接 → size 变化）→ 该轨响度与曲线作废
+  await syncWorkTracks(
+    WORK,
+    memorySource({ 'a.wav': Buffer.concat([wav, wav]) }),
+    tree,
+  );
+  const row = (await getTrackRows(WORK))[0];
+  expect(row?.loudnessLufs).toBeNull();
+  expect(row?.loudnessCurve).toBeNull();
 });

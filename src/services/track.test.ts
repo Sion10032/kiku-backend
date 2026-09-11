@@ -4,10 +4,13 @@ import { eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
 import { tracks } from '../infra/db/main/schema.js';
 import {
+  computeWorkLoudness,
   deleteTrackRows,
+  getPendingAnalysisWorkIds,
   getTotalDurations,
   getTrackRows,
   planTrackSync,
+  setTrackLoudness,
   upsertTrackRow,
 } from './track.service.js';
 import { upsertWork } from './work.service.js';
@@ -89,6 +92,100 @@ describe('track.service（DB）', () => {
     });
     await deleteTrackRows(WORK, ['x.mp3']);
     expect(await getTrackRows(WORK)).toEqual([]);
+  });
+
+  it('upsert + resetLoudness 清空响度与曲线', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'a.mp3',
+      title: 'a.mp3',
+      sizeBytes: 100,
+      durationSec: 12.5,
+    });
+    await setTrackLoudness(WORK, 'a.mp3', {
+      lufs: -18.2,
+      truePeakDb: -1.5,
+      curve: [-70, null, -18.4],
+    });
+    await upsertTrackRow(
+      {
+        workId: WORK,
+        mediaIndex: 'a.mp3',
+        title: 'a.mp3',
+        sizeBytes: 200,
+        durationSec: 13,
+      },
+      { resetLoudness: true },
+    );
+    const rows = await getTrackRows(WORK);
+    expect(rows[0]?.sizeBytes).toBe(200);
+    expect(rows[0]?.loudnessLufs).toBeNull();
+    expect(rows[0]?.loudnessCurve).toBeNull();
+  });
+
+  it('setTrackLoudness 记录错误分支', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'e.mp3',
+      title: 'e.mp3',
+      sizeBytes: 1,
+      durationSec: null,
+    });
+    await setTrackLoudness(WORK, 'e.mp3', { error: 'boom' });
+    expect((await getTrackRows(WORK))[0]?.analyzeError).toBe('boom');
+  });
+
+  it('setTrackLoudness 存曲线（JSON 序列化，空段 null）', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'c.mp3',
+      title: 'c.mp3',
+      sizeBytes: 1,
+      durationSec: 10,
+    });
+    await setTrackLoudness(WORK, 'c.mp3', {
+      lufs: -19,
+      truePeakDb: -2,
+      curve: [-70, null, -19.3],
+    });
+    expect(
+      JSON.parse((await getTrackRows(WORK))[0]?.loudnessCurve ?? '[]'),
+    ).toEqual([-70, null, -19.3]);
+  });
+
+  it('computeWorkLoudness 按时长加权 + true peak 取最大', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'a.mp3',
+      title: 'a.mp3',
+      sizeBytes: 1,
+      durationSec: 100,
+    });
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'b.mp3',
+      title: 'b.mp3',
+      sizeBytes: 1,
+      durationSec: 300,
+    });
+    await setTrackLoudness(WORK, 'a.mp3', { lufs: -20, truePeakDb: -2 });
+    await setTrackLoudness(WORK, 'b.mp3', { lufs: -16, truePeakDb: -0.5 });
+    const w = await computeWorkLoudness(WORK);
+    // (100×-20 + 300×-16)/400 = -17
+    expect(w?.lufs).toBeCloseTo(-17, 5);
+    expect(w?.truePeakDb).toBeCloseTo(-0.5, 5);
+    expect(await getPendingAnalysisWorkIds()).toEqual([]);
+  });
+
+  it('待分析作品 = 存在未分析音轨的作品', async () => {
+    await upsertTrackRow({
+      workId: WORK,
+      mediaIndex: 'x.mp3',
+      title: 'x.mp3',
+      sizeBytes: 1,
+      durationSec: 1,
+    });
+    expect(await getPendingAnalysisWorkIds()).toEqual([WORK]);
   });
 });
 

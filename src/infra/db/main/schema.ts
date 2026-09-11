@@ -43,6 +43,10 @@ export const works = sqliteTable(
     seriesId: text('series_id').references(() => series.id),
     /** 软删除标记（ISO 时间串，null = 正常）。源文件缺失时置位，超过宽限期后物理清理。 */
     deletedAt: text('deleted_at'),
+    /** 作品整合响度（LUFS，已分析音轨按时长加权）；null = 未分析。 */
+    loudnessLufs: real('loudness_lufs'),
+    /** 作品内已分析音轨的 True Peak 最大值（dBTP），用于正向增益防削波钳制。 */
+    loudnessTruePeakDb: real('loudness_true_peak_db'),
   },
   (t) => [
     // 列表端点按这些列排序且恒带 deleted_at IS NULL，用部分索引精确匹配查询形状；
@@ -221,6 +225,16 @@ export const tracks = sqliteTable(
     title: text('title').notNull(),
     durationSec: real('duration_sec'), // 解析失败为 null
     sizeBytes: integer('size_bytes').notNull(),
+    /** 整合响度（LUFS）；null = 未分析。 */
+    loudnessLufs: real('loudness_lufs'),
+    /** True Peak（dBTP）。 */
+    loudnessTruePeakDb: real('loudness_true_peak_db'),
+    /** 最近一次分析时间（ISO 8601 文本，与全库时间戳风格一致）。 */
+    analyzedAt: text('analyzed_at'),
+    /** 最近一次分析错误（null = 无错误；重试成功时清空）。 */
+    analyzeError: text('analyze_error'),
+    // 响度曲线（D6）：JSON 数组，short-term LUFS 按秒降采样（1 点/秒，1 位小数），空段 null
+    loudnessCurve: text('loudness_curve'),
   },
   (t) => [primaryKey({ columns: [t.workId, t.mediaIndex] })],
 );

@@ -1,6 +1,6 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
-import { tracks } from '../infra/db/main/schema.js';
+import { tracks, works } from '../infra/db/main/schema.js';
 
 export type TrackRow = typeof tracks.$inferSelect;
 
@@ -49,17 +49,29 @@ export interface NewTrackInput {
   durationSec: number | null;
 }
 
-export async function upsertTrackRow(row: NewTrackInput): Promise<void> {
+export async function upsertTrackRow(
+  row: NewTrackInput,
+  opts?: { resetLoudness?: boolean },
+): Promise<void> {
   await db
     .insert(tracks)
     .values(row)
     .onConflictDoUpdate({
       target: [tracks.workId, tracks.mediaIndex],
-      set: {
-        title: row.title,
-        sizeBytes: row.sizeBytes,
-        durationSec: row.durationSec,
-      },
+      set: opts?.resetLoudness
+        ? {
+            ...row,
+            loudnessLufs: null,
+            loudnessTruePeakDb: null,
+            loudnessCurve: null,
+            analyzedAt: null,
+            analyzeError: null,
+          }
+        : {
+            title: row.title,
+            sizeBytes: row.sizeBytes,
+            durationSec: row.durationSec,
+          },
     });
 }
 
@@ -99,4 +111,75 @@ export async function getTotalDurations(
     if (map.has(r.workId)) map.set(r.workId, r.total);
   }
   return map;
+}
+
+export type LoudnessValue =
+  | {
+      lufs: number;
+      truePeakDb: number;
+      /** short-term 按秒降采样序列（1 点/秒，1 位小数，空段 null）；正常分析总带值 */
+      curve?: Array<number | null>;
+    }
+  | { error: string };
+
+export async function setTrackLoudness(
+  workId: string,
+  mediaIndex: string,
+  value: LoudnessValue,
+): Promise<void> {
+  const base =
+    'error' in value
+      ? {
+          loudnessLufs: null,
+          loudnessTruePeakDb: null,
+          loudnessCurve: null,
+          analyzeError: value.error,
+        }
+      : {
+          loudnessLufs: value.lufs,
+          loudnessTruePeakDb: value.truePeakDb,
+          loudnessCurve: value.curve ? JSON.stringify(value.curve) : null,
+          analyzeError: null,
+        };
+  await db
+    .update(tracks)
+    .set({ ...base, analyzedAt: new Date().toISOString() })
+    .where(and(eq(tracks.workId, workId), eq(tracks.mediaIndex, mediaIndex)));
+}
+
+/** 待分析 = 存在 loudness IS NULL 音轨的作品（含 analyze_error 的可重试）；join works 排除软删与孤儿轨。 */
+export async function getPendingAnalysisWorkIds(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ workId: tracks.workId })
+    .from(tracks)
+    .innerJoin(works, eq(tracks.workId, works.id))
+    .where(and(isNull(tracks.loudnessLufs), isNull(works.deletedAt)));
+  return rows.map((r) => r.workId);
+}
+
+/** 作品响度 = 已分析音轨按时长加权 LUFS + true peak 最大值；无已分析音轨返回 null。 */
+export async function computeWorkLoudness(
+  workId: string,
+): Promise<{ lufs: number; truePeakDb: number } | null> {
+  const rows = (await getTrackRows(workId)).filter(
+    (r) =>
+      r.loudnessLufs !== null && r.durationSec !== null && r.durationSec > 0,
+  );
+  if (rows.length === 0) {
+    await db
+      .update(works)
+      .set({ loudnessLufs: null, loudnessTruePeakDb: null })
+      .where(eq(works.id, workId));
+    return null;
+  }
+  const totalDur = rows.reduce((s, r) => s + (r.durationSec ?? 0), 0);
+  const lufs =
+    rows.reduce((s, r) => s + (r.durationSec ?? 0) * (r.loudnessLufs ?? 0), 0) /
+    totalDur;
+  const truePeakDb = Math.max(...rows.map((r) => r.loudnessTruePeakDb ?? -99));
+  await db
+    .update(works)
+    .set({ loudnessLufs: lufs, loudnessTruePeakDb: truePeakDb })
+    .where(eq(works.id, workId));
+  return { lufs, truePeakDb };
 }

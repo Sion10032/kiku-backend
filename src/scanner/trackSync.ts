@@ -6,6 +6,7 @@ import {
 import type { WorkSource } from '../infra/fs/source/types.js';
 import type { TrackNode } from '../infra/fs/utils.js';
 import {
+  computeWorkLoudness,
   deleteTrackRows,
   getTrackRows,
   planTrackSync,
@@ -13,12 +14,10 @@ import {
 } from '../services/track.service.js';
 
 /**
- * 音轨行同步：size diff → 仅对新增/变更条目探测时长 → upsert/delete。
- * 挂接点：scan 任务分支与 update 模式共用（scanner.ts
- * syncWorkMetadataAndTracks，新作品入库即时同步），已扫描跳过的作品仍由
- * update 模式统一回填；另有 workOps 单作品运维直接调用。
- * 变更条目 revalidate=true（本计划仅计入 updated；姊妹计划在该标记上挂响度失效）。
- * 探测失败 durationSec=null 不阻塞。
+ * 音轨行同步（对齐封面回填的静默模式）：
+ * size diff → 仅对新增/变更条目探测时长 → upsert/delete。
+ * 变更条目 revalidate=true → 清空该轨响度（内容变了）。
+ * 任何变更后重算作品级响度。探测失败 durationSec=null 不阻塞。
  */
 export async function syncWorkTracks(
   workId: string,
@@ -27,18 +26,27 @@ export async function syncWorkTracks(
 ): Promise<{ added: number; updated: number; removed: number }> {
   const leaves = await probeTrackSizes(source, collectAudioLeaves(tree));
   const plan = planTrackSync(leaves, await getTrackRows(workId));
+  let touched = false;
 
   for (const t of plan.toUpsert) {
     const durationSec = await probeDuration(source, t.mediaIndex);
-    await upsertTrackRow({
-      workId,
-      mediaIndex: t.mediaIndex,
-      title: t.title,
-      sizeBytes: t.sizeBytes,
-      durationSec,
-    });
+    await upsertTrackRow(
+      {
+        workId,
+        mediaIndex: t.mediaIndex,
+        title: t.title,
+        sizeBytes: t.sizeBytes,
+        durationSec,
+      },
+      { resetLoudness: t.revalidate },
+    );
+    touched = true;
   }
-  await deleteTrackRows(workId, plan.toDelete);
+  if (plan.toDelete.length > 0) {
+    await deleteTrackRows(workId, plan.toDelete);
+    touched = true;
+  }
+  if (touched) await computeWorkLoudness(workId);
 
   return {
     added: plan.toUpsert.filter((t) => !t.revalidate).length,
