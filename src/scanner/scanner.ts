@@ -17,6 +17,7 @@ import {
   softDeleteWork,
   upsertWork,
 } from '../services/work.service.js';
+import { analysisManager } from './analysis.js';
 import { classifyMissingWorks } from './prune.js';
 import { syncWorkTracks } from './trackSync.js';
 
@@ -684,6 +685,16 @@ class ScannerManager extends EventEmitter {
         type: 'SCAN_FINISHED',
         message: 'Scan completed successfully',
       });
+      // 响度分析自动接力：scan 正常结束 + 自动分析开启才触发；失败静默（下一次手动/播放触发兜底）
+      if (mode === 'scan' && !signal.aborted) {
+        if (config.autoLoudnessAnalysis) {
+          try {
+            analysisManager.startAnalysis(config);
+          } catch (err) {
+            console.error('[Scanner] Failed to chain analysis:', err);
+          }
+        }
+      }
     } catch (err) {
       if (signal.aborted) {
         this.emit('scan', {

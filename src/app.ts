@@ -10,6 +10,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { initAdminFromEnv } from './auth/init.js';
 import { getConfig } from './infra/config/index.js';
+import { analysisRoutes } from './routes/analysis.js';
 import { authRoutes } from './routes/auth.js';
 import { configRoutes } from './routes/config.js';
 import { credentialsRoutes } from './routes/credentials.js';
@@ -62,6 +63,7 @@ export async function buildApp() {
   await app.register(configRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
   await app.register(scannerRoutes, { prefix: '/api/scanner' });
+  await app.register(analysisRoutes, { prefix: '/api/analysis' });
   await app.register(setupRoutes, { prefix: '/api/setup' });
 
   return app;
