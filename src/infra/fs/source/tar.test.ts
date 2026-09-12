@@ -13,6 +13,22 @@ async function makeTar(buf: Buffer): Promise<string> {
   writeFileSync(p, buf);
   return p;
 }
+
+/** 手拼一个 pax 'x' 条目（512B 头 + 数据 + 补齐），用于构造恶意 pax 数据。 */
+function xEntry(data: Buffer): Buffer {
+  const hdr = Buffer.alloc(512);
+  hdr.write('x', 0, 'ascii');
+  hdr.write(`${data.length.toString(8).padStart(10, '0')}\0 `, 124, 'ascii');
+  hdr.write('        ', 148, 'ascii');
+  hdr.write('x', 156, 'ascii');
+  hdr.write('ustar\0', 257, 'ascii');
+  hdr.write('00', 263, 'ascii');
+  let sum = 0;
+  for (const b of hdr) sum += b;
+  hdr.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 'ascii');
+  const pad = Buffer.alloc((512 - (data.length % 512)) % 512);
+  return Buffer.concat([hdr, data, pad]);
+}
 async function collect(stream: AsyncIterable<unknown>): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const c of stream) chunks.push(c as Buffer);
@@ -91,5 +107,31 @@ describe('tar source', () => {
     bad.write('nope!', 257, 'ascii');
     const tar = await makeTar(bad);
     await expect(createTarSource(tar)).rejects.toThrow(/tar|ustar/);
+  });
+
+  it('恶意 pax 数据（len 为 0 / 非 ASCII / 越界）显式报错而非挂死或静默错名', async () => {
+    for (const pax of ['0 ', 'garbage', '99 path=a.mp3\n']) {
+      const tar = await makeTar(
+        Buffer.concat([
+          xEntry(Buffer.from(pax, 'ascii')),
+          buildTar([{ path: 'a.mp3', data: 'x' }]),
+        ]),
+      );
+      await expect(createTarSource(tar)).rejects.toThrow(
+        /malformed pax record length/,
+      );
+    }
+  });
+
+  it('合法 pax path 覆盖条目名', async () => {
+    const tar = await makeTar(
+      Buffer.concat([
+        xEntry(Buffer.from('15 path=ab.mp3\n', 'ascii')),
+        buildTar([{ path: 'dummy', data: 'x' }]),
+      ]),
+    );
+    const src = await createTarSource(tar);
+    expect(await src.has('ab.mp3')).toBe(true);
+    expect(await src.has('dummy')).toBe(false);
   });
 });

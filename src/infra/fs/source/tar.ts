@@ -40,6 +40,9 @@ function parsePaxPath(data: Buffer): string | null {
   while (pos < data.length) {
     const sp = data.indexOf(' ', pos);
     const len = Number.parseInt(data.subarray(pos, sp).toString('ascii'), 10);
+    // 损坏/恶意数据（len 非正数或越界）：显式报错，避免 pos 不前进导致死循环
+    if (!Number.isFinite(len) || len <= 0 || pos + len > data.length)
+      throw new Error('malformed pax record length');
     const record = data.subarray(pos, pos + len).toString('utf8');
     const m = /^(\d+) path=(.*)\n$/.exec(record);
     if (m?.[2]) return m[2];
