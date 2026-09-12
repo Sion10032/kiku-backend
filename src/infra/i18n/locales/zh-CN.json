@@ -4,6 +4,8 @@
   "errors.user.exists": "用户已存在",
   "errors.user.create-failed": "创建用户失败",
   "errors.user.not-found": "用户不存在",
+  "errors.user.last-administrator": "不能删除最后一个管理员用户",
+  "errors.user.cannot-delete-self": "不能删除当前登录用户",
   "errors.media.file-not-found": "文件不存在",
   "errors.media.work-not-found": "作品不存在",
   "errors.media.cover-not-found": "作品 {{id}} 的封面不存在",

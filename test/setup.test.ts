@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { InferInsertModel } from 'drizzle-orm';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { initAdminFromEnv } from '../src/auth/init.js';
@@ -8,7 +8,7 @@ import { verifyPassword } from '../src/auth/utils.js';
 import { getConfig, updateConfig } from '../src/infra/config/index.js';
 import { db } from '../src/infra/db/main/index.js';
 import { users } from '../src/infra/db/main/schema.js';
-import { deleteUser, getUserByName } from '../src/services/user.service.js';
+import { getUserByName } from '../src/services/user.service.js';
 import { expectNotNull } from './helpers/assert';
 import { setupTestEnvironment } from './helpers/setup';
 
@@ -38,8 +38,10 @@ describe('Setup / Register / Private-mode', () => {
     savedUsers = await db.query.users.findMany();
     savedInstanceMode = getConfig().instanceMode;
     savedAllowRegistration = getConfig().allowRegistration;
+    // 本文件需要真实清空用户表（含管理员），是测试脚手架的无限制删除，
+    // 直接走 db.delete（service 层删除带最后一个管理员保护）
     for (const u of savedUsers) {
-      await deleteUser(u.name);
+      await db.delete(users).where(eq(users.name, u.name));
     }
 
     app = await buildApp();
@@ -47,10 +49,10 @@ describe('Setup / Register / Private-mode', () => {
   });
 
   afterAll(async () => {
-    // 清理本文件创建的用户，恢复备份用户与配置
-    await deleteUser(ADMIN);
-    await deleteUser(REG_USER);
-    await deleteUser(ENV_ADMIN);
+    // 清理本文件创建的用户（无限制删除，绕过最后一个管理员保护），恢复备份用户与配置
+    await db
+      .delete(users)
+      .where(inArray(users.name, [ADMIN, REG_USER, ENV_ADMIN]));
     for (const u of savedUsers) {
       await db.insert(users).values(u).onConflictDoNothing();
     }
@@ -212,7 +214,9 @@ describe('Setup / Register / Private-mode', () => {
   it('环境变量初始化：空库 + 两变量 → 创建 administrator', async () => {
     // 清空用户表以模拟空库（beforeAll 备份会在 afterAll 恢复）
     const current = await db.query.users.findMany({ columns: { name: true } });
-    for (const u of current) await deleteUser(u.name);
+    for (const u of current) {
+      await db.delete(users).where(eq(users.name, u.name));
+    }
 
     process.env.KIKU_ADMIN_USER = ENV_ADMIN;
     process.env.KIKU_ADMIN_PASSWORD = 'env-pass-123';

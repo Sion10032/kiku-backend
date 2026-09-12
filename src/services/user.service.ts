@@ -43,8 +43,30 @@ export async function updateUserPassword(name: string, newPassword: string) {
     .where(eq(users.name, name));
 }
 
-export async function deleteUser(name: string) {
-  await db.delete(users).where(eq(users.name, name));
+export type DeleteUsersResult =
+  | { ok: true }
+  | { ok: false; reason: 'last-administrator' };
+
+/**
+ * 删除用户用例（批量）：先整批校验、再执行删除，保证原子性——
+ * 要么整批成功，要么一个都不动，不允许删光管理员后留下不一致状态。
+ */
+export async function deleteUsers(names: string[]): Promise<DeleteUsersResult> {
+  const admins = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.group, 'administrator'));
+  if (admins.length > 0) {
+    const requested = new Set(names);
+    const remaining = admins.filter((admin) => !requested.has(admin.name));
+    if (remaining.length === 0) {
+      return { ok: false, reason: 'last-administrator' };
+    }
+  }
+  for (const name of new Set(names)) {
+    await db.delete(users).where(eq(users.name, name));
+  }
+  return { ok: true };
 }
 
 export type CreateUserAccountResult =

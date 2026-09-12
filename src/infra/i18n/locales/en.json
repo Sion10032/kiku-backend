@@ -4,6 +4,8 @@
   "errors.user.exists": "User already exists",
   "errors.user.create-failed": "Failed to create user",
   "errors.user.not-found": "User not found",
+  "errors.user.last-administrator": "Cannot delete the last administrator user",
+  "errors.user.cannot-delete-self": "Cannot delete the currently logged-in user",
   "errors.media.file-not-found": "File not found",
   "errors.media.work-not-found": "Work not found",
   "errors.media.cover-not-found": "Cover for work {{id}} not found",

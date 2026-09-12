@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   changePassword,
   createUserAccount,
-  deleteUser,
+  deleteUsers,
   getUsers,
 } from '../services/user.service.js';
 
@@ -104,13 +104,20 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: deleteUsersSchema,
         response: {
           200: z.object({ message: z.string() }),
+          400: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { users: usersToDelete } = request.body;
-      for (const { name } of usersToDelete) {
-        await deleteUser(name);
+      // 删除批次含自己：整批拒绝（调用方上下文规则，只有 route 知道请求者）
+      if (usersToDelete.some((u) => u.name === request.user.name)) {
+        return reply.fail(400, 'errors.user.cannot-delete-self');
+      }
+      const result = await deleteUsers(usersToDelete.map(({ name }) => name));
+      if (!result.ok) {
+        return reply.fail(409, 'errors.user.last-administrator');
       }
 
       return { message: 'Users deleted' };
