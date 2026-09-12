@@ -298,6 +298,8 @@ export async function* performScan(
   const failedTasks: ScanTask[] = [];
   /** 本次扫描在磁盘上发现的全部 RJ 码（含 unsupported-archive：源还在就不算缺失） */
   const onDiskRjCodes = new Set<string>();
+  /** 本次枚举失败的 root 路径（path 才是 readdir 失败的身份标识） */
+  const failedRootPaths = new Set<string>();
   /** 本次因已扫描（路径未变、未软删）而跳过的作品数 */
   let skipped = 0;
 
@@ -312,10 +314,35 @@ export async function* performScan(
       `Scanning root folder: ${rootFolder.name} (${rootFolder.path})`,
     );
 
-    const entries = await collectWorkEntries(
+    const collected = await collectWorkEntries(
       rootFolder.path,
       config.scannerMaxRecursionDepth,
     );
+    if (!collected.complete) {
+      // 枚举失败 ≠ 目录为空（fail-safe）：该 root 的扫描结果视为未知，
+      // 排除出本次 prune，绝不据此软删；失败任务 + error 日志保证可感知。
+      // 判别联合收窄后 failedPath/reason 必为 string，无需兜底。
+      const detail = `${collected.failedPath}: ${collected.reason}`;
+      const task: ScanTask = {
+        id: tasks.length + failedTasks.length + 1,
+        title: `${rootFolder.name} (unreadable)`,
+        relativePath: rootFolder.path,
+        rootFolder: rootFolder.name,
+        rjCode: '',
+        dirName: rootFolder.name,
+        status: 'failed',
+        error: detail,
+      };
+      failedTasks.push(task);
+      failedRootPaths.add(rootFolder.path);
+      yield* emitLog(
+        'error',
+        `Failed to enumerate root folder ${rootFolder.name} (${rootFolder.path}): ${detail} — excluded from pruning`,
+      );
+      yield { type: 'SCAN_TASK', task: stripTask(task) };
+      continue;
+    }
+    const entries = collected.entries;
 
     // 已扫描作品索引：存在且路径未变、未软删的在下方直接跳过
     const knownWorks = new Map(
@@ -487,8 +514,20 @@ export async function* performScan(
   let removed = 0;
   let purged = 0;
 
+  // DB 作品按 root 名归属（getWorksByRootFolder），同名 root（schema 不校验
+  // 名称唯一）的作品无法按 path 区分：任一同名路径枚举失败 → 该名下全部作品
+  // 视为未知，整名排除出 prune——否则失败 root 的作品会经同名成功 root 的
+  // prune 轮被误软删（宁可漏删、下轮再清，不可误删）。
+  const failedRootNames = new Set(
+    config.rootFolders
+      .filter((r) => failedRootPaths.has(r.path))
+      .map((r) => r.name),
+  );
+
   for (const rootFolder of config.rootFolders) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+    if (failedRootNames.has(rootFolder.name)) continue;
 
     const inDb = await getWorksByRootFolder(rootFolder.name);
     if (inDb.length === 0) continue;

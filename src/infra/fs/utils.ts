@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { extractWorkCode } from '../../utils/rjcode.js';
@@ -29,21 +30,40 @@ export interface WorkEntry {
 }
 
 /**
+ * collectWorkEntries 的结果：用返回值（而非异常）告知枚举是否完整。
+ * 判别联合：失败分支（complete=false）不含 entries，failedPath/reason 必填；
+ * 调用方须先收窄才能访问条目。
+ */
+export type CollectWorkEntriesResult =
+  | { complete: true; entries: WorkEntry[] }
+  | { complete: false; failedPath: string; reason: string };
+
+/**
  * 递归收集 root 下的 RJ 作品条目。
  * 规则：RJ 目录不深入、非 RJ 目录下探一层直至 maxDepth。
  * RJ 命名文件按扩展名分类：tar/zip → archive，其余 → unsupported-archive。
+ * 任一层 readdir 失败（EACCES / EIO / 路径消失等）即短路返回
+ * complete=false（携带失败路径与原因）：枚举失败 ≠ 目录为空；
+ * 不以异常传递枚举失败，非枚举类意外错误仍自然上抛。
  */
 export async function collectWorkEntries(
   rootPath: string,
   maxDepth: number,
   currentDepth = 0,
-): Promise<WorkEntry[]> {
-  if (currentDepth >= maxDepth) return [];
+): Promise<CollectWorkEntriesResult> {
+  if (currentDepth >= maxDepth) return { complete: true, entries: [] };
   const out: WorkEntry[] = [];
-  const entries = await readdir(rootPath, { withFileTypes: true }).catch(
-    () => [],
-  );
-  for (const entry of entries) {
+  let dirents: Dirent[];
+  try {
+    dirents = await readdir(rootPath, { withFileTypes: true });
+  } catch (cause) {
+    return {
+      complete: false,
+      failedPath: rootPath,
+      reason: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+  for (const entry of dirents) {
     const rj = extractWorkCode(entry.name);
     if (entry.isDirectory()) {
       if (rj) {
@@ -59,8 +79,13 @@ export async function collectWorkEntries(
           maxDepth,
           currentDepth + 1,
         );
+        if (!nested.complete) {
+          // 短路：子层失败视为整个 root 枚举失败，结果直接透传
+          //（收窄后 nested.failedPath/reason 必为 string）
+          return nested;
+        }
         out.push(
-          ...nested.map((n) => ({
+          ...nested.entries.map((n) => ({
             ...n,
             relativePath: `${entry.name}/${n.relativePath}`,
           })),
@@ -86,7 +111,7 @@ export async function collectWorkEntries(
       // 其他扩展名（RJ123.jpg 等）忽略
     }
   }
-  return out;
+  return { complete: true, entries: out };
 }
 
 /** 歌词文件引用（建树时匹配，仅 audio 节点设置）。 */
