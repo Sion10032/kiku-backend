@@ -14,7 +14,7 @@ const createUserSchema = z.object({
 });
 
 const updatePasswordSchema = z.object({
-  name: z.string().min(5),
+  name: z.string().min(4),
   newPassword: z.string().min(5),
 });
 
