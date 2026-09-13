@@ -5,6 +5,7 @@ import { buildApp } from '../src/app';
 import { db } from '../src/infra/db/main/index.js';
 import { circles, series, users, works } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -42,7 +43,7 @@ describe('Favourite Routes', () => {
       seriesId: SERIES_ID,
     });
 
-    token = app.jwt.sign({ name: TEST_USER, group: 'user' });
+    token = await signTokenFor(app, TEST_USER);
   });
 
   afterAll(async () => {

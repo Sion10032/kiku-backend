@@ -5,7 +5,9 @@ import { buildApp } from '../src/app';
 import { hashPassword } from '../src/auth/utils.js';
 import { db } from '../src/infra/db/main/index.js';
 import { users } from '../src/infra/db/main/schema.js';
+import { deleteUsers as deleteUsersService } from '../src/services/user.service.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -14,8 +16,8 @@ const RUN = Date.now().toString(36);
 const ADMIN_A = `del_admin_a_${RUN}`;
 const ADMIN_B = `del_admin_b_${RUN}`;
 const NORMAL_USER = `del_user_${RUN}`;
-// 不入库的管理员 token，模拟「已删除但 token 未吊销」的调用方
-//（合法管理员批次永不含自己，最后一个管理员保护只在该场景下可达）
+// 已删除管理员的遗留 token：行先入库签发、再删除，
+// 模拟「账号已删但 token 仍在调用方手中未吊销」的真实场景
 const STALE_ADMIN = `del_admin_stale_${RUN}`;
 
 describe('DELETE /api/credentials/user（删除保护）', () => {
@@ -24,8 +26,9 @@ describe('DELETE /api/credentials/user（删除保护）', () => {
   let staleAdminToken: string;
   // 其他测试文件可能遗留 administrator 行且未清理；本文件的用例依赖
   // 「库内管理员集合可控」（如“唯一管理员”场景），故先备份并移除遗留
-  // 管理员，afterAll 恢复（auth 插件只读 JWT payload，不读库内 group，
-  // 临时移除不影响其他测试的鉴权）
+  // 管理员，afterAll 恢复原行（token_version 不变 → 其持有 token 的 ver 校验不受影响）。
+  // 注意：P1-7 后鉴权会回查用户表，移除期间这些行不可被其他请求引用——
+  // bun test 单进程顺序执行各文件，窗口期内无并发请求，安全。
   let leftoverAdmins: (typeof users.$inferSelect)[] = [];
 
   beforeAll(async () => {
@@ -62,11 +65,15 @@ describe('DELETE /api/credentials/user（删除保护）', () => {
         group: 'user',
       },
     ]);
-    adminToken = app.jwt.sign({ name: ADMIN_A, group: 'administrator' });
-    staleAdminToken = app.jwt.sign({
+    adminToken = await signTokenFor(app, ADMIN_A);
+    // stale token：先入库签发（拿到合法 ver 声明），再删除行
+    await db.insert(users).values({
       name: STALE_ADMIN,
+      password: hashPassword('test-password'),
       group: 'administrator',
     });
+    staleAdminToken = await signTokenFor(app, STALE_ADMIN);
+    await db.delete(users).where(eq(users.name, STALE_ADMIN));
   });
 
   afterAll(async () => {
@@ -125,19 +132,18 @@ describe('DELETE /api/credentials/user（删除保护）', () => {
     expect(await userExists(ADMIN_A)).toBe(true);
   });
 
-  it('已删除管理员的未吊销 token 删最后一个管理员被拒（409），管理员仍在', async () => {
-    // 前置：ADMIN_B 已被上一用例删除，ADMIN_A 是唯一管理员
+  it('已删除管理员的未吊销 token 被存在性校验拒绝（401），不进入删除用例', async () => {
     const response = await deleteUsers(
       { users: [{ name: ADMIN_A }] },
       staleAdminToken,
     );
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error: expect.any(String) });
+    expect(response.statusCode).toBe(401);
     expect(await userExists(ADMIN_A)).toBe(true);
   });
 
-  it('未吊销 token 一次请求删光全部管理员被拒，整批保留（原子性）', async () => {
-    // 补回 ADMIN_B，使库内有两个管理员
+  it('删除服务：批次删光全部管理员被拒（409 last-administrator），整批保留（原子性）', async () => {
+    // 补回 ADMIN_B，使库内有两个管理员；409 现在仅在服务层可达
+    //（HTTP 调用方必是库内管理员且批次不得含自己，故无法经路由触发）
     await db
       .insert(users)
       .values({
@@ -147,21 +153,15 @@ describe('DELETE /api/credentials/user（删除保护）', () => {
       })
       .onConflictDoNothing();
 
-    const response = await deleteUsers(
-      { users: [{ name: ADMIN_A }, { name: ADMIN_B }] },
-      staleAdminToken,
-    );
-    expect(response.statusCode).toBe(409);
+    const result = await deleteUsersService([ADMIN_A, ADMIN_B]);
+    expect(result).toEqual({ ok: false, reason: 'last-administrator' });
     expect(await userExists(ADMIN_A)).toBe(true);
     expect(await userExists(ADMIN_B)).toBe(true);
   });
 
-  it('未吊销 token 混合批次删光管理员被拒，整批不动（原子性）', async () => {
-    const response = await deleteUsers(
-      { users: [{ name: ADMIN_A }, { name: ADMIN_B }, { name: NORMAL_USER }] },
-      staleAdminToken,
-    );
-    expect(response.statusCode).toBe(409);
+  it('删除服务：混合批次删光管理员被拒，整批不动（原子性）', async () => {
+    const result = await deleteUsersService([ADMIN_A, ADMIN_B, NORMAL_USER]);
+    expect(result).toEqual({ ok: false, reason: 'last-administrator' });
     expect(await userExists(ADMIN_A)).toBe(true);
     expect(await userExists(ADMIN_B)).toBe(true);
     expect(await userExists(NORMAL_USER)).toBe(true);

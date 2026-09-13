@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { setupTestEnvironment } from './helpers/setup';
+import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -103,15 +104,19 @@ beforeAll(async () => {
 
   app = await buildApp();
   await app.ready();
-  // authenticateAdmin 的 jwtVerify 只验签不查库，group 决定放行与否
-  adminToken = app.jwt.sign({ name: `admin_${RUN}`, group: 'administrator' });
-  userToken = app.jwt.sign({ name: `user_${RUN}`, group: 'user' });
+  // 回查鉴权要求用户真实入库；admin/user group 由库行决定
+  await createTestUser(`admin_${RUN}`, 'administrator');
+  await createTestUser(`user_${RUN}`);
+  adminToken = await signTokenFor(app, `admin_${RUN}`);
+  userToken = await signTokenFor(app, `user_${RUN}`);
   globalThis.fetch = fetchMock;
 });
 
 afterAll(async () => {
   globalThis.fetch = realFetch;
   await app.close();
+  await deleteTestUser(`admin_${RUN}`);
+  await deleteTestUser(`user_${RUN}`);
   await db.delete(works).where(eq(works.id, ID));
   const circle = await db.query.circles.findFirst({
     where: { RAW: (t, op) => op.eq(t.name, CIRCLE) },

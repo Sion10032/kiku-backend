@@ -121,6 +121,8 @@ export const users = sqliteTable('t_user', {
   name: text('name').primaryKey(),
   password: text('password').notNull(),
   group: text('group').notNull(),
+  /** token 版本号：改密时 +1，旧 JWT 的 ver 声明不匹配即吊销 */
+  tokenVersion: integer('token_version').notNull().default(0),
 });
 
 export const reviews = sqliteTable(

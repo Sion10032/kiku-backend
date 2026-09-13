@@ -11,6 +11,7 @@ import {
   works,
 } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -90,7 +91,7 @@ describe('GET /api/history', () => {
     await insertWork(WORK_C, '作品C', circleId);
     await insertWork(WORK_D, '作品D', circleId);
 
-    token = app.jwt.sign({ name: TEST_USER, group: 'user' });
+    token = await signTokenFor(app, TEST_USER);
   });
 
   afterAll(async () => {
@@ -283,7 +284,7 @@ describe('GET /api/history', () => {
         password: 'test-password',
         group: 'user',
       });
-      const freshToken = app.jwt.sign({ name: freshUser, group: 'user' });
+      const freshToken = await signTokenFor(app, freshUser);
 
       const res = await app.inject({
         method: 'GET',

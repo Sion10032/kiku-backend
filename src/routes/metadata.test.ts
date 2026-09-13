@@ -5,6 +5,7 @@ import {
   OVR,
 } from '@test/fixtures/override';
 import { setupTestEnvironment } from '@test/helpers/setup';
+import { signTokenFor } from '@test/helpers/token';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/utils.js';
 import { db } from '../infra/db/main/index.js';
@@ -35,8 +36,8 @@ beforeAll(async () => {
       },
     ])
     .onConflictDoNothing();
-  adminToken = app.jwt.sign({ name: 'meta-admin', group: 'administrator' });
-  userToken = app.jwt.sign({ name: 'meta-user', group: 'user' });
+  adminToken = await signTokenFor(app, 'meta-admin');
+  userToken = await signTokenFor(app, 'meta-user');
   await insertOverrideFixtures();
 });
 afterAll(cleanupOverrideFixtures);

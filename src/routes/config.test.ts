@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'bun:test';
 import { setupTestEnvironment } from '@test/helpers/setup';
+import { signTokenFor } from '@test/helpers/token';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/utils.js';
 import { getConfig, setConfigForTesting } from '../infra/config/index.js';
@@ -26,7 +27,7 @@ beforeAll(async () => {
       group: 'administrator',
     })
     .onConflictDoNothing();
-  adminToken = app.jwt.sign({ name: 'config-admin', group: 'administrator' });
+  adminToken = await signTokenFor(app, 'config-admin');
 });
 
 function auth(): Record<string, string> {

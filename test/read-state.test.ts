@@ -12,6 +12,7 @@ import {
   works,
 } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -123,7 +124,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
       },
     ]);
 
-    token = app.jwt.sign({ name: TEST_USER, group: 'user' });
+    token = await signTokenFor(app, TEST_USER);
   });
 
   afterAll(async () => {

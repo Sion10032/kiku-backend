@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { setupTestEnvironment } from './helpers/setup';
+import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -76,6 +77,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(works).where(eq(works.id, WORK));
+  await deleteTestUser('loudness-tester');
   const circle = await db.query.circles.findFirst({
     where: { RAW: (t, op) => op.eq(t.name, '时长测试社团') },
   });
@@ -126,9 +128,11 @@ describe('响度 API 输出', () => {
     await computeWorkLoudness(WORK);
   }
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    // works 端点可选鉴权；token 用户入库以满足类型与回查语义
+    await createTestUser('loudness-tester');
     auth = {
-      authorization: `Bearer ${app.jwt.sign({ name: 'loudness-tester', group: 'user' })}`,
+      authorization: `Bearer ${await signTokenFor(app, 'loudness-tester')}`,
     };
   });
 

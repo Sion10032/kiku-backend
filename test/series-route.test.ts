@@ -5,6 +5,7 @@ import { db } from '../src/infra/db/main/index.js';
 import { series, works } from '../src/infra/db/main/schema.js';
 import { upsertWork } from '../src/services/work.service.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -23,8 +24,9 @@ describe('GET /api/series/ 与作品详情 series 字段', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    // 私有模式全局守卫需要 JWT（verify 只验签，无需真实用户）
-    token = app.jwt.sign({ name: `series_tester_${base}`, group: 'user' });
+    // 私有模式全局守卫需要 JWT，回查鉴权要求用户真实入库
+    await createTestUser(`series_tester_${base}`);
+    token = await signTokenFor(app, `series_tester_${base}`);
 
     const res = await upsertWork({
       id: W1,
@@ -46,6 +48,7 @@ describe('GET /api/series/ 与作品详情 series 字段', () => {
       .delete(series)
       .where(inArray(series.id, [S1]))
       .catch(() => {});
+    await deleteTestUser(`series_tester_${base}`);
     await app.close();
   });
 

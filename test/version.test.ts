@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { setupTestEnvironment } from './helpers/setup';
+import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -12,11 +13,13 @@ describe('Version Routes', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    // 默认私有模式下需要鉴权
-    token = app.jwt.sign({ name: 'version_tester', group: 'user' });
+    // 回查鉴权要求用户真实入库（默认私有模式下需要鉴权）
+    await createTestUser('version_tester');
+    token = await signTokenFor(app, 'version_tester');
   });
 
   afterAll(async () => {
+    await deleteTestUser('version_tester');
     await app.close();
   });
 

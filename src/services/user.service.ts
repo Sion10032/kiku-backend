@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { hashPassword } from '../auth/utils.js';
 import { db } from '../infra/db/main/index.js';
 import { users } from '../infra/db/main/schema.js';
@@ -39,7 +39,11 @@ export async function updateUserGroup(name: string, group: string) {
 export async function updateUserPassword(name: string, newPassword: string) {
   await db
     .update(users)
-    .set({ password: newPassword })
+    .set({
+      password: newPassword,
+      // 改密即 bump token 版本，旧 JWT 的 ver 声明不匹配而被吊销
+      tokenVersion: sql`${users.tokenVersion} + 1`,
+    })
     .where(eq(users.name, name));
 }
 

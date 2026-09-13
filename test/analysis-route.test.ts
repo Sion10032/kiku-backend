@@ -7,6 +7,7 @@ import { tracks, works } from '../src/infra/db/main/schema';
 import { analysisManager } from '../src/scanner/analysis';
 import { scanner } from '../src/scanner/scanner';
 import { setupTestEnvironment } from './helpers/setup';
+import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -55,11 +56,9 @@ describe('Analysis Routes', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    // authenticateAdmin 的 jwtVerify 只验签不查库，group 决定放行与否
-    adminToken = app.jwt.sign({
-      name: 'admin_analysis_route',
-      group: 'administrator',
-    });
+    // 回查鉴权要求管理员真实入库，group 以库行为准
+    await createTestUser('admin_analysis_route', 'administrator');
+    adminToken = await signTokenFor(app, 'admin_analysis_route');
     // 空库防御：无论文件执行顺序如何，保证无待分析数据
     await db.delete(tracks);
     await db.delete(works);
@@ -67,6 +66,7 @@ describe('Analysis Routes', () => {
 
   afterAll(async () => {
     analysisManager.killAnalysis();
+    await deleteTestUser('admin_analysis_route');
     await app.close();
     // 清空 config 缓存，避免污染同进程后续测试文件
     setConfigForTesting();

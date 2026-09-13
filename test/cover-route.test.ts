@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { FastifyInstance } from 'fastify';
 import { setupTestEnvironment } from './helpers/setup';
+import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -21,13 +22,15 @@ describe('GET /api/cover/:id/file 封面回退', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    // 私有模式全局守卫需要 JWT（verify 只验签，无需真实用户）
-    token = app.jwt.sign({ name: `cover_tester_${RUN}`, group: 'user' });
+    // 私有模式全局守卫需要 JWT，回查鉴权要求用户真实入库
+    await createTestUser(`cover_tester_${RUN}`);
+    token = await signTokenFor(app, `cover_tester_${RUN}`);
   });
 
   afterAll(async () => {
     deleteBlob('cover', `${ID}_main`);
     deleteBlob('cover', `${ID}_sam`);
+    await deleteTestUser(`cover_tester_${RUN}`);
     await app.close();
   });
 

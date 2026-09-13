@@ -5,6 +5,7 @@ import { buildApp } from '../src/app';
 import { db } from '../src/infra/db/main/index.js';
 import { users } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -39,8 +40,8 @@ describe('Settings Backup Routes', () => {
       .insert(users)
       .values({ name: USER_B, password: 'test-password', group: 'user' });
 
-    tokenA = app.jwt.sign({ name: USER_A, group: 'user' });
-    tokenB = app.jwt.sign({ name: USER_B, group: 'user' });
+    tokenA = await signTokenFor(app, USER_A);
+    tokenB = await signTokenFor(app, USER_B);
   });
 
   afterAll(async () => {

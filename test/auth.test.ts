@@ -6,6 +6,7 @@ import { hashPassword } from '../src/auth/utils.js';
 import { db } from '../src/infra/db/main/index.js';
 import { users } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
+import { signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
@@ -26,7 +27,7 @@ describe('Auth Routes', () => {
       password: hashPassword('test-password'),
       group: 'user',
     });
-    token = app.jwt.sign({ name: TEST_USER, group: 'user' });
+    token = await signTokenFor(app, TEST_USER);
   });
 
   afterAll(async () => {
