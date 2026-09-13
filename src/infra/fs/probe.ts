@@ -138,7 +138,9 @@ export async function probeDuration(
   source: WorkSource,
   hash: string,
 ): Promise<number | null> {
-  const size = await source.size(hash);
+  // size 探测与整体容错口径一致：失败返回 null，不阻塞调用方（trackSync）
+  const size = await source.size(hash).catch(() => null);
+  if (size === null) return null;
   const duration = await probeWithDurationOption(source, hash, size, false);
   if (duration !== null) return duration;
   return probeWithDurationOption(source, hash, size, true);
@@ -170,7 +172,18 @@ export async function probeTrackSizes(
     sizeBytes: number;
   }> = [];
   for (const leaf of leaves) {
-    out.push({ ...leaf, sizeBytes: await source.size(leaf.mediaIndex) });
+    try {
+      out.push({ ...leaf, sizeBytes: await source.size(leaf.mediaIndex) });
+    } catch (cause) {
+      // 单叶失败容错（对齐 probeDuration 的静默模式，不阻塞整树同步）：
+      // 被跳过的叶不在返回列表 → planTrackSync 会把库内既有行归入 toDelete，
+      // 与「不可服务即不列出」的口径一致。
+      console.warn(
+        `[probe] size 探测失败，跳过音轨 ${leaf.mediaIndex}: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
   }
   return out;
 }

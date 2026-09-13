@@ -93,6 +93,24 @@ describe('tar source', () => {
     ]);
   });
 
+  it('sanitize 拒绝的脏名条目（含冒号）不入树，正常条目不受影响', async () => {
+    const tar = await makeTar(
+      buildTar([
+        { path: 'Track 2:30.mp3', data: 'x' },
+        { path: '2:30/03.flac', data: 'x' },
+        { path: '01.mp3', data: audio },
+      ]),
+    );
+    const src = await createTarSource(tar);
+    const tree = await src.buildTree();
+    expect(tree.map((n) => n.type)).toEqual(['audio']);
+    expect(tree[0]?.type === 'audio' && tree[0].hash).toBe('01.mp3');
+    // 索引保持完整，但读取路径 sanitize 兜底 → 脏路径不可服务
+    expect(await src.has('Track 2:30.mp3')).toBe(false);
+    expect(await src.has('01.mp3')).toBe(true);
+    expect(await src.size('01.mp3')).toBe(audio.length);
+  });
+
   it('ustar prefix 拼接完整路径', async () => {
     const tar = await makeTar(
       buildTar([

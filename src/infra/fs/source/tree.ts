@@ -2,6 +2,7 @@
 // 保证树形状与排序在不同作品形态间完全一致。
 import { extname } from 'node:path';
 import type { LyricsRef, TrackLeaf, TrackNode } from '../utils.js';
+import { sanitizeMediaIndex } from './types.js';
 
 const AUDIO_EXTENSIONS = new Set([
   '.mp3',
@@ -28,6 +29,17 @@ export function isAudioFile(name: string): boolean {
 }
 export function isSupportedFile(name: string): boolean {
   return SUPPORTED_EXTENSIONS.has(extname(name).toLowerCase());
+}
+
+/**
+ * 枚举边界统一过滤：树里每一条都必须「可服务」——
+ * 扩展名支持（isSupportedFile）且能通过读取路径的 sanitizeMediaIndex 校验
+ * （folder 的 abs()、tar/zip 的 entry() 都先过 sanitize）。过滤是静默的：
+ * 被拒绝的文件本来也播不了（读取路径永远 404），不能服务的就不要列出来，
+ * 以此保证「树里每一条都可服务」的不变量（否则作品入库但音轨同步全 500）。
+ */
+export function servablePaths(paths: string[]): string[] {
+  return paths.filter((p) => isSupportedFile(p) && sanitizeMediaIndex(p));
 }
 
 function classify(name: string): TrackLeaf['type'] {
@@ -139,7 +151,8 @@ function findLyrics(
 
 /**
  * 相对路径列表 → TrackNode 树。
- * 入参为「/」分隔的相对路径；跳过不支持扩展名的路径。
+ * 入参为「/」分隔的相对路径；生产调用方应先经 servablePaths 过滤（此处
+ * 保留的 isSupportedFile 跳过只是最后防线，勿与过滤口径产生第二套语义）。
  * 排序：文件夹在前、文件在后，同级自然序（数字编号按数值），与文件夹版行为一致。
  */
 export function entriesToTrackTree(paths: string[]): TrackNode[] {

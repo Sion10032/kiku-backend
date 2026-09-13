@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { memorySource } from '@test/helpers/memorySource.js';
-import { collectAudioLeaves, probeDuration } from './probe.js';
+import { collectAudioLeaves, probeDuration, probeTrackSizes } from './probe.js';
 import type { TrackNode } from './utils.js';
 
 const FIX = join(import.meta.dir, '../../../test/fixtures/audio');
@@ -48,5 +48,25 @@ test('collectAudioLeaves 展平树并保留相对路径', () => {
   expect(collectAudioLeaves(tree)).toEqual([
     { mediaIndex: 'a.mp3', title: 'a.mp3' },
     { mediaIndex: 'sub/b.flac', title: 'b.flac' },
+  ]);
+});
+
+test('probeTrackSizes 单叶 size 失败容错：跳过该叶不抛错，其余正常返回', async () => {
+  // memorySource 对不存在的 hash 抛错，充当「某一叶 size() 失败」的 fake source
+  const src = memorySource({
+    'a.mp3': Buffer.alloc(4),
+    'b.mp3': Buffer.alloc(8),
+  });
+  const leaves = [
+    { mediaIndex: 'a.mp3', title: 'a.mp3' },
+    { mediaIndex: 'missing.mp3', title: 'missing.mp3' },
+    { mediaIndex: 'b.mp3', title: 'b.mp3' },
+  ];
+  const out = await probeTrackSizes(src, leaves);
+  // 被跳过的叶不出现在结果里 → planTrackSync 会把库内既有行归入 toDelete
+  //（与「不可服务即不列出」口径一致）
+  expect(out).toEqual([
+    { mediaIndex: 'a.mp3', title: 'a.mp3', sizeBytes: 4 },
+    { mediaIndex: 'b.mp3', title: 'b.mp3', sizeBytes: 8 },
   ]);
 });

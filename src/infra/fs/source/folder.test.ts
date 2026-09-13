@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { TrackNode } from '../utils.js';
 import { createFolderSource } from './folder.js';
 import { openWorkSource } from './index.js';
 import { UnsupportedArchiveError } from './types.js';
@@ -14,6 +15,10 @@ beforeAll(() => {
   mkdirSync(join(dir, 'sub トラック'));
   writeFileSync(join(dir, 'sub トラック/02.wav'), Buffer.alloc(4, 0xab));
   writeFileSync(join(dir, 'ignore.xyz'), 'x');
+  // Linux 合法但被 sanitizeMediaIndex 拒绝的文件名/目录名（P1-5 场景）
+  writeFileSync(join(dir, 'Track 2:30.mp3'), 'x');
+  mkdirSync(join(dir, '3:00'));
+  writeFileSync(join(dir, '3:00/03.flac'), 'x');
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -41,6 +46,24 @@ describe('folder source', () => {
   it('穿越路径在 has 阶段即拒绝', async () => {
     const src = createFolderSource(dir);
     expect(await src.has('../outside.mp3')).toBe(false);
+  });
+  it('sanitize 拒绝的路径（含冒号的文件名/目录名）不入树：树里每一条都可服务', async () => {
+    const src = createFolderSource(dir);
+    const tree = await src.buildTree();
+    const hashes: string[] = [];
+    const walk = (nodes: TrackNode[]): void => {
+      for (const n of nodes) {
+        if (n.type === 'folder') walk(n.children);
+        else hashes.push(n.hash);
+      }
+    };
+    walk(tree);
+    expect(hashes).toEqual(['sub トラック/02.wav', '01.mp3']);
+    // 读取路径 sanitize 兜底：脏路径不可服务
+    expect(await src.has('Track 2:30.mp3')).toBe(false);
+    expect(await src.has('3:00/03.flac')).toBe(false);
+    // 正常文件行为不变
+    expect(await src.size('01.mp3')).toBe(8);
   });
 });
 

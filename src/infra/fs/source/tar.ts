@@ -4,8 +4,8 @@ import { closeSync, createReadStream, openSync, readSync } from 'node:fs';
 import type { TrackNode } from '../utils.js';
 import {
   entriesToTrackTree,
-  isSupportedFile,
   rekeyStrippedTopDir,
+  servablePaths,
 } from './tree.js';
 import { sanitizeMediaIndex, type WorkSource } from './types.js';
 
@@ -120,8 +120,9 @@ export async function createTarSource(
   return {
     kind: 'tar',
     async buildTree(): Promise<TrackNode[]> {
-      const paths = [...(await index()).keys()].filter(isSupportedFile);
-      return entriesToTrackTree(paths);
+      // 索引本身保持完整不过滤（has/entry 的 sanitize 兜底仍在），
+      // 树只含可服务条目（P1-5：脏名条目不阻塞音轨同步）。
+      return entriesToTrackTree(servablePaths([...(await index()).keys()]));
     },
     async has(hash) {
       if (!sanitizeMediaIndex(hash)) return false;

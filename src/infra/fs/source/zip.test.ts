@@ -65,6 +65,23 @@ describe('zip source（stored）', () => {
     ]);
   });
 
+  it('sanitize 拒绝的脏名条目（含冒号）不入树，正常条目不受影响', async () => {
+    const zip = await makeZip(
+      buildZip([
+        { path: 'Track 2:30.mp3', data: 'x' },
+        { path: '2:30/03.flac', data: 'x' },
+        { path: '01.mp3', data: 'y' },
+      ]),
+    );
+    const src = await createZipSource(zip);
+    const tree = await src.buildTree();
+    expect(tree.map((n) => n.type)).toEqual(['audio']);
+    // 索引保持完整，但读取路径 sanitize 兜底 → 脏路径不可服务
+    expect(await src.has('Track 2:30.mp3')).toBe(false);
+    expect(await src.has('01.mp3')).toBe(true);
+    expect(await src.size('01.mp3')).toBe(1);
+  });
+
   it('EFS 位置 1 的 UTF-8 文件名直接解码', async () => {
     const zip = await makeZip(
       buildZip([{ path: 'RJ000004/おまけ.wav', data: 'x', efs: true }]),
