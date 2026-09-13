@@ -1,9 +1,10 @@
 import { buildApp } from './app.js';
+import { getConfig } from './infra/config/index.js';
+import { resolveListenAddress } from './infra/config/listen-address.js';
 
 const app = await buildApp();
 
-const port = Number(process.env.PORT) || 8888;
-const host = process.env.HOST || '0.0.0.0';
+const { host, port } = resolveListenAddress(process.env, getConfig());
 
 try {
   await app.listen({ port, host });
