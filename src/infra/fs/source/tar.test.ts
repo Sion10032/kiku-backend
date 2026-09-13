@@ -14,13 +14,20 @@ async function makeTar(buf: Buffer): Promise<string> {
   return p;
 }
 
-/** 手拼一个 pax 'x' 条目（512B 头 + 数据 + 补齐），用于构造恶意 pax 数据。 */
-function xEntry(data: Buffer): Buffer {
+/**
+ * 手拼一个任意 typeflag 的 512B 头条目（含 size 八进制与 checksum）+ 数据 + 补齐。
+ * 用于构造 buildTar 不支持的条目类型（'L' longname、'5' 目录等）。
+ */
+function rawEntry(
+  name: string,
+  opts?: { type?: string; data?: Buffer },
+): Buffer {
+  const data = opts?.data ?? Buffer.alloc(0);
   const hdr = Buffer.alloc(512);
-  hdr.write('x', 0, 'ascii');
+  hdr.write(name.slice(0, 99), 0, 'utf8');
   hdr.write(`${data.length.toString(8).padStart(10, '0')}\0 `, 124, 'ascii');
   hdr.write('        ', 148, 'ascii');
-  hdr.write('x', 156, 'ascii');
+  hdr.write(opts?.type ?? '0', 156, 'ascii');
   hdr.write('ustar\0', 257, 'ascii');
   hdr.write('00', 263, 'ascii');
   let sum = 0;
@@ -28,6 +35,11 @@ function xEntry(data: Buffer): Buffer {
   hdr.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 'ascii');
   const pad = Buffer.alloc((512 - (data.length % 512)) % 512);
   return Buffer.concat([hdr, data, pad]);
+}
+
+/** 手拼一个 pax 'x' 条目（头 + 数据 + 补齐），用于构造恶意 pax 数据。 */
+function xEntry(data: Buffer): Buffer {
+  return rawEntry('x', { type: 'x', data });
 }
 async function collect(stream: AsyncIterable<unknown>): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -133,5 +145,68 @@ describe('tar source', () => {
     const src = await createTarSource(tar);
     expect(await src.has('ab.mp3')).toBe(true);
     expect(await src.has('dummy')).toBe(false);
+  });
+
+  it("GNU 'L' 目录长名被目录条目消费，不污染后续普通文件", async () => {
+    const longDir = `${'d'.repeat(120)}/`;
+    const tar = await makeTar(
+      Buffer.concat([
+        rawEntry('dummy', { type: 'L', data: Buffer.from(longDir, 'utf8') }),
+        rawEntry('dummy', { type: '5' }),
+        rawEntry('b.mp3', { data: Buffer.from('abc') }),
+        Buffer.alloc(1024),
+      ]),
+    );
+    const src = await createTarSource(tar);
+    expect(await src.has('b.mp3')).toBe(true);
+    expect(await src.size('b.mp3')).toBe(3);
+    // 目录条目本身仍不建索引（长名以 / 结尾会被丢弃）
+    expect(await src.has(longDir)).toBe(false);
+  });
+
+  it("pax 'x' 目录长名同样不被后续普通文件继承", async () => {
+    const tar = await makeTar(
+      Buffer.concat([
+        xEntry(Buffer.from('21 path=verylongdir/\n', 'ascii')),
+        rawEntry('dummy', { type: '5' }),
+        rawEntry('c.mp3', { data: Buffer.from('xy') }),
+        Buffer.alloc(1024),
+      ]),
+    );
+    const src = await createTarSource(tar);
+    expect(await src.has('c.mp3')).toBe(true);
+    expect(await src.has('verylongdir')).toBe(false);
+    expect(await src.has('verylongdir/c.mp3')).toBe(false);
+  });
+
+  it("GNU 'L' 长名正常作用于紧随其后的普通文件", async () => {
+    const longFile = `${'f'.repeat(150)}.mp3`;
+    const tar = await makeTar(
+      Buffer.concat([
+        rawEntry('dummy', { type: 'L', data: Buffer.from(longFile, 'utf8') }),
+        rawEntry('dummy', { data: Buffer.from('abc') }),
+        Buffer.alloc(1024),
+      ]),
+    );
+    const src = await createTarSource(tar);
+    expect(await src.has(longFile)).toBe(true);
+    expect(await src.size(longFile)).toBe(3);
+  });
+
+  it("'L' 指向目录后被再次 'L' 覆盖，普通文件取后者长名", async () => {
+    const longDir = `${'d'.repeat(120)}/`;
+    const longFile = `${'g'.repeat(150)}.mp3`;
+    const tar = await makeTar(
+      Buffer.concat([
+        rawEntry('dummy', { type: 'L', data: Buffer.from(longDir, 'utf8') }),
+        rawEntry('dummy', { type: '5' }),
+        rawEntry('dummy', { type: 'L', data: Buffer.from(longFile, 'utf8') }),
+        rawEntry('dummy', { data: Buffer.from('abc') }),
+        Buffer.alloc(1024),
+      ]),
+    );
+    const src = await createTarSource(tar);
+    expect(await src.has(longFile)).toBe(true);
+    expect(await src.has(longDir)).toBe(false);
   });
 });

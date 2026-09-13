@@ -74,8 +74,8 @@ function buildIndex(archivePath: string): Map<string, TarEntry> {
         if (type === 'L')
           pendingName = data.toString('utf8').replace(/\0+$/, '');
         else {
-          const pax = parsePaxPath(data);
-          if (pax) pendingName = pax;
+          // 'x' 是下一个条目的覆盖头：无论有无 path 记录，旧 pendingName 都失效
+          pendingName = parsePaxPath(data);
         }
       } else if (type === '0' || type === '\0') {
         const rawName = hdr
@@ -93,8 +93,10 @@ function buildIndex(archivePath: string): Map<string, TarEntry> {
         if (!name.endsWith('/')) {
           index.set(name, { size, dataOffset }); // GNU 允许同名条目，取后者
         }
+      } else {
+        // 目录（'5'）与其他类型：跳过，但长名覆盖视为已被本条目消费
+        pendingName = null;
       }
-      // 目录（'5'）与其他类型：跳过
       pos = dataOffset + Math.ceil(size / 512) * 512;
     }
   } finally {
