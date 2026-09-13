@@ -86,10 +86,36 @@ describe('compileQuery：布尔组合', () => {
     expect(not?.sql).toContain('NOT');
   });
 
-  it('括号分组解包', () => {
+  it('括号分组保留括号（不再解包）', () => {
     const s = compile('(tag:a OR tag:b) circle:x');
     expect(s?.sql).toContain('AND');
     expect(s?.sql).toContain('OR');
+    const q = s?.sql.replace(/\s+/g, ' ') ?? '';
+    // OR 组整体括号化后再与 circle 条件 AND：接缝为「探针闭合 + 组闭合」双右括号
+    expect(q).toContain(')) AND (');
+  });
+
+  it('混合 OR/AND 优先级：括号组先 AND（liqe 语义，非 SQL 优先级）', () => {
+    // 若 OR 组未括号化，SQL 优先级会变成 tag1 OR (tag2 AND va:x)
+    const s = compile('(tag:tag1 OR tag:tag2) va:x');
+    const q = s?.sql.replace(/\s+/g, ' ') ?? '';
+    // OR 组的收尾为双右括号（内层探针 + 组包裹）+ AND 接缝
+    expect(q).toContain(')) AND (');
+    // AND 接缝位于 tag 的 OR 组之后（括号组在前，va 条件在后）
+    expect(q.lastIndexOf(')) AND (')).toBeGreaterThan(q.indexOf(') OR ('));
+    expect(s?.params).toContain('tag1');
+    expect(s?.params).toContain('tag2');
+    expect(s?.params).toContain('x');
+  });
+
+  it('NOT 与括号组合：否定整个 OR 组', () => {
+    const s = compile('NOT (tag:a OR tag:b)');
+    const q = s?.sql.replace(/\s+/g, ' ') ?? '';
+    // NOT 括号覆盖整个 OR 组（组包裹 + OR 接缝均在 NOT 内），而非仅第一个操作数
+    expect(q.startsWith('NOT (((')).toBe(true);
+    expect(q).toContain(') OR (');
+    expect(s?.params).toContain('a');
+    expect(s?.params).toContain('b');
   });
 });
 

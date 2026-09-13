@@ -36,8 +36,11 @@ function compileNode(node: LiqeQuery, t: typeof works): SQL | undefined {
   switch (node.type) {
     case 'EmptyExpression':
       return undefined;
-    case 'ParenthesizedExpression':
-      return compileNode(node.expression, t);
+    case 'ParenthesizedExpression': {
+      const inner = compileNode(node.expression, t);
+      if (!inner) return undefined;
+      return sql`(${inner})`;
+    }
     case 'UnaryOperator': {
       const inner = compileNode(node.operand, t);
       if (!inner) return undefined;
@@ -51,8 +54,8 @@ function compileNode(node: LiqeQuery, t: typeof works): SQL | undefined {
       if (!left) return right;
       if (!right) return left;
       return op === 'AND'
-        ? sql`${left} AND ${right}`
-        : sql`${left} OR ${right}`;
+        ? sql`(${left} AND ${right})`
+        : sql`(${left} OR ${right})`;
     }
     case 'Tag':
       return compileTag(node, t);
