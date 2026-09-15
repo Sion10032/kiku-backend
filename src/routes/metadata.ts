@@ -35,6 +35,8 @@ const saveBodySchema = z
       .max(100)
       .optional(),
     removeVaIds: z.array(z.string()).max(200).optional(),
+    // 先恢复原始再套用本次编辑（上限 6 = OVERRIDE_FIELDS 全集）
+    resetFields: z.array(z.enum(OVERRIDE_FIELDS)).max(6).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: '空覆盖请求' });
 
@@ -108,7 +110,8 @@ const overrideDetailSchema = z.object({
  * 元数据覆盖（管理员专用）。与 works.ts 公开浏览端点相对，同 workAdmin.ts 模式。
  */
 export const metadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // PATCH /api/work/:id/metadata — 保存覆盖（标量为最终值；tags/vas 为动作列表）
+  // PATCH /api/work/:id/metadata — 保存覆盖（标量为最终值；tags/vas 为动作列表；
+  // resetFields 先恢复原始再套用本次编辑）
   fastify.patch(
     '/work/:id/metadata',
     {

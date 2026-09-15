@@ -141,6 +141,78 @@ describe('saveOverride / getOverride', () => {
   });
 });
 
+describe('saveOverride resetFields（保存时原子恢复原始）', () => {
+  it('标量 reset：行 title 置 null、effective 回落 original，其余字段不受影响', async () => {
+    await saveOverride(OVR.w1, {
+      title: `标题_override_${OVR.base}`,
+      tagsCleared: true, // 伴生覆盖：reset title 后主行仍存在，可断言行级状态
+    });
+    await saveOverride(OVR.w1, { resetFields: ['title'] });
+    const row = await db
+      .select()
+      .from(workMetaOverride)
+      .where(eq(workMetaOverride.workId, OVR.w1))
+      .get();
+    expect(row?.title).toBeNull();
+    expect(row?.tagsCleared).toBe(1); // 未 reset 的字段不动
+    const detail = await getOverride(OVR.w1);
+    expect(detail?.effective.title).toBe(`标题甲_${OVR.base}`);
+    expect(detail?.overriddenFields).toEqual(['tags']);
+  });
+
+  it('tags reset 清干净：add/remove 动作行全删、cleared=0、effective.tags = original', async () => {
+    await saveOverride(OVR.w1, {
+      tagsCleared: true,
+      addTags: [`标签Z_${OVR.base}`],
+      removeTagIds: [await tagIdByName(OVR.tagX)],
+    });
+    await saveOverride(OVR.w1, { resetFields: ['tags'] });
+    const actions = await db
+      .select({ id: tagWorkOverride.tagId })
+      .from(tagWorkOverride)
+      .where(eq(tagWorkOverride.workId, OVR.w1));
+    expect(actions).toEqual([]);
+    const detail = await getOverride(OVR.w1);
+    expect(detail?.effective.tags.map((t) => t.name)).toEqual([
+      OVR.tagX,
+      OVR.tagY,
+    ]);
+    expect(detail?.override.tagsCleared).toBe(false);
+    expect(detail?.overriddenFields).not.toContain('tags');
+  });
+
+  it('叠加语义：reset tags 与 addTags 同请求 → 结果 = original + 新增（purge 不吃掉本次新增）', async () => {
+    await saveOverride(OVR.w1, { tagsCleared: true });
+    await saveOverride(OVR.w1, {
+      resetFields: ['tags'],
+      addTags: [`标签W_${OVR.base}`],
+    });
+    const detail = await getOverride(OVR.w1);
+    expect(detail?.effective.tags.map((t) => t.name)).toEqual([
+      OVR.tagX,
+      OVR.tagY,
+      `标签W_${OVR.base}`,
+    ]);
+    expect(detail?.override.tagsCleared).toBe(false);
+  });
+
+  it('reset 与同请求显式标量并存：显式输入获胜（不落 null）', async () => {
+    await saveOverride(OVR.w1, { title: `标题_override_${OVR.base}` });
+    await saveOverride(OVR.w1, {
+      resetFields: ['title'],
+      title: `标题_final_${OVR.base}`,
+    });
+    const detail = await getOverride(OVR.w1);
+    expect(detail?.effective.title).toBe(`标题_final_${OVR.base}`);
+    const row = await db
+      .select()
+      .from(workMetaOverride)
+      .where(eq(workMetaOverride.workId, OVR.w1))
+      .get();
+    expect(row?.title).toBe(`标题_final_${OVR.base}`);
+  });
+});
+
 describe('applyEffective', () => {
   it('空数组直接返回；无覆盖的作品零改动', async () => {
     await applyEffective([]);

@@ -131,6 +131,35 @@ describe('元数据覆盖路由', () => {
     expect(bad.statusCode).toBe(400); // release 不在可编辑字段清单
   });
 
+  it('PATCH 仅 resetFields：zod 放行 → 200；无覆盖行作品 no-op 不 500', async () => {
+    // 自足构造已知状态：w1 = tagsCleared + add（不依赖前序用例残留）
+    await saveOverride(OVR.w1, {
+      tagsCleared: true,
+      addTags: [`标签Z_${OVR.base}`],
+    });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/work/${OVR.w1}/metadata`,
+      headers: auth(adminToken),
+      payload: { resetFields: ['tags'] },
+    });
+    expect(res.statusCode).toBe(200);
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/work/${OVR.w1}/metadata/override`,
+      headers: auth(adminToken),
+    });
+    expect(detail.json().overriddenFields).toEqual([]);
+    // 从未有覆盖行的作品（w3）：仅 resetFields 请求安全落地
+    const noop = await app.inject({
+      method: 'PATCH',
+      url: `/api/work/${OVR.w3}/metadata`,
+      headers: auth(adminToken),
+      payload: { resetFields: ['title'] },
+    });
+    expect(noop.statusCode).toBe(200);
+  });
+
   it('GET 回显匿名 → 401（管理员端点不公开）', async () => {
     const res = await app.inject({
       method: 'GET',

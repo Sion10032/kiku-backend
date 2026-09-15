@@ -46,6 +46,8 @@ export type SaveMetadataOverrideInput = {
   removeTagIds?: number[];
   addVas?: Array<{ id?: string; name: string }>;
   removeVaIds?: string[];
+  /** 本请求内先恢复原始的字段；随后再套用本次编辑（叠加语义，见 saveOverride） */
+  resetFields?: MetadataField[];
   updatedBy?: string;
 };
 
@@ -234,9 +236,14 @@ export function applyScalarOverrideInTx(
 /**
  * 保存覆盖（单事务）：
  * 0) 清理失效 remove 行（原始关系已被 rescan 删除 → 行退化为 no-op）
- * 1) 主行读-改-写（只更新请求中出现的键）
- * 2) tag/va 动作落库：以「原始集合」为基准推导——add 原始已存在 → 撤销 remove 行；
+ * 1) resetFields：先恢复原始（标量置 null / tags·vas 清动作行与 cleared）
+ * 2) 主行读-改-写（只更新请求中出现的键；reset 的标量以显式 null 键合入 patch）
+ * 3) tag/va 动作落库：以「原始集合」为基准推导——add 原始已存在 → 撤销 remove 行；
  *    remove 原始不存在 → 撤销先前 add 行。delta 语义的关键分支。
+ *
+ * reset 必须先于 apply：同请求的「resetFields + addTags/标量编辑」语义是
+ * 「先重置回 original、再套用本次编辑」（purge 不能吃掉本次新增），
+ * 顺序不可交换。
  */
 export async function saveOverride(
   workId: string,
@@ -261,7 +268,43 @@ export async function saveOverride(
          AND va_id NOT IN (SELECT va_id FROM r_va_work WHERE work_id = ${workId})
     `);
 
-    applyScalarOverrideInTx(tx, workId, input);
+    // step 1（resetFields）：
+    // - 标量：翻译成显式 null 键合入即将应用的 patch——仅当请求未显式携带该键
+    //   时补（显式输入获胜，applyScalarOverrideInTx 的 'key' in patch 在场判断
+    //   语义保持不变）。
+    // - tags/vas：清空全部动作行 + 解除 cleared 标记。顺序敏感：必须先 purge
+    //   再推导下方 add/remove，动作才会相对 original 基准叠加；主行不存在时
+    //   UPDATE 零行即 no-op，主行收口由末尾 pruneIfEmpty 统一处理。
+    const resets = new Set(input.resetFields ?? []);
+    const scalarPatch: ScalarOverridePatch = { ...input };
+    if (resets.has('title') && !('title' in input)) scalarPatch.title = null;
+    if (resets.has('circle') && !('circleName' in input)) {
+      scalarPatch.circleName = null;
+    }
+    if (resets.has('series') && !('seriesName' in input)) {
+      scalarPatch.seriesName = null;
+    }
+    if (resets.has('ageRating') && !('ageRating' in input)) {
+      scalarPatch.ageRating = null;
+    }
+    if (resets.has('tags')) {
+      tx.delete(tagWorkOverride)
+        .where(eq(tagWorkOverride.workId, workId))
+        .run();
+      tx.update(workMetaOverride)
+        .set({ tagsCleared: 0 })
+        .where(eq(workMetaOverride.workId, workId))
+        .run();
+    }
+    if (resets.has('vas')) {
+      tx.delete(vaWorkOverride).where(eq(vaWorkOverride.workId, workId)).run();
+      tx.update(workMetaOverride)
+        .set({ vasCleared: 0 })
+        .where(eq(workMetaOverride.workId, workId))
+        .run();
+    }
+
+    applyScalarOverrideInTx(tx, workId, scalarPatch);
 
     const originalTagIds = new Set(
       tx
