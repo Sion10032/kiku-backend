@@ -90,6 +90,11 @@ async function plugin(fastify: FastifyInstance) {
     if (getConfig().instanceMode !== 'private') return;
 
     const path = request.url.split('?')[0] ?? request.url;
+
+    // 非 /api 路径是前端静态产物与 SPA 入口（数据接口全部挂在 /api 下），
+    // 不做鉴权——否则私有模式下连登录页自身都无法加载。
+    if (!path.startsWith('/api')) return;
+
     if (PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`)))
       return;
 

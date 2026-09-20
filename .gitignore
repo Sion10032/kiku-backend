@@ -6,6 +6,9 @@ out
 dist
 *.tgz
 
+# 前端构建产物（后端静态目录，见 AGENTS.md「静态资源」）
+/public
+
 # code coverage
 coverage
 *.lcov

@@ -6,6 +6,9 @@ Bun + Fastify + Drizzle ORM + Zod + Biome。
 
 ```bash
 bun run dev            # 开发（watch）
+bun run start          # 源码运行（无 watch）
+bun run build          # 打包到 dist/（Bun.build：依赖 external + 拷贝迁移目录）
+bun run start:prod     # 运行打包产物（需 node_modules 已安装）
 bun run test           # bun test
 bun run typecheck      # tsc --noEmit
 bun run lint           # biome check
@@ -54,6 +57,17 @@ bun run db:blob:generate / db:blob:migrate   # blob 库（drizzle.blob.config.ts
 
 - src 下 import 带 `.js` 后缀（verbatimModuleSyntax）；测试文件不带（现状惯例）
 - Biome：单引号、2 空格、分号；`bun run lint` / `bun run format`
+
+## 打包与静态资源
+
+- `bun run build` 用 `Bun.build`（`build.ts`）把 `src/index.ts` 打成 `dist/index.js`，依赖全部 external，
+  所以运行产物仍需 `node_modules`；两个库的 migrations 目录被拷到 `dist/migrations/{main,blob}`。
+- 迁移目录定位统一走 `src/infra/db/migrations.ts` 的 `resolveMigrationsFolder()`，同时兼容
+  源码态（`src/infra/db/<db>/migrations`）与打包态（`dist/migrations/<db>`）；新增库时
+  `build.ts` 的 `MIGRATIONS` 清单与 `MigrationTarget` 一起加。
+- 前端产物放仓库根 `public/`（cwd 相对，与 `CONFIG_PATH` 同约定，已 gitignore）：`public/index.html`
+  存在时 `buildApp()` 才注册 `@fastify/static` 并做 SPA 深链回落，否则跳过（开发态前端走 Vite）。
+- 私有模式的全局鉴权只覆盖 `/api`；非 `/api` 路径是前端静态产物与 SPA 入口，匿名可访问。
 
 ## i18n
 

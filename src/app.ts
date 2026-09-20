@@ -2,7 +2,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import sensible from '@fastify/sensible';
 import fastifySSE from '@fastify/sse';
-import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import Fastify, { type FastifyInstance } from 'fastify';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -29,7 +30,12 @@ import { versionRoutes } from './routes/version.js';
 import { workAdminRoutes } from './routes/workAdmin.js';
 import { worksRoutes } from './routes/works.js';
 
-export async function buildApp() {
+export interface BuildAppOptions {
+  /** 静态资源根目录；默认 cwd 相对的 `./public`（与 CONFIG_PATH 同约定）。 */
+  staticRoot?: string;
+}
+
+export async function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
 
   // Configure Zod Type Provider
@@ -66,7 +72,45 @@ export async function buildApp() {
   await app.register(analysisRoutes, { prefix: '/api/analysis' });
   await app.register(setupRoutes, { prefix: '/api/setup' });
 
+  registerStaticAssets(
+    app,
+    options.staticRoot ?? join(process.cwd(), 'public'),
+  );
+
   return app;
+}
+
+/**
+ * 注册前端静态资源与 SPA 深度链接回落。
+ *
+ * 静态目录缺少 index.html（未构建前端产物）时跳过，交给 Fastify 默认 404——
+ * 开发时前端由 Vite 提供，后端只在部署形态下托管产物。
+ */
+function registerStaticAssets(app: FastifyInstance, root: string): void {
+  const indexHtml = join(root, 'index.html');
+  if (!existsSync(indexHtml)) {
+    app.log.info(`Static assets not served: ${indexHtml} not found`);
+    return;
+  }
+
+  app.register(fastifyStatic, { root, prefix: '/', index: ['index.html'] });
+
+  app.setNotFoundHandler((request, reply) => {
+    const isApi = request.url === '/api' || request.url.startsWith('/api/');
+    const isGet = request.method === 'GET' || request.method === 'HEAD';
+
+    if (isApi || !isGet) {
+      // 保持 Fastify 默认 404 形状：API 响应体不能混进 index.html
+      reply.code(404).send({
+        message: `Route ${request.method}:${request.url} not found`,
+        error: 'Not Found',
+        statusCode: 404,
+      });
+      return;
+    }
+
+    reply.sendFile('index.html');
+  });
 }
 
 function initializeDirectories() {

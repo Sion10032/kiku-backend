@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { getConfig } from '../../config/index.js';
+import { resolveMigrationsFolder } from '../migrations.js';
 import { relations } from './relations.js';
 
 // 获取数据库路径
@@ -33,4 +34,4 @@ sqlite.exec('PRAGMA foreign_keys = ON');
 export const db = drizzle({ client: sqlite, relations });
 
 // Run pending migrations on startup (idempotent via __drizzle_migrations table)
-migrate(db, { migrationsFolder: './src/infra/db/main/migrations' });
+migrate(db, { migrationsFolder: resolveMigrationsFolder('main') });
