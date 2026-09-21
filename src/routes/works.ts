@@ -32,7 +32,7 @@ const idParamsSchema = z.object({
 const worksQuerySchema = z.object({
   /** LQL 查询文本（空/省略 = 全量）。语法：tag:催眠 -tag:百合 circle:"xx" va:x age:r18 裸词 */
   q: z.string().optional(),
-  page: z.coerce.number().default(1),
+  page: z.coerce.number().int().min(1).default(1),
   order: z
     .enum([
       'id',
