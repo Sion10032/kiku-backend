@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
 import { reviews, works } from '../infra/db/main/schema.js';
+import { liveWorkExists } from './work.service.js';
 
 export async function getReviewsByWorkId(workId: string) {
   return db.query.reviews.findMany({
@@ -26,13 +27,24 @@ export async function getReview(username: string, workId: string) {
   });
 }
 
+/** upsertReview 结果：ok 携带落库后的 review 行（可能为 undefined），reason 供 route 映射状态码。 */
+export type UpsertReviewOutcome =
+  | { ok: true; review: Awaited<ReturnType<typeof getReview>> }
+  | { ok: false; reason: 'work-missing' };
+
 export async function upsertReview(data: {
   userName: string;
   workId: string;
   rating?: number;
   reviewText?: string;
   progress?: string;
-}) {
+}): Promise<UpsertReviewOutcome> {
+  // FK 防护：作品不在库（或已软删）→ 'work-missing'（route 映射 404），
+  // 否则 t_review.work_id 外键违反会抛 500
+  if (!(await liveWorkExists(data.workId))) {
+    return { ok: false, reason: 'work-missing' };
+  }
+
   const existing = await getReview(data.userName, data.workId);
   const now = new Date().toISOString();
 
@@ -59,7 +71,7 @@ export async function upsertReview(data: {
 
   await updateWorkReviewStats(data.workId);
 
-  return getReview(data.userName, data.workId);
+  return { ok: true, review: await getReview(data.userName, data.workId) };
 }
 
 export async function deleteReview(username: string, workId: string) {

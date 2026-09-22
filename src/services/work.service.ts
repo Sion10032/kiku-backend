@@ -327,6 +327,21 @@ export async function workExists(id: string): Promise<boolean> {
   return row != null;
 }
 
+/** 作品是否「在库且未软删」（只查主键，不加载关联、不走 formatWork）。
+ * 与 workExists 的区别：软删行对被隐藏的场景（评价、进度的 FK 防护）视为不存在。
+ * 需要作品详情用 getWorkById，别为了判存在把整套关联拉起来。 */
+export async function liveWorkExists(id: string): Promise<boolean> {
+  const row = await db.query.works.findFirst({
+    columns: { id: true },
+    where: {
+      RAW: (t, op) =>
+        // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined
+        op.and(op.eq(t.id, id), op.isNull(t.deletedAt))!,
+    },
+  });
+  return row != null;
+}
+
 /**
  * 物理删除：删除作品记录（级联清 tagWork/vaWork/reviews/userProgress，
  * SQLite 外键已开启）并清理封面 blob。

@@ -76,20 +76,25 @@ export const reviewRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: reviewSchema,
         response: {
           200: reviewResponseSchema.nullable(),
+          404: z.object({ error: z.string() }),
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const user = request.user;
       const { work_id, rating, review_text, progress } = request.body;
 
-      return upsertReview({
+      const outcome = await upsertReview({
         userName: user.name,
         workId: work_id,
         rating,
         reviewText: review_text,
         progress,
       });
+      if (!outcome.ok) {
+        return reply.fail(404, 'errors.work.not-found', { id: work_id });
+      }
+      return outcome.review;
     },
   );
 

@@ -7,7 +7,7 @@ import {
   works,
 } from '../infra/db/main/schema.js';
 import { getUserByName } from './user.service.js';
-import { getWorkById } from './work.service.js';
+import { liveWorkExists } from './work.service.js';
 
 /** 听完判定阈值（position/duration ≥ 此值视为听完），前端 progressStore 同值对齐。 */
 export const LISTENED_RATIO = 0.95;
@@ -63,11 +63,7 @@ export async function upsertProgress(data: {
   // FK 防护：幽灵 token（用户已不存在）→ 'user-missing'（route 映射 401）；
   // 作品不在库 → 'work-missing'（route 映射 404，进度静默丢弃）
   if (!(await getUserByName(data.userName))) return 'user-missing';
-  try {
-    await getWorkById(data.workId);
-  } catch {
-    return 'work-missing';
-  }
+  if (!(await liveWorkExists(data.workId))) return 'work-missing';
 
   const now = new Date().toISOString();
 
@@ -226,12 +222,8 @@ export async function markWorkRead(
   userName: string,
   workId: string,
 ): Promise<'work-missing' | 'ok'> {
-  // FK 防护：作品不在库 → 'work-missing'（route 映射 404）
-  try {
-    await getWorkById(workId);
-  } catch {
-    return 'work-missing';
-  }
+  // FK 防护：作品不在库（或已软删）→ 'work-missing'（route 映射 404）
+  if (!(await liveWorkExists(workId))) return 'work-missing';
 
   const now = new Date().toISOString();
   await db
