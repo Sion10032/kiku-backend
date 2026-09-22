@@ -2,7 +2,6 @@
   "errors.auth.invalid-credentials": "Invalid credentials",
   "errors.auth.registration-disabled": "Registration is not allowed",
   "errors.user.exists": "User already exists",
-  "errors.user.create-failed": "Failed to create user",
   "errors.user.not-found": "User not found",
   "errors.user.last-administrator": "Cannot delete the last administrator user",
   "errors.user.cannot-delete-self": "Cannot delete the currently logged-in user",

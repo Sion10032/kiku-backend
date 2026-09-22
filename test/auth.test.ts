@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { hashPassword } from '../src/auth/utils.js';
+import { getConfig, updateConfig } from '../src/infra/config/index.js';
 import { db } from '../src/infra/db/main/index.js';
 import { users } from '../src/infra/db/main/schema.js';
 import { setupTestEnvironment } from './helpers/setup';
@@ -83,6 +84,76 @@ describe('Auth Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('POST /api/auth/register', () => {
+    let app: FastifyInstance;
+    let savedAllowRegistration: boolean;
+    const created: string[] = [];
+
+    beforeAll(async () => {
+      savedAllowRegistration = getConfig().allowRegistration;
+      updateConfig({ allowRegistration: true });
+      app = await buildApp();
+      await app.ready();
+    });
+
+    afterAll(async () => {
+      await db.delete(users).where(inArray(users.name, created));
+      updateConfig({ allowRegistration: savedAllowRegistration });
+      await app.close();
+    });
+
+    it('should register a new user and return token/name/group', async () => {
+      const name = `auth_reg_ok_${RUN}`;
+      created.push(name);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { name, password: 'reg-pass-123' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.name).toBe(name);
+      expect(body.group).toBe('user');
+      expect(typeof body.token).toBe('string');
+    });
+
+    it('should reject a duplicate name with 409', async () => {
+      const name = `auth_reg_dup_${RUN}`;
+      created.push(name);
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { name, password: 'reg-pass-123' },
+      });
+      expect(first.statusCode).toBe(200);
+
+      const duplicate = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { name, password: 'reg-pass-123' },
+      });
+      expect(duplicate.statusCode).toBe(409);
+    });
+
+    it('should map a concurrent same-name registration to 409, never 500', async () => {
+      const name = `auth_reg_race_${RUN}`;
+      created.push(name);
+      const payload = { name, password: 'reg-pass-123' };
+
+      const [a, b] = await Promise.all([
+        app.inject({ method: 'POST', url: '/api/auth/register', payload }),
+        app.inject({ method: 'POST', url: '/api/auth/register', payload }),
+      ]);
+
+      const statuses = [a.statusCode, b.statusCode].sort((x, y) => x - y);
+      expect(statuses).toEqual([200, 409]);
+      expect(statuses).not.toContain(500);
     });
   });
 

@@ -2,7 +2,6 @@
   "errors.auth.invalid-credentials": "用户名或密码错误",
   "errors.auth.registration-disabled": "不允许注册",
   "errors.user.exists": "用户已存在",
-  "errors.user.create-failed": "创建用户失败",
   "errors.user.not-found": "用户不存在",
   "errors.user.last-administrator": "不能删除最后一个管理员用户",
   "errors.user.cannot-delete-self": "不能删除当前登录用户",

@@ -55,7 +55,6 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             group: z.string(),
           }),
           409: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
         },
       },
     },
@@ -63,10 +62,7 @@ export const credentialsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { name, password, group } = request.body;
       const result = await createUserAccount(name, password, group);
       if (!result.ok) {
-        if (result.reason === 'conflict') {
-          return reply.fail(409, 'errors.user.exists');
-        }
-        return reply.fail(500, 'errors.user.create-failed');
+        return reply.fail(409, 'errors.user.exists');
       }
 
       return { name: result.user.name, group: result.user.group };

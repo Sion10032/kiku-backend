@@ -18,18 +18,25 @@ export async function getUsers() {
   });
 }
 
+/** 建户：重名由数据库唯一约束裁决（不抛异常），返回 undefined 表示该名已存在。
+ * target 限定在 name，所以「返回空行」只可能来自 name 唯一约束冲突；
+ * NOT NULL / CHECK / 外键 / 其他唯一列冲突 / 写锁 / 磁盘错误一律照旧抛出（已实测）。 */
 export async function createUser(data: {
   name: string;
   password: string;
   group: string;
 }) {
-  await db.insert(users).values({
-    name: data.name,
-    password: data.password,
-    group: data.group,
-  });
+  const [created] = await db
+    .insert(users)
+    .values({
+      name: data.name,
+      password: data.password,
+      group: data.group,
+    })
+    .onConflictDoNothing({ target: users.name })
+    .returning();
 
-  return getUserByName(data.name);
+  return created;
 }
 
 export async function updateUserGroup(name: string, group: string) {
@@ -75,24 +82,22 @@ export async function deleteUsers(names: string[]): Promise<DeleteUsersResult> {
 
 export type CreateUserAccountResult =
   | { ok: true; user: { name: string; group: string } }
-  | { ok: false; reason: 'conflict' | 'create-failed' };
+  | { ok: false; reason: 'conflict' };
 
-/** 建户用例：查重 + hash + 创建（hash 细节不再暴露给 route） */
+/** 建户用例：hash + 创建（hash 细节不再暴露给 route）。
+ * 重名交给数据库唯一约束判定（先查后插有 TOCTOU 竞态），createUser 返回 undefined 即 conflict。 */
 export async function createUserAccount(
   name: string,
   password: string,
   group: 'user' | 'guest',
 ): Promise<CreateUserAccountResult> {
-  if (await getUserByName(name)) {
-    return { ok: false, reason: 'conflict' };
-  }
   const user = await createUser({
     name,
     password: hashPassword(password),
     group,
   });
   if (!user) {
-    return { ok: false, reason: 'create-failed' };
+    return { ok: false, reason: 'conflict' };
   }
   return { ok: true, user: { name: user.name, group: user.group } };
 }

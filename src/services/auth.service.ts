@@ -27,7 +27,8 @@ export type RegisterResult =
   | { ok: true; user: AuthUser }
   | { ok: false; reason: 'registration-disabled' | 'name-taken' };
 
-/** 注册：allowRegistration 开关 → 查重 → 建户（密码 hash 在此完成） */
+/** 注册：allowRegistration 开关 → 建户（密码 hash 在此完成）。
+ * 重名交给数据库唯一约束判定（先查后插有 TOCTOU 竞态），createUser 返回 undefined 即 name-taken。 */
 export async function register(
   name: string,
   password: string,
@@ -35,10 +36,14 @@ export async function register(
   if (!getConfig().allowRegistration) {
     return { ok: false, reason: 'registration-disabled' };
   }
-  if (await getUserByName(name)) {
+  const created = await createUser({
+    name,
+    password: hashPassword(password),
+    group: 'user',
+  });
+  if (!created) {
     return { ok: false, reason: 'name-taken' };
   }
-  await createUser({ name, password: hashPassword(password), group: 'user' });
   return { ok: true, user: { name, group: 'user' } };
 }
 
@@ -54,11 +59,13 @@ export async function setupInstance(input: {
 }): Promise<AuthUser | null> {
   const existing = await getUsers();
   if (existing.length === 0) {
-    await createUser({
+    const created = await createUser({
       name: input.name,
       password: hashPassword(input.password),
       group: 'administrator',
     });
+    // undefined = 并发 /api/setup 已抢先建户 → 视为已初始化（route 映射 403）
+    if (!created) return null;
   } else if (
     getConfig().kikoeruMigratedAt && !getConfig().kikoeruSetupConsumed
   ) {
@@ -69,11 +76,13 @@ export async function setupInstance(input: {
         await updateUserGroup(input.name, 'administrator');
       }
     } else {
-      await createUser({
+      const created = await createUser({
         name: input.name,
         password: hashPassword(input.password),
         group: 'administrator',
       });
+      // 同上：并发下已被别的请求建户，按已初始化处理
+      if (!created) return null;
     }
   } else {
     return null;
