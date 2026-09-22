@@ -22,7 +22,11 @@ describe('元数据覆盖迁移产物', () => {
       sql`SELECT name FROM sqlite_master WHERE type = 'view'
            AND name IN ('v_work', 'v_tag_work', 'v_va_work')`,
     );
-    expect(rows.map((r) => r.name).sort()).toEqual(['v_tag_work', 'v_va_work', 'v_work']);
+    expect(rows.map((r) => r.name).sort()).toEqual([
+      'v_tag_work',
+      'v_va_work',
+      'v_work',
+    ]);
   });
 
   it('r_tag_work_override 带 tag_id 索引（add 探针按 tag 查找用）', async () => {

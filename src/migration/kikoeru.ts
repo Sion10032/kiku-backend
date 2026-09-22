@@ -1,26 +1,26 @@
 import { Database } from 'bun:sqlite';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { getConfig, updateConfig } from '../infra/config/index.js';
 import type { Config } from '../infra/config/schema.js';
-import { db } from '../infra/db/main/index.js';
-import { putBlobs } from '../infra/db/blob/index.js';
 import type { BlobPut } from '../infra/db/blob/index.js';
+import { putBlobs } from '../infra/db/blob/index.js';
+import { db } from '../infra/db/main/index.js';
 import {
   circles,
   readStates,
   reviews,
-  tagWork,
   tags,
+  tagWork,
   users,
-  vaWork,
   vas,
+  vaWork,
   works,
 } from '../infra/db/main/schema.js';
-import { extractWorkCode } from '../utils/rjcode.js';
 import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
+import { extractWorkCode } from '../utils/rjcode.js';
 
 /** kikoeru 旧数据目录（与 config.databaseFolderDir 同规则解析） */
 export function getOldDataDir(): string {
@@ -217,7 +217,10 @@ export async function migrateFromKikoeru(
 
   // 门禁 1：已迁移过
   if (getConfig().kikoeruMigratedAt) {
-    return { ok: false, error: '已迁移过 kikoeru 数据（config.kikoeruMigratedAt 已存在）' };
+    return {
+      ok: false,
+      error: '已迁移过 kikoeru 数据（config.kikoeruMigratedAt 已存在）',
+    };
   }
   // 门禁 2：新库非空
   const workCount = db.select({ c: sql<number>`count(*)` }).from(works).get();
@@ -282,7 +285,9 @@ export async function migrateFromKikoeru(
         .all() as OldRow[];
       if (circleRows.length) {
         tx.insert(circles)
-          .values(circleRows.map((r) => ({ id: Number(r.id), name: String(r.name) })))
+          .values(
+            circleRows.map((r) => ({ id: Number(r.id), name: String(r.name) })),
+          )
           .onConflictDoNothing()
           .run();
         stats.circles = circleRows.length;
@@ -291,7 +296,9 @@ export async function migrateFromKikoeru(
       const tagRows = old.query('SELECT id, name FROM t_tag').all() as OldRow[];
       if (tagRows.length) {
         tx.insert(tags)
-          .values(tagRows.map((r) => ({ id: Number(r.id), name: String(r.name) })))
+          .values(
+            tagRows.map((r) => ({ id: Number(r.id), name: String(r.name) })),
+          )
           .onConflictDoNothing()
           .run();
         stats.tags = tagRows.length;
@@ -300,7 +307,9 @@ export async function migrateFromKikoeru(
       const vaRows = old.query('SELECT id, name FROM t_va').all() as OldRow[];
       if (vaRows.length) {
         tx.insert(vas)
-          .values(vaRows.map((r) => ({ id: String(r.id), name: String(r.name) })))
+          .values(
+            vaRows.map((r) => ({ id: String(r.id), name: String(r.name) })),
+          )
           .onConflictDoNothing()
           .run();
         stats.vas = vaRows.length;
@@ -436,7 +445,6 @@ export async function migrateFromKikoeru(
           stats.readStates = rsValues.length;
         }
       }
-
     });
 
     // 封面导入（独立于主库事务；putBlobs 幂等 upsert，分批提交避免每张一次 fsync）

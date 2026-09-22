@@ -67,7 +67,8 @@ export async function setupInstance(input: {
     // undefined = 并发 /api/setup 已抢先建户 → 视为已初始化（route 映射 403）
     if (!created) return null;
   } else if (
-    getConfig().kikoeruMigratedAt && !getConfig().kikoeruSetupConsumed
+    getConfig().kikoeruMigratedAt &&
+    !getConfig().kikoeruSetupConsumed
   ) {
     const same = await getUserByName(input.name);
     if (same) {

@@ -3,22 +3,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sql } from 'drizzle-orm';
 import { setupTestEnvironment } from '@test/helpers/setup';
+import { sql } from 'drizzle-orm';
+import { getConfig, setConfigForTesting } from '../infra/config/index.js';
+import { getBlob } from '../infra/db/blob/index.js';
 import { db } from '../infra/db/main/index.js';
 import {
   circles,
   readStates,
   reviews,
-  tagWork,
   tags,
-  vaWork,
+  tagWork,
   users,
   vas,
+  vaWork,
   works,
 } from '../infra/db/main/schema.js';
-import { getConfig, setConfigForTesting } from '../infra/config/index.js';
-import { getBlob } from '../infra/db/blob/index.js';
 import { detectKikoeruData, migrateFromKikoeru } from './kikoeru.js';
 
 setupTestEnvironment();
@@ -371,7 +371,9 @@ describe('migrateFromKikoeru（用户数据）', () => {
 
     const userRows = await db.select().from(users);
     expect(userRows).toHaveLength(2);
-    expect(userRows.find((u) => u.name === 'admin')?.group).toBe('administrator');
+    expect(userRows.find((u) => u.name === 'admin')?.group).toBe(
+      'administrator',
+    );
     expect(userRows.find((u) => u.name === 'admin')?.password).toBe('hash-a');
 
     const rev = await db.select().from(reviews);
@@ -390,7 +392,9 @@ describe('migrateFromKikoeru（用户数据）', () => {
   it('同名用户已存在 → 保留已有行（不覆盖），计数入 usersSkipped', async () => {
     await cleanNewDb();
     // 预置同名用户（模拟迁移前已有账号）
-    await db.insert(users).values({ name: 'admin', password: 'new-hash', group: 'user' });
+    await db
+      .insert(users)
+      .values({ name: 'admin', password: 'new-hash', group: 'user' });
     const forkDir = join(dir, 'fork-skip');
     const old = makeOldDb(forkDir, 'number178-fork');
     old.close();
@@ -478,7 +482,11 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     await cleanNewDb();
     await db.insert(circles).values({ id: 900, name: '占位' });
     await db.insert(works).values({
-      id: 'RJ999999', rootFolder: 'x', dir: 'x', title: '占位', circleId: 900,
+      id: 'RJ999999',
+      rootFolder: 'x',
+      dir: 'x',
+      title: '占位',
+      circleId: 900,
     });
     const sub = join(dir, 'gate2');
     const old = makeOldDb(sub, 'vanilla');
@@ -500,7 +508,10 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     writeOldConfig(sub);
     const coversDir = join(sub, 'covers');
     mkdirSync(coversDir, { recursive: true });
-    writeFileSync(join(coversDir, 'RJ000100_img_main.jpg'), Buffer.from('jpeg-bytes'));
+    writeFileSync(
+      join(coversDir, 'RJ000100_img_main.jpg'),
+      Buffer.from('jpeg-bytes'),
+    );
     writeFileSync(join(coversDir, 'readme.txt'), 'not a cover');
 
     const result = await migrateFromKikoeru(sub);
@@ -612,7 +623,9 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const cfg = getConfig();
     expect(cfg.kikoeruMigratedAt).toBeTruthy();
     expect(cfg.md5secret).toBe('baseline-md5'); // 畸形 md5secret 未并入
-    expect(cfg.rootFolders.find((r) => r.name === 'good')?.path).toBe('/valid/path');
+    expect(cfg.rootFolders.find((r) => r.name === 'good')?.path).toBe(
+      '/valid/path',
+    );
     expect(cfg.rootFolders.find((r) => r.name === 'bad')).toBeUndefined();
 
     rmSync(join(sub, 'config'), { recursive: true, force: true });
@@ -644,11 +657,16 @@ describe('migrateFromKikoeru 分批封面导入', () => {
     mkdirSync(coversDir, { recursive: true });
     const kb = Buffer.alloc(1024, 1);
     for (let i = 1; i <= 250; i++) {
-      writeFileSync(join(coversDir, `RJ${String(i).padStart(6, '0')}_img_full.jpg`), kb);
+      writeFileSync(
+        join(coversDir, `RJ${String(i).padStart(6, '0')}_img_full.jpg`),
+        kb,
+      );
     }
 
     const progress: { imported: number; total: number }[] = [];
-    const result = await migrateFromKikoeru(sub, (p) => progress.push({ ...p }));
+    const result = await migrateFromKikoeru(sub, (p) =>
+      progress.push({ ...p }),
+    );
     expect(result.ok).toBe(true);
     expect(result.stats?.coversImported).toBe(250);
     expect(progress.length).toBeGreaterThanOrEqual(2); // 200/批 → 至少两批
@@ -657,7 +675,8 @@ describe('migrateFromKikoeru 分批封面导入', () => {
       progress.every((p, i) => {
         const prev = progress[i - 1];
         return (
-          p.total === 250 && (i === 0 || (prev !== undefined && p.imported > prev.imported))
+          p.total === 250 &&
+          (i === 0 || (prev !== undefined && p.imported > prev.imported))
         );
       }),
     ).toBe(true);

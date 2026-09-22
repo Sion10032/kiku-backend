@@ -71,9 +71,15 @@ describe('列表/详情返回生效值', () => {
       addVas: [{ name: `声优Z_${OVR.base}` }],
     });
     const work = await getWorkById(OVR.w1);
-    expect(work.tags.find((t) => t.name === `标签Z_${OVR.base}`)?.overridden).toBe(true);
-    expect(work.vas.find((v) => v.name === `声优Z_${OVR.base}`)?.overridden).toBe(true);
-    expect(work.tags.find((t) => t.name === OVR.tagX)?.overridden).toBeUndefined();
+    expect(
+      work.tags.find((t) => t.name === `标签Z_${OVR.base}`)?.overridden,
+    ).toBe(true);
+    expect(
+      work.vas.find((v) => v.name === `声优Z_${OVR.base}`)?.overridden,
+    ).toBe(true);
+    expect(
+      work.tags.find((t) => t.name === OVR.tagX)?.overridden,
+    ).toBeUndefined();
 
     // 列表端点同样携带标记；cleared 后仅剩 override 新增，全带标记
     await saveOverride(OVR.w1, {
