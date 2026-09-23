@@ -67,7 +67,7 @@ const sanitizeResponseSchema = z.object({
   samples: z.array(sanitizeSampleSchema).optional(),
 });
 
-const circleEntitySchema = z.object({ id: z.number(), name: z.string() });
+const circleEntitySchema = z.object({ id: z.string(), name: z.string() });
 const seriesEntitySchema = z.object({ id: z.string(), name: z.string() });
 const tagEntitySchema = z.object({ id: z.number(), name: z.string() });
 const vaEntitySchema = z.object({ id: z.string(), name: z.string() });

@@ -18,7 +18,7 @@ export interface FavouriteItemDto {
   createdAt: string;
   target:
     | { id: string; title: string; circleName: string }
-    | { id: string | number; name: string; workCount: number };
+    | { id: string; name: string; workCount: number };
 }
 
 /** 校验收藏目标存在（多态无 FK，service 层维护完整性）。软删作品视为不存在。 */
@@ -41,13 +41,10 @@ async function targetExists(
       return !!(await db.query.vas.findFirst({
         where: { RAW: (t, op) => op.eq(t.id, targetId) },
       }));
-    case 'circle': {
-      const id = Number(targetId);
-      if (!Number.isInteger(id)) return false;
+    case 'circle':
       return !!(await db.query.circles.findFirst({
-        where: { RAW: (t, op) => op.eq(t.id, id) },
+        where: { RAW: (t, op) => op.eq(t.id, targetId) },
       }));
-    }
   }
 }
 
@@ -178,9 +175,7 @@ export async function listFavourites(
     : [];
   const vaMap = new Map(vaRows.map((v) => [v.id, v]));
 
-  const circleIds = inType('circle')
-    .map((s) => Number(s))
-    .filter((n) => Number.isInteger(n));
+  const circleIds = inType('circle');
   const circleRows = circleIds.length
     ? await db
         .select({
@@ -232,7 +227,7 @@ export async function listFavourites(
         target: { id: v.id, name: v.name, workCount: v.workCount },
       });
     } else {
-      const c = circleMap.get(Number(row.targetId));
+      const c = circleMap.get(row.targetId);
       if (!c) continue;
       items.push({
         targetType: 'circle',
