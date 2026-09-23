@@ -14,6 +14,7 @@ import {
   workMetaOverride,
   works,
 } from '../infra/db/main/schema.js';
+import { resolveCircle, type Tx } from './circle.service.js';
 
 export const OVERRIDE_FIELDS = [
   'title',
@@ -53,24 +54,11 @@ export type SaveMetadataOverrideInput = {
 
 // bun:sqlite 是同步驱动：事务回调必须同步（async 回调会在首个 await 后被提前 commit，
 // 见 kikoeru.ts / blob/index.ts 的既有事务用法），事务体内用 .get()/.all()/.run() 终结。
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 // ---------- 维度表按名 upsert（事务内执行；新条目留在共享维度表，不随恢复删除） ----------
 
-function upsertCircleByName(tx: Tx, name: string): number {
-  const found = tx
-    .select({ id: circles.id })
-    .from(circles)
-    .where(eq(circles.name, name))
-    .get();
-  if (found) return found.id;
-  const inserted = tx
-    .insert(circles)
-    .values({ name })
-    .returning({ id: circles.id })
-    .get();
-  if (!inserted) throw new Error(`circle upsert failed: ${name}`);
-  return inserted.id;
+function upsertCircleByName(tx: Tx, name: string): string {
+  return resolveCircle(tx, { name }).id;
 }
 
 function upsertSeriesByName(tx: Tx, name: string): string {
@@ -454,7 +442,7 @@ export type OverrideActionRow<T> = OverrideEntityRef<T> & {
 export type OverrideDetail = {
   original: {
     title: string;
-    circle: OverrideEntityRef<number> | null;
+    circle: OverrideEntityRef<string> | null;
     series: OverrideEntityRef<string> | null;
     ageRating: string;
     tags: Array<OverrideEntityRef<number>>;
@@ -462,7 +450,7 @@ export type OverrideDetail = {
   };
   effective: {
     title: string;
-    circle: OverrideEntityRef<number> | null;
+    circle: OverrideEntityRef<string> | null;
     series: OverrideEntityRef<string> | null;
     ageRating: string;
     tags: Array<OverrideEntityRef<number>>;
@@ -470,7 +458,7 @@ export type OverrideDetail = {
   };
   override: {
     title: string | null;
-    circle: OverrideEntityRef<number> | null;
+    circle: OverrideEntityRef<string> | null;
     series: OverrideEntityRef<string> | null;
     ageRating: string | null;
     tagsCleared: boolean;
@@ -632,7 +620,7 @@ export async function getOverride(
 export type EffectiveWork = {
   id: string;
   title: string;
-  circle: OverrideEntityRef<number>;
+  circle: OverrideEntityRef<string>;
   series: OverrideEntityRef<string> | null;
   ageRating: string;
   tags: Array<OverrideEntityRef<number>>;
@@ -675,7 +663,7 @@ export async function applyEffective(items: EffectiveWork[]): Promise<void> {
   // 被覆盖 circle/series 的名字解析（FK 保证行存在）
   const circleIds = metaRows
     .map((m) => m.circleId)
-    .filter((x): x is number => x !== null);
+    .filter((x): x is string => x !== null);
   const seriesIds = metaRows
     .map((m) => m.seriesId)
     .filter((x): x is string => x !== null);

@@ -3,7 +3,6 @@ import type { Config } from '../infra/config/schema.js';
 import { db } from '../infra/db/main/index.js';
 import type { AgeRating } from '../infra/db/main/schema.js';
 import {
-  circles,
   series,
   tags,
   tagWork,
@@ -12,6 +11,7 @@ import {
   works,
 } from '../infra/db/main/schema.js';
 import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
+import { resolveCircle } from '../services/circle.service.js';
 
 export interface UpdateResult {
   workId: string;
@@ -25,6 +25,8 @@ export async function updateWorkMetadata(
   metadata: {
     title?: string;
     circleName?: string;
+    /** DLsite maker_id（缺省不改 circle 归属） */
+    circleId?: string;
     tags?: string[];
     vas?: Array<{ id: string; name: string }>;
     series?: { id: string; name: string } | null;
@@ -49,27 +51,16 @@ export async function updateWorkMetadata(
       return { workId, title: '', success: false, error: 'Work not found' };
     }
 
-    // Update circle if provided
+    // Update circle if provided（占位 id 在此升级为真实 maker_id）
     if (metadata.circleName) {
       const circleName = metadata.circleName;
-      let circle = await db.query.circles.findFirst({
-        where: { RAW: (t, op) => op.eq(t.name, circleName) },
-      });
-
-      if (!circle) {
-        const result = await db
-          .insert(circles)
-          .values({ name: metadata.circleName })
-          .returning();
-        circle = result[0];
-      }
-
-      if (circle) {
-        await db
-          .update(works)
-          .set({ circleId: circle.id })
-          .where(eq(works.id, workId));
-      }
+      const circle = db.transaction((tx) =>
+        resolveCircle(tx, { name: circleName, circleId: metadata.circleId }),
+      );
+      await db
+        .update(works)
+        .set({ circleId: circle.id })
+        .where(eq(works.id, workId));
     }
 
     // Update work fields

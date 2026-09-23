@@ -10,7 +10,6 @@ import type {
   Work,
 } from '../infra/db/main/schema.js';
 import {
-  circles,
   series,
   tags,
   tagWork,
@@ -21,6 +20,7 @@ import {
 import { openWorkSource } from '../infra/fs/source/index.js';
 import type { TrackNode } from '../infra/fs/utils.js';
 import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
+import { resolveCircle } from './circle.service.js';
 import { deleteAllCovers } from './cover.service.js';
 import {
   applyEffective,
@@ -93,18 +93,10 @@ export async function upsertWork(
   input: UpsertWorkInput,
 ): Promise<UpsertResult> {
   try {
-    // 1. Find or create circle
-    let circle = await db.query.circles.findFirst({
-      where: { RAW: (t, op) => op.eq(t.name, input.circleName) },
-    });
-    if (!circle) {
-      const result = await db
-        .insert(circles)
-        .values({ name: input.circleName })
-        .returning();
-      circle = result[0];
-    }
-    if (!circle) throw new Error('Failed to create circle');
+    // 1. Find or create circle（占位 id 会在此就地升级为真实 maker_id）
+    const circle = db.transaction((tx) =>
+      resolveCircle(tx, { name: input.circleName, circleId: input.circleId }),
+    );
 
     // 2. Check if work already exists
     const existing = await db.query.works.findFirst({
@@ -366,7 +358,7 @@ export interface FormattedWork {
   rootFolder: string;
   dir: string;
   title: string;
-  circle: { id: number; name: string };
+  circle: { id: string; name: string };
   /** 年龄分级：all 全年龄 / r15 / r18 */
   ageRating: AgeRating;
   release: string | null;

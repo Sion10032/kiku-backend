@@ -191,7 +191,7 @@ export const readStates = sqliteTable(
 
 // 多态收藏：作品 / 系列 / 声优 / 社团，按用户隔离。
 // 多态目标无法做 FK（targetId 统一存 text：work→RJ 号、series→SRI 号、
-// va→DLsite 声优 id、circle→t_circle.id 转文本），完整性由 favourite.service 校验。
+// va→DLsite 声优 id、circle→t_circle.id（maker_id）），完整性由 favourite.service 校验。
 export const favourites = sqliteTable(
   't_favourite',
   {

@@ -179,6 +179,7 @@ export async function* syncWorkMetadata(
     dir: relativePath,
     title: metadata.title,
     circleName: metadata.circle || 'Unknown',
+    circleId: metadata.circleId || undefined,
     ageRating: metadata.ageRating,
     release: metadata.releaseDate || undefined,
     dlCount: metadata.dlCount || undefined,

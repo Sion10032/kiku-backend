@@ -220,7 +220,7 @@ describe('applyEffective', () => {
       {
         id: OVR.w2,
         title: `标题乙_${OVR.base}`,
-        circle: { id: 1, name: OVR.circleA },
+        circle: { id: OVR.circleA, name: OVR.circleA },
         series: null,
         ageRating: 'all',
         tags: [],
@@ -242,7 +242,7 @@ describe('applyEffective', () => {
       {
         id: OVR.w1,
         title: `标题甲_${OVR.base}`,
-        circle: { id: 1, name: OVR.circleA },
+        circle: { id: OVR.circleA, name: OVR.circleA },
         series: null,
         ageRating: 'all',
         tags: [
@@ -254,7 +254,7 @@ describe('applyEffective', () => {
       {
         id: OVR.w2,
         title: `标题乙_${OVR.base}`,
-        circle: { id: 1, name: OVR.circleA },
+        circle: { id: OVR.circleA, name: OVR.circleA },
         series: null,
         ageRating: 'all',
         tags: [],
@@ -280,7 +280,7 @@ describe('applyEffective', () => {
       {
         id: OVR.w1,
         title: 't',
-        circle: { id: 1, name: 'c' },
+        circle: { id: 'c', name: 'c' },
         series: null,
         ageRating: 'all',
         tags: [{ id: await tagIdByName(OVR.tagX), name: OVR.tagX }],
