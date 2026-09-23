@@ -434,6 +434,51 @@ describe('scrapeStaticWorkInfo（VJ pro 页面，zh-cn）', () => {
   });
 });
 
+/** maker_id href のみを差し替えた最小ページ（数字串長さの境界ガード用） */
+const MAKER_ID_PAGE = (makerId: string) => `<!DOCTYPE html>
+<html>
+<head>
+  <meta property="og:title" content="maker_id テスト [テストサークル] | DLsite" />
+  <meta property="og:image" content="https://img.dlsite.jp/modpub/images2/work/doujin/RJ01560000/RJ01559247_img_main.jpg" />
+</head>
+<body>
+  <span class="maker_name"><a href="https://www.dlsite.com/maniax/circle/profile/=/maker_id/${makerId}.html">テストサークル</a></span>
+  <table id="work_outline">
+    <tr><th>年齢指定</th><td>R18</td></tr>
+  </table>
+</body>
+</html>`;
+
+describe('scrapeStaticWorkInfo の maker_id 抽出', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('maker_id 数字串长度必须在 5/8 位且到边界', async () => {
+    const { setConfigForTesting, getConfig } = await import(
+      '../config/index.js'
+    );
+    const saved = getConfig();
+    setConfigForTesting({ ...saved, tagLanguage: 'ja-jp' });
+
+    try {
+      const { scrapeStaticWorkInfo } = await import('./dlsite');
+
+      // 8 位（DLsite 常见的补零形态）不得被 5 位分支截断成 RG00000
+      mockWorkPage(MAKER_ID_PAGE('RG00000001'));
+      expect((await scrapeStaticWorkInfo('RJ01559247')).circleId).toBe(
+        'RG00000001',
+      );
+
+      // 超过 8 位 → 不是 maker_id 形态，留空，不得截断成 RG12345
+      mockWorkPage(MAKER_ID_PAGE('RG123456'));
+      expect((await scrapeStaticWorkInfo('RJ01559247')).circleId).toBe('');
+    } finally {
+      setConfigForTesting(saved);
+    }
+  });
+});
+
 /** zh-tw pro 页面的语言行是「對應語言」（简体为「支持的语言」，日文为「対応言語」） */
 const ZH_TW_LANGUAGE_PAGE_HTML = `<!DOCTYPE html>
 <html>

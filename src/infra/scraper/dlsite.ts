@@ -154,11 +154,17 @@ export async function scrapeStaticWorkInfo(
     .trim()
     .replace(/ \[.+\] \| DLsite$/, '');
 
-  // 社团/品牌：RJ 是社团（maker_id RG 前缀），VJ 是品牌（maker_id VG 前缀）
+  // 社团/品牌：RJ 是社团（maker_id RG 前缀），VJ 是品牌（maker_id VG 前缀）。
+  // 只接受 RG/VG + 5 或 8 位数字、且右侧到边界（与 services/circle.service.ts 的
+  // 归一化一致）。(?=\D|$) 不可省：否则位数为 6/7/9 位的数字串会被截断成另一个
+  // 合法形态（RG123456 → RG12345）。位数不符一律留空 → 调用方按「无 maker_id」
+  // 处理（以 name 作 id，rescan 时再升级）。
   const circleLink = $('span.maker_name a').first();
   const circle = circleLink.text().trim();
   const circleId =
-    circleLink.attr('href')?.match(/maker_id\/([RV]G\d+)/)?.[1] || '';
+    circleLink
+      .attr('href')
+      ?.match(/maker_id\/((?:RG|VG)(?:\d{5}|\d{8}))(?=\D|$)/)?.[1] || '';
 
   // 年龄指定值跨语言一致：'R18'/'R-18' → r18、'R15'/'R-15' → r15；
   // 仅全年龄随页面语言翻译（日：全年齢 / 中：全年龄 / 英：All Ages），
