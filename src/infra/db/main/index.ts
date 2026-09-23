@@ -29,9 +29,14 @@ const sqlite = new Database(getDatabasePath(), {
 
 sqlite.exec('PRAGMA journal_mode = WAL');
 sqlite.exec('PRAGMA busy_timeout = 1000');
-sqlite.exec('PRAGMA foreign_keys = ON');
 
 export const db = drizzle({ client: sqlite, relations });
 
-// Run pending migrations on startup (idempotent via __drizzle_migrations table)
+// Run pending migrations on startup (idempotent via __drizzle_migrations table).
+// 必须在 PRAGMA foreign_keys = ON 之前执行：SQLite 的表重建（DROP + RENAME）在
+// FK 开启时会因隐式 DELETE 触发子表 ON DELETE CASCADE，清空评论/进度/音轨；
+// 而迁移内的 PRAGMA 在事务内无效（见对应 migration.sql 顶部注释）。
 migrate(db, { migrationsFolder: resolveMigrationsFolder('main') });
+
+// 迁移完成后再打开外键（运行时需要 ON UPDATE CASCADE 与删除级联）。
+sqlite.exec('PRAGMA foreign_keys = ON');

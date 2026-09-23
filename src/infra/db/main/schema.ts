@@ -10,7 +10,12 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 export const circles = sqliteTable('t_circle', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+  /**
+   * DLsite maker_id（RG/VG + 5 或 8 位数字）。
+   * 旧库迁移无法确定时为 'unknown'；手工新建以 name 作 id（同 t_series 先例）；
+   * rescan 拿到真实 maker_id 后就地升级（见 services/circle.service.ts）。
+   */
+  id: text('id').primaryKey(),
   name: text('name').notNull(),
 });
 
@@ -21,9 +26,10 @@ export const works = sqliteTable(
     rootFolder: text('root_folder').notNull(),
     dir: text('dir').notNull(),
     title: text('title').notNull(),
-    circleId: integer('circle_id')
+    /** FK ON UPDATE CASCADE：circle 占位 id 升级为真实 maker_id 时关联自动跟随。 */
+    circleId: text('circle_id')
       .notNull()
-      .references(() => circles.id),
+      .references(() => circles.id, { onUpdate: 'cascade' }),
     /** 年龄分级：all 全年龄 / r15 / r18。迁移按旧库 nsfw 映射（真值 → 'r18'，假值/NULL → 'all'），rescan 后由 DLsite 元数据回写真实分级。 */
     ageRating: text('age_rating', { enum: ['all', 'r15', 'r18'] })
       .notNull()
@@ -289,7 +295,9 @@ export const workMetaOverride = sqliteTable('t_work_meta_override', {
     .primaryKey()
     .references(() => works.id, { onDelete: 'cascade' }),
   title: text('title'),
-  circleId: integer('circle_id').references(() => circles.id),
+  circleId: text('circle_id').references(() => circles.id, {
+    onUpdate: 'cascade',
+  }),
   seriesId: text('series_id').references(() => series.id),
   ageRating: text('age_rating').$type<'all' | 'r15' | 'r18'>(),
   tagsCleared: integer('tags_cleared').notNull().default(0),
@@ -342,7 +350,7 @@ export const vaWorkOverride = sqliteTable(
 export const vWork = sqliteView('v_work', {
   workId: text('work_id'),
   title: text('title'),
-  circleId: integer('circle_id'),
+  circleId: text('circle_id'),
   seriesId: text('series_id'),
   ageRating: text('age_rating'),
 }).as(sql`
