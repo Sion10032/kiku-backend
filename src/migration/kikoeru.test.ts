@@ -51,11 +51,11 @@ export function makeOldDb(
       primary key (user_name, work_id));
   `);
   db.exec(`
-    INSERT INTO t_circle (id, name) VALUES (1, '社団A');
+    INSERT INTO t_circle (id, name) VALUES (10001, '社団A'), (10002, 'ブランドB');
     INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
-      VALUES (100, 1, '同人音声', 'A/[RJ000100] テスト作品1', 'テスト作品1', 1);
+      VALUES (100, 10001, '同人音声', 'A/[RJ000100] テスト作品1', 'テスト作品1', 1);
     INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
-      VALUES (200, 1, '同人音声', 'B/[VJ000200] テスト作品2', 'テスト作品2', 0);
+      VALUES (200, 10002, '同人音声', 'B/[VJ000200] テスト作品2', 'テスト作品2', 0);
     INSERT INTO t_tag (id, name) VALUES (1, 'タグ1');
     INSERT INTO t_va (id, name) VALUES ('uuid-va-1', '声優1');
     INSERT INTO r_tag_work VALUES (1, 100);
@@ -187,17 +187,23 @@ describe('migrateFromKikoeru（元数据）', () => {
     expect(w1?.ageRating).toBe('r18');
     expect(w1?.rootFolder).toBe('同人音声');
     expect(w1?.dir).toBe('A/[RJ000100] テスト作品1');
-    expect(w1?.circleId).toBe(1);
+    expect(w1?.circleId).toBe('RG10001');
 
     const w2 = await db.query.works.findFirst({
       where: { RAW: (t, op) => op.eq(t.id, 'VJ000200') },
     });
     expect(w2?.title).toBe('テスト作品2');
     expect(w2?.ageRating).toBe('all'); // fixture nsfw=0 → 全年龄
+    expect(w2?.circleId).toBe('VG10002');
 
     const circleRows = await db.select().from(circles);
-    expect(circleRows).toHaveLength(1);
-    expect(circleRows[0]?.name).toBe('社団A');
+    expect(circleRows).toHaveLength(2);
+    expect(new Set(circleRows.map((c) => c.id))).toEqual(
+      new Set(['RG10001', 'VG10002']),
+    );
+    expect(new Set(circleRows.map((c) => c.name))).toEqual(
+      new Set(['社団A', 'ブランドB']),
+    );
 
     const tagRows = await db.select().from(tags);
     expect(tagRows).toHaveLength(1);
@@ -261,6 +267,149 @@ describe('migrateFromKikoeru（元数据）', () => {
         where: { RAW: (t, op) => op.eq(t.id, 'RJ000100') },
       }),
     ).toBeTruthy();
+  });
+
+  it('6~8 位旧 id 补零到 8 位', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'pad');
+    const old = makeOldDb(sub, 'vanilla');
+    old.exec(`
+      INSERT INTO t_circle (id, name) VALUES (1000001, 'パディング社');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title)
+        VALUES (900, 1000001, '同人音声', 'P/[RJ000900] パディング作品', 'x');
+    `);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    const row = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000900') },
+    });
+    expect(row?.circleId).toBe('RG01000001');
+  });
+
+  it('同组混有 RJ+VJ → 落 unknown 占位行', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'mixed');
+    const old = makeOldDb(sub, 'vanilla');
+    old.exec(`
+      INSERT INTO t_circle (id, name) VALUES (10003, '混在社');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title)
+        VALUES (910, 10003, '同人音声', 'M/[RJ000910] 混在1', 'x');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title)
+        VALUES (920, 10003, '同人音声', 'M/[VJ000920] 混在2', 'x');
+    `);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    for (const id of ['RJ000910', 'VJ000920']) {
+      const row = await db.query.works.findFirst({
+        where: { RAW: (t, op) => op.eq(t.id, id) },
+      });
+      expect(row?.circleId).toBe('unknown');
+    }
+    const unknown = await db.query.circles.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'unknown') },
+    });
+    expect(unknown?.name).toBe('unknown');
+  });
+
+  it('孤儿 circle（无 works）不插入', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'orphan');
+    const old = makeOldDb(sub, 'vanilla');
+    // 夹具自带的两个 works 会带出 10001/10002 两个占位 circle，
+    // 本用例只看「无 works 的 circle」：先清空 works
+    old.exec('DELETE FROM t_work');
+    old.exec(`INSERT INTO t_circle (id, name) VALUES (99999, '孤儿社')`);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    expect(result.stats?.circles).toBe(0);
+    const rows = await db.select().from(circles);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('<5 位旧 id 落 unknown 占位行', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'short-id');
+    const old = makeOldDb(sub, 'vanilla');
+    old.exec(`
+      INSERT INTO t_circle (id, name) VALUES (42, '短号社');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title)
+        VALUES (930, 42, '同人音声', 'S/[RJ000930] 短号作品', 'x');
+    `);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    const row = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000930') },
+    });
+    expect(row?.circleId).toBe('unknown');
+    const unknown = await db.query.circles.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'unknown') },
+    });
+    expect(unknown?.name).toBe('unknown');
+  });
+
+  it('>8 位旧 id 落 unknown 占位行', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'long-id');
+    const old = makeOldDb(sub, 'vanilla');
+    // 9 位：无法作为 RG/VG + 5/8 位 maker_id 表达 → 必须落 unknown，
+    // 绝不能补零成 9 位数字串（MAKER_ID_RE 会拒绝，rescan 无法就地升级）
+    old.exec(`
+      INSERT INTO t_circle (id, name) VALUES (100000001, '过长社');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title)
+        VALUES (940, 100000001, '同人音声', 'L/[RJ000940] 过长作品', 'x');
+    `);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    const row = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000940') },
+    });
+    expect(row?.circleId).toBe('unknown');
+    const unknown = await db.query.circles.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'unknown') },
+    });
+    expect(unknown?.name).toBe('unknown');
+    // 不得插入任何 9 位以上的 maker_id 形态行
+    const rows = await db.select().from(circles);
+    expect(rows.map((c) => c.id)).not.toContain('RG100000001');
+  });
+
+  it('恰好 8 位旧 id 原样映射（补零上界，不再补零）', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'exact-8');
+    const old = makeOldDb(sub, 'vanilla');
+    old.exec(`
+      INSERT INTO t_circle (id, name) VALUES (10000001, '八位社');
+      INSERT INTO t_work (id, circle_id, root_folder, dir, title)
+        VALUES (950, 10000001, '同人音声', 'E/[RJ000950] 八位作品', 'x');
+    `);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    const row = await db.query.works.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RJ000950') },
+    });
+    expect(row?.circleId).toBe('RG10000001');
+    const circle = await db.query.circles.findFirst({
+      where: { RAW: (t, op) => op.eq(t.id, 'RG10000001') },
+    });
+    expect(circle?.name).toBe('八位社');
   });
 });
 

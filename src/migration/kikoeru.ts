@@ -20,7 +20,7 @@ import {
   works,
 } from '../infra/db/main/schema.js';
 import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
-import { extractWorkCode } from '../utils/rjcode.js';
+import { extractWorkCode, parseWorkCode } from '../utils/rjcode.js';
 
 /** kikoeru 旧数据目录（与 config.databaseFolderDir 同规则解析） */
 export function getOldDataDir(): string {
@@ -192,6 +192,20 @@ function normalizeRank(raw: unknown): WorkRankEntry[] | null {
   return out.length > 0 ? out : null;
 }
 
+/**
+ * 旧库 circle.id → 新 maker_id 占位值。
+ * 5 位数字直接拼前缀；6~8 位补零到 8 位；其余（<5 位、>8 位）无法确定 → null。
+ * 入参用字符串：调用方统一以 String() 归一化旧 id（t_circle.id / t_work.circle_id
+ * 两侧键一致），避免数字/文本两种存储形态被数字转换后漏配。
+ */
+function placeholderMakerId(prefix: 'RG' | 'VG', oldId: string): string | null {
+  if (oldId.length === 5) return `${prefix}${oldId}`;
+  if (oldId.length >= 6 && oldId.length <= 8) {
+    return `${prefix}${oldId.padStart(8, '0')}`;
+  }
+  return null;
+}
+
 /** 封面分批导入：每批最多 200 张或 32MB（先到为准），单事务写入，批间让出事件循环 */
 const COVER_BATCH_MAX_FILES = 200;
 const COVER_BATCH_MAX_BYTES = 32 * 1024 * 1024;
@@ -279,20 +293,52 @@ export async function migrateFromKikoeru(
         idMap.set(Number(w.id), code);
       }
 
-      // 2) 基础表（id 保留；ON CONFLICT 保留已有行）
-      const circleRows = old
-        .query('SELECT id, name FROM t_circle')
-        .all() as OldRow[];
-      if (circleRows.length) {
-        tx.insert(circles)
-          .values(
-            circleRows.map((r) => ({ id: Number(r.id), name: String(r.name) })),
-          )
-          .onConflictDoNothing()
-          .run();
-        stats.circles = circleRows.length;
+      // 2) circle id 映射：前缀由组内 works 的作品码推得（RJ→RG / VJ→VG），
+      //    数字按 5/8 位规则补零；混组、<5 位、>8 位一律落 'unknown' 占位行。
+      //    真实 maker_id 由后续 rescan 就地升级（services/circle.service.ts）。
+      const prefixByCircle = new Map<string, 'RG' | 'VG' | null>();
+      for (const w of oldWorks) {
+        const code = idMap.get(Number(w.id));
+        if (!code) continue;
+        const prefix = parseWorkCode(code)?.prefix === 'VJ' ? 'VG' : 'RG';
+        const circleId = String(w.circle_id);
+        const seen = prefixByCircle.get(circleId);
+        if (seen === undefined) prefixByCircle.set(circleId, prefix);
+        else if (seen !== prefix) prefixByCircle.set(circleId, null);
       }
 
+      const oldCircleRows = old
+        .query('SELECT id, name FROM t_circle')
+        .all() as OldRow[];
+      const nameByOldCircle = new Map(
+        oldCircleRows.map((r) => [String(r.id), String(r.name)]),
+      );
+
+      const newIdByCircle = new Map<string, string>();
+      let needsUnknown = false;
+      for (const [oldCircleId, prefix] of prefixByCircle) {
+        const newId = prefix ? placeholderMakerId(prefix, oldCircleId) : null;
+        if (newId) newIdByCircle.set(oldCircleId, newId);
+        else needsUnknown = true;
+      }
+
+      const circleValues = [...newIdByCircle].map(([oldCircleId, id]) => ({
+        id,
+        name: nameByOldCircle.get(oldCircleId) ?? id,
+      }));
+      if (circleValues.length) {
+        tx.insert(circles).values(circleValues).onConflictDoNothing().run();
+        stats.circles += circleValues.length;
+      }
+      if (needsUnknown) {
+        tx.insert(circles)
+          .values({ id: 'unknown', name: 'unknown' })
+          .onConflictDoNothing()
+          .run();
+        stats.circles += 1;
+      }
+
+      // 其余基础表：tags / vas（id 保留；ON CONFLICT 保留已有行）
       const tagRows = old.query('SELECT id, name FROM t_tag').all() as OldRow[];
       if (tagRows.length) {
         tx.insert(tags)
@@ -329,7 +375,7 @@ export async function migrateFromKikoeru(
             rootFolder: String(w.root_folder),
             dir: String(w.dir),
             title: String(w.title),
-            circleId: Number(w.circle_id),
+            circleId: newIdByCircle.get(String(w.circle_id)) ?? 'unknown',
             // nsfw 在 bun:sqlite 里是 0/1（可空）：真值 → 'r18'，假值/NULL → 'all'
             ageRating: (w.nsfw ? 'r18' : 'all') as 'r18' | 'all',
             release: (w.release as string | null) ?? null,
