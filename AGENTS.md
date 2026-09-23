@@ -43,6 +43,11 @@ bun run db:blob:generate / db:blob:migrate   # blob 库（drizzle.blob.config.ts
 - 改完 schema 必须在对应库跑 `db:generate` 并提交生成的迁移目录。
 - **迁移在进程启动时自动应用**（`src/infra/db/{main,blob}/index.ts` 里 `migrate()`，靠 `__drizzle_migrations` 幂等），
   所以 `db:migrate` 只用于手动/调试，正常开发改完 schema 生成迁移即可。
+- **表重建类迁移不要用 `db:migrate`**：drizzle-kit CLI 用 better-sqlite3 且开启了 foreign_keys，
+  会在 `DROP TABLE t_circle` 处报 `FOREIGN KEY constraint failed` 并整体回滚（不丢数据），
+  这类迁移只认运行时迁移器。另外，`db:generate` 出的表重建迁移必须手工在 `DROP TABLE` 前加上
+  `DROP VIEW v_work; DROP VIEW v_tag_work; DROP VIEW v_va_work;`，并在重建完成后把三者原样重建——
+  SQLite ≥3.25 的 `ALTER TABLE ... RENAME` 会重新解析整个 schema，`DROP TABLE` 留下的悬空视图会让它直接报错。
 - 运行时配置读 `data/config.json`（可用 `CONFIG_PATH` 覆盖），经 `src/infra/config/schema.ts` 的 zod 校验；
   文件不存在时自动创建并写入随机 secret（首次启动）。读配置一律走 `getConfig()`。
 

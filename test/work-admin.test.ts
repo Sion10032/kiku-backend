@@ -156,6 +156,14 @@ describe('管理员单作品端点', () => {
     const body = res.json();
     expect(body.title).toBe(`路由测试作品 ${ID}`);
     expect(body.tracks.added).toBe(1);
+
+    // 端到端钉住 circle_id 链路：seed 只给了 circleName（占位 id = 社团名），
+    // 而 fixture 的 maker_name 链接是 maker_id/RG00000001。只有
+    // scraper 提取 maker_id → syncWorkMetadata 透传 → upsertWork 透传给
+    // resolveCircle → 占位行原地升级 这条链完整存在，circleId 才会变成
+    // RG00000001；任一环退回 undefined 都会落回占位 id 而在此失败。
+    const [refreshed] = await db.select().from(works).where(eq(works.id, ID));
+    expect(refreshed?.circleId).toBe('RG00000001');
   });
 
   it('POST /refresh：作品不存在 → 404', async () => {

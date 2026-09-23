@@ -4,7 +4,8 @@
 --
 -- 重建前必须先摘掉引用被重建表的视图：SQLite ≥3.25 的 ALTER TABLE ... RENAME 会重新解析
 -- 整个 schema，而 DROP TABLE 之后旧表上的视图成为悬空引用，RENAME 会以
--- "error in view v_work: no such table: main.t_work" 失败（后续 DROP/INSERT 也随之丢失表）。
+-- "error in view v_work: no such table: main.t_work" 失败。migrateSync 把整份迁移包在
+-- 一个事务里，失败即整体回滚（schema 与数据都不变），结果是这份迁移根本无法应用。
 -- 三个视图的定义与 20260907123050_blue_ken_ellis 逐字节一致，文件末尾原样重建。
 DROP VIEW `v_work`;--> statement-breakpoint
 DROP VIEW `v_tag_work`;--> statement-breakpoint
