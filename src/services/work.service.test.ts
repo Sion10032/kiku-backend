@@ -11,14 +11,16 @@ const RUN = Date.now().toString(36);
 const WORK_ID = `RJ${RUN.padStart(8, '0').slice(-8)}`;
 const DELETED_ID = `RJDEL${RUN}`;
 const MISSING_ID = `RJmissing${RUN}`;
+// circle 主键是 DLsite maker_id 形态的 text；RUN 的 base36 串未必含足够数字，补齐 3 位
+const CIRCLE_ID = `RG96${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
 
 describe('workExists / liveWorkExists 的软删语义差异', () => {
-  let circleId: number;
+  let circleId: string;
 
   beforeAll(async () => {
     const circle = await db
       .insert(circles)
-      .values({ name: `workExists 测试社团_${RUN}` })
+      .values({ id: CIRCLE_ID, name: `workExists 测试社团_${RUN}` })
       .returning();
     const circleRow = circle[0];
     if (!circleRow) throw new Error('circle insert failed');

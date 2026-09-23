@@ -13,11 +13,13 @@ const RUN = Date.now().toString(36);
 const TEST_USER = `fav_route_${RUN}`;
 const WORK_ID = `RJ${RUN.padStart(8, '0').slice(-8)}`;
 const SERIES_ID = `SRI${RUN}`;
+// circle 主键是 DLsite maker_id 形态的 text；RUN 的 base36 串未必含足够数字，补齐 3 位
+const CIRCLE_ID = `RG90${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
 
 describe('Favourite Routes', () => {
   let app: FastifyInstance;
   let token: string;
-  let circleId: number;
+  let circleId: string;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -28,7 +30,7 @@ describe('Favourite Routes', () => {
       .values({ name: TEST_USER, password: 'test-password', group: 'user' });
     const circle = await db
       .insert(circles)
-      .values({ name: `路由测试社团_${RUN}` })
+      .values({ id: CIRCLE_ID, name: `路由测试社团_${RUN}` })
       .returning();
     circleId = circle[0]!.id;
     await db
@@ -164,6 +166,52 @@ describe('Favourite Routes', () => {
         favourites: Array<{ target: { workCount: number } }>;
       };
       expect(body.favourites[0]!.target.workCount).toBe(1);
+    });
+
+    it('收藏社团（maker_id）→ 实体摘要 id 为字符串且可读回', async () => {
+      const post = await app.inject({
+        method: 'POST',
+        url: '/api/favourites',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { targetType: 'circle', targetId: CIRCLE_ID },
+      });
+      expect(post.statusCode).toBe(200);
+      expect(post.json<{ favourited: boolean }>()).toEqual({
+        favourited: true,
+      });
+
+      const list = await app.inject({
+        method: 'GET',
+        url: '/api/favourites?targetType=circle',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(list.statusCode).toBe(200);
+      const body = list.json() as {
+        favourites: Array<{
+          targetId: string;
+          target: { id: string; name: string; workCount: number };
+        }>;
+      };
+      expect(body.favourites.length).toBe(1);
+      expect(body.favourites[0]).toMatchObject({
+        targetId: CIRCLE_ID,
+        target: {
+          id: CIRCLE_ID,
+          name: `路由测试社团_${RUN}`,
+          workCount: 1,
+        },
+      });
+
+      // 数值比较下 maker_id 转不成整数，这条状态查询会返回 false
+      const status = await app.inject({
+        method: 'GET',
+        url: `/api/favourites/status?targetType=circle&ids=${CIRCLE_ID}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(status.statusCode).toBe(200);
+      expect(status.json<Record<string, boolean>>()).toEqual({
+        [CIRCLE_ID]: true,
+      });
     });
 
     it('收藏不存在的目标 → 404；非法 targetType → 400', async () => {

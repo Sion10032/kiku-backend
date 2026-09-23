@@ -19,11 +19,12 @@ const { buildTar, buildZip } = await import('./helpers/archive.js');
 const base = 200000 + Math.floor(Math.random() * 700000);
 const TAR_ID = `RJ${base}`;
 const ZIP_ID = `RJ${base + 1}`;
+// circle 主键是 DLsite maker_id 形态的 text（VG = 视频作品前缀）
+const CIRCLE_ID = `VG95${String(base).slice(-3)}`;
 const audio = Buffer.alloc(4096, 0x7f);
 
 let root: string;
 let app: FastifyInstance;
-let circleId: number;
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'kiku-media-'));
@@ -48,25 +49,23 @@ beforeAll(async () => {
   });
   app = await buildApp();
   await app.ready();
-  const circle = await db
+  await db
     .insert(circles)
-    .values({ name: `媒体测试社团_${base}` })
-    .returning();
-  circleId = circle[0]?.id ?? 0;
+    .values({ id: CIRCLE_ID, name: `媒体测试社团_${base}` });
   await db.insert(works).values([
     {
       id: TAR_ID,
       rootFolder: 'media-root',
       dir: `${TAR_ID}.tar`,
       title: 'tar 作品',
-      circleId,
+      circleId: CIRCLE_ID,
     },
     {
       id: ZIP_ID,
       rootFolder: 'media-root',
       dir: `${ZIP_ID}.zip`,
       title: 'zip 作品',
-      circleId,
+      circleId: CIRCLE_ID,
     },
   ]);
 });
@@ -74,7 +73,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(works).where(eq(works.id, TAR_ID));
   await db.delete(works).where(eq(works.id, ZIP_ID));
-  await db.delete(circles).where(eq(circles.id, circleId));
+  await db.delete(circles).where(eq(circles.id, CIRCLE_ID));
   await app.close();
   rmSync(root, { recursive: true, force: true });
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离

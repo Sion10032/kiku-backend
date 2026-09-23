@@ -629,13 +629,13 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
 
   it('新库 works 非空 → 拒绝迁移', async () => {
     await cleanNewDb();
-    await db.insert(circles).values({ id: 900, name: '占位' });
+    await db.insert(circles).values({ id: 'RG98000', name: '占位' });
     await db.insert(works).values({
       id: 'RJ999999',
       rootFolder: 'x',
       dir: 'x',
       title: '占位',
-      circleId: 900,
+      circleId: 'RG98000',
     });
     const sub = join(dir, 'gate2');
     const old = makeOldDb(sub, 'vanilla');

@@ -25,15 +25,18 @@ const USER = `fav_svc_${RUN}`;
 const WORK_ID = `RJ${RUN.padStart(8, '0').slice(-8)}`;
 const SERIES_ID = `SRI${RUN}`;
 const VA_ID = `VA${RUN}`;
+// circle 主键是 DLsite maker_id 形态的 text（真实形态而非递增整数）；
+// RUN 的 base36 串未必含足够数字，补齐 3 位
+const CIRCLE_ID = `RG97${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
 
 describe('favourite.service', () => {
-  let circleId: number;
+  let circleId: string;
 
   beforeAll(async () => {
     await db.insert(users).values({ name: USER, password: 'x', group: 'user' });
     const circle = await db
       .insert(circles)
-      .values({ name: `测试社团_${RUN}` })
+      .values({ id: CIRCLE_ID, name: `测试社团_${RUN}` })
       .returning();
     // biome-ignore lint/style/noNonNullAssertion: 测试前置数据必须存在，插入失败时用例本身会失败
     circleId = circle[0]!.id;
@@ -73,9 +76,29 @@ describe('favourite.service', () => {
     expect(rows.length).toBe(4);
   });
 
+  // Task 4 review 发现：circle 分支曾带 Number.isInteger 守卫，maker_id 转数字为 NaN，
+  // 导致所有合法社团收藏都查不到。这里用真实形态的 maker_id 断言可收藏、可读回、
+  // 状态映射为 true——把 id 当数字比较时这三条都会失败。
+  it('circle 收藏用 maker_id 字符串：可加、可读回、状态为 true', async () => {
+    expect(await addFavourite(USER, 'circle', CIRCLE_ID)).toBe(true);
+
+    const { favourites: items } = await listFavourites(USER, 'circle');
+    const circle = items.find((i) => i.targetType === 'circle');
+    expect(circle?.targetId).toBe(CIRCLE_ID);
+    expect(circle?.target).toMatchObject({
+      id: CIRCLE_ID,
+      name: `测试社团_${RUN}`,
+      workCount: 1,
+    });
+
+    expect(await statusFavourites(USER, 'circle', [CIRCLE_ID])).toEqual({
+      [CIRCLE_ID]: true,
+    });
+  });
+
   it('目标不存在时返回 false', async () => {
     expect(await addFavourite(USER, 'work', 'RJ99999999')).toBe(false);
-    expect(await addFavourite(USER, 'circle', '999999')).toBe(false);
+    expect(await addFavourite(USER, 'circle', 'RG99999')).toBe(false);
     expect(await addFavourite(USER, 'circle', 'not-a-number')).toBe(false);
   });
 

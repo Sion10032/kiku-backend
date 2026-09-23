@@ -20,6 +20,8 @@ setupTestEnvironment();
 const RUN = Date.now().toString(36);
 const TEST_USER = `read_state_tester_${RUN}`;
 const CIRCLE_NAME = `已读测试社团_${RUN}`;
+// circle 主键是 DLsite maker_id 形态的 text；RUN 的 base36 串未必含足够数字，补齐 3 位
+const CIRCLE_ID = `RG93${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
 
 // 作品按用例拆分，避免状态互相污染：
 // - WORK_MAIN：2 轨已知时长，走完整生命周期（未听完 → 部分听完 → 全听完自动置
@@ -73,7 +75,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
       .values({ name: TEST_USER, password: 'test-password', group: 'user' });
     const circle = await db
       .insert(circles)
-      .values({ name: CIRCLE_NAME })
+      .values({ id: CIRCLE_ID, name: CIRCLE_NAME })
       .returning();
     const circleRow = circle[0];
     if (!circleRow) throw new Error('circle insert failed');

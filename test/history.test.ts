@@ -23,6 +23,8 @@ const WORK_B = `RJ${String(CIRCLE_ID_RAW + 1).padStart(8, '0')}`;
 const WORK_C = `RJ${String(CIRCLE_ID_RAW + 2).padStart(8, '0')}`;
 // 额外作品用于分页和软删测试
 const WORK_D = `RJ${String(CIRCLE_ID_RAW + 3).padStart(8, '0')}`;
+// circle 主键是 DLsite maker_id 形态的 text；RUN 的 base36 串未必含足够数字，补齐 3 位
+const CIRCLE_ID = `RG92${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
 
 // 用显式的时间戳控制排序：T1 < T2 < T3 < T4
 const T1 = '2024-01-01T00:00:00.000Z';
@@ -33,7 +35,7 @@ const T4 = '2024-01-04T00:00:00.000Z';
 const T_NEW = '2024-01-11T00:00:00.000Z';
 
 /** 创建测试作品（需先有 circle 外键） */
-async function insertWork(id: string, title: string, circleId: number) {
+async function insertWork(id: string, title: string, circleId: string) {
   await db
     .insert(works)
     .values({
@@ -79,7 +81,7 @@ describe('GET /api/history', () => {
     });
     const circle = await db
       .insert(circles)
-      .values({ name: `历史测试社团_${RUN}` })
+      .values({ id: CIRCLE_ID, name: `历史测试社团_${RUN}` })
       .returning();
     const circleRow = circle[0];
     if (!circleRow) throw new Error('circle insert failed');
