@@ -8,6 +8,7 @@ import {
 import type { Config } from '../infra/config/schema.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
 import type { WorkSource } from '../infra/fs/source/types.js';
+import { getRootFolderPathByName } from '../services/rootFolder.service.js';
 import {
   computeWorkLoudness,
   getPendingAnalysisWorkIds,
@@ -127,7 +128,6 @@ interface WorkOutcome {
  * 抛错（含 abort）由 worker 捕获记失败任务。
  */
 async function analyzeWork(
-  config: Config,
   workId: string,
   signal: AbortSignal,
   push: (e: AnalysisEvent) => void,
@@ -135,9 +135,7 @@ async function analyzeWork(
 ): Promise<WorkOutcome> {
   const work = await getWorkRow(workId);
   if (!work) throw new Error(`work ${workId} not found`);
-  const rootPath = config.rootFolders.find(
-    (f) => f.name === work.rootFolder,
-  )?.path;
+  const rootPath = await getRootFolderPathByName(work.rootFolder);
   if (!rootPath) throw new Error(`root folder ${work.rootFolder} missing`);
 
   const source = await deps.openSource(rootPath, work.dir);
@@ -265,7 +263,7 @@ export async function* performAnalysis(
       const workId = pull();
       if (!workId) return;
       try {
-        const r = await analyzeWork(config, workId, signal, push, deps);
+        const r = await analyzeWork(workId, signal, push, deps);
         analyzedTracks += r.analyzed;
         failedTracks += r.failed;
         if (r.failed > 0 && r.analyzed === 0) {

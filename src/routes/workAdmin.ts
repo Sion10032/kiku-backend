@@ -1,6 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { getConfig } from '../infra/config/index.js';
 import { refreshWorkMetadata, syncWorkDurations } from '../scanner/workOps.js';
 import { softDeleteWork, workExists } from '../services/work.service.js';
 
@@ -36,7 +35,7 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       try {
-        const result = await refreshWorkMetadata(id, getConfig());
+        const result = await refreshWorkMetadata(id);
         if (!result.ok) {
           if (result.reason === 'work-not-found') {
             return reply.fail(404, 'errors.media.work-not-found');
@@ -72,7 +71,7 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       try {
-        const result = await syncWorkDurations(id, getConfig());
+        const result = await syncWorkDurations(id);
         if (!result.ok) {
           if (result.reason === 'work-not-found') {
             return reply.fail(404, 'errors.media.work-not-found');

@@ -1,6 +1,6 @@
-import type { Config } from '../infra/config/schema.js';
 import { db } from '../infra/db/main/index.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
+import { getRootFolderPathByName } from '../services/rootFolder.service.js';
 import { syncWorkMetadata } from './scanner.js';
 import { syncWorkTracks } from './trackSync.js';
 
@@ -29,8 +29,9 @@ async function getWorkLocation(
   return row ?? null;
 }
 
-function resolveRootPath(config: Config, rootFolder: string): string | null {
-  return config.rootFolders.find((f) => f.name === rootFolder)?.path ?? null;
+/** 根目录路径（未配置 → null，语义同旧的 root-folder-not-found）。 */
+function resolveRootPath(rootFolder: string): Promise<string | null> {
+  return getRootFolderPathByName(rootFolder);
 }
 
 /**
@@ -41,12 +42,11 @@ function resolveRootPath(config: Config, rootFolder: string): string | null {
  */
 export async function refreshWorkMetadata(
   workId: string,
-  config: Config,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<WorkOpResult<{ title: string; tracks: TrackSyncStats }>> {
   const location = await getWorkLocation(workId);
   if (!location) return { ok: false, reason: 'work-not-found' };
-  const rootPath = resolveRootPath(config, location.rootFolder);
+  const rootPath = await resolveRootPath(location.rootFolder);
   if (!rootPath) return { ok: false, reason: 'root-folder-not-found' };
 
   // Drain 元数据事件流；return 值带抓取到的标题
@@ -69,11 +69,10 @@ export async function refreshWorkMetadata(
  */
 export async function syncWorkDurations(
   workId: string,
-  config: Config,
 ): Promise<WorkOpResult<{ tracks: TrackSyncStats }>> {
   const location = await getWorkLocation(workId);
   if (!location) return { ok: false, reason: 'work-not-found' };
-  const rootPath = resolveRootPath(config, location.rootFolder);
+  const rootPath = await resolveRootPath(location.rootFolder);
   if (!rootPath) return { ok: false, reason: 'root-folder-not-found' };
 
   const source = await openWorkSource(rootPath, location.dir);

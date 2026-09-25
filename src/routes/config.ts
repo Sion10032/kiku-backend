@@ -13,7 +13,7 @@ import {
 
 // 部分更新 body：全字段 optional 且去除 default。
 // 不能用 configSchema.partial()：zod 4 中 default 在 optional 之下仍生效，
-// parse 会把未提交字段填成默认值（如 rootFolders: []），经合并覆盖真实配置。
+// parse 会把未提交字段填成默认值（如 maxParallelism: 16），经合并覆盖真实配置。
 const updateConfigSchema: z.ZodType<Partial<Config>> = z.object(
   Object.fromEntries(
     Object.entries(configSchema.shape).map(([key, field]) => [

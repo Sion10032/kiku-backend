@@ -11,6 +11,10 @@ import {
   downloadCover,
 } from '../services/cover.service.js';
 import {
+  getRootFolderPathByName,
+  listRootFolders,
+} from '../services/rootFolder.service.js';
+import {
   getAllWorkRefs,
   getWorksByRootFolder,
   hardDeleteWork,
@@ -249,7 +253,6 @@ async function* syncWorkMetadataAndTracks(
   rjCode: string,
   rootFolder: string,
   relativePath: string,
-  config: Config,
   signal: AbortSignal,
 ): AsyncGenerator<ScanEvent, { title: string; created: boolean }> {
   const metaGen = syncWorkMetadata(rjCode, rootFolder, relativePath, signal);
@@ -261,9 +264,7 @@ async function* syncWorkMetadataAndTracks(
 
   // 音轨行回填：size diff → 仅对新增/变更条目探测时长；失败不判任务失败
   try {
-    const rootPath = config.rootFolders.find(
-      (f) => f.name === rootFolder,
-    )?.path;
+    const rootPath = await getRootFolderPathByName(rootFolder);
     if (!rootPath) {
       yield* emitLog(
         'warning',
@@ -306,9 +307,19 @@ export async function* performScan(
 
   yield* emitLog('info', 'Starting scan...');
 
+  const roots = await listRootFolders();
+
   // Scan each root folder to build the task list
-  for (const rootFolder of config.rootFolders) {
+  for (const rootFolder of roots) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+    if (!rootFolder.path) {
+      yield* emitLog(
+        'warning',
+        `Skipped root folder (path unset): ${rootFolder.name}`,
+      );
+      continue;
+    }
 
     yield* emitLog(
       'info',
@@ -480,7 +491,6 @@ export async function* performScan(
         task.rjCode,
         task.rootFolder,
         task.relativePath,
-        config,
         signal,
       );
       let r = await gen.next();
@@ -515,20 +525,12 @@ export async function* performScan(
   let removed = 0;
   let purged = 0;
 
-  // DB 作品按 root 名归属（getWorksByRootFolder），同名 root（schema 不校验
-  // 名称唯一）的作品无法按 path 区分：任一同名路径枚举失败 → 该名下全部作品
-  // 视为未知，整名排除出 prune——否则失败 root 的作品会经同名成功 root 的
-  // prune 轮被误软删（宁可漏删、下轮再清，不可误删）。
-  const failedRootNames = new Set(
-    config.rootFolders
-      .filter((r) => failedRootPaths.has(r.path))
-      .map((r) => r.name),
-  );
-
-  for (const rootFolder of config.rootFolders) {
+  // DB 作品按 root 名归属（getWorksByRootFolder）。name 是主键，一个名字只对应
+  // 一条路径，枚举失败的根按 path 跳过它自己即可。
+  for (const rootFolder of roots) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
-    if (failedRootNames.has(rootFolder.name)) continue;
+    if (!rootFolder.path || failedRootPaths.has(rootFolder.path)) continue;
 
     const inDb = await getWorksByRootFolder(rootFolder.name);
     if (inDb.length === 0) continue;
@@ -590,7 +592,9 @@ export async function* performScan(
  * 导出供测试直接驱动（对齐 performScan）。
  */
 export async function* performUpdate(
-  config: Config,
+  // 保留形参：与 performScan 共用 manager 调用点与现有测试调用约定；update 模式
+  // 已不需要任何配置（根目录路径统一由 syncWorkMetadataAndTracks 查表解析）。
+  _config: Config,
   signal: AbortSignal,
 ): AsyncGenerator<ScanEvent> {
   yield* emitLog('info', 'Starting metadata update...');
@@ -623,7 +627,6 @@ export async function* performUpdate(
         ref.id,
         ref.rootFolder,
         ref.dir,
-        config,
         signal,
       );
       let r = await gen.next();

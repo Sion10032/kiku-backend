@@ -1,5 +1,4 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { getConfig } from '../infra/config/index.js';
 import { db } from '../infra/db/main/index.js';
 import type {
   AgeRating,
@@ -33,6 +32,7 @@ import {
 } from './progress.service.js';
 import { compileQuery } from './query/compiler.js';
 import { parseQuery } from './query/parser.js';
+import { getRootFolderPathByName } from './rootFolder.service.js';
 import { getTotalDurations, getTrackRows } from './track.service.js';
 
 // ---------- Upsert (used by scanner) ----------
@@ -728,10 +728,9 @@ export async function getWorkTracks(id: string): Promise<WorkTracksResult> {
     return { ok: false, reason: 'work-not-found' };
   }
 
-  const config = getConfig();
-  const rootFolder = config.rootFolders.find((f) => f.name === row.rootFolder);
+  const rootPath = await getRootFolderPathByName(row.rootFolder);
 
-  if (!rootFolder) {
+  if (!rootPath) {
     return {
       ok: false,
       reason: 'root-folder-not-found',
@@ -739,7 +738,7 @@ export async function getWorkTracks(id: string): Promise<WorkTracksResult> {
     };
   }
 
-  const source = await openWorkSource(rootFolder.path, row.dir);
+  const source = await openWorkSource(rootPath, row.dir);
   const tree = await source.buildTree();
   // API 层职责：文件系统 TrackNode 保持纯净，时长/响度在返回前按 mediaIndex 附加
   // （库内无行的轨/探测失败的轨 → null）。
