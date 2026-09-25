@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setupTestEnvironment } from '@test/helpers/setup';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getConfig, setConfigForTesting } from '../infra/config/index.js';
 import { getBlob } from '../infra/db/blob/index.js';
 import { db } from '../infra/db/main/index.js';
@@ -12,6 +12,7 @@ import {
   circles,
   readStates,
   reviews,
+  rootFolders,
   tags,
   tagWork,
   users,
@@ -147,6 +148,7 @@ async function cleanNewDb() {
   await db.delete(tagWork);
   await db.delete(vaWork);
   await db.delete(works);
+  await db.delete(rootFolders);
   await db.delete(tags);
   await db.delete(vas);
   await db.delete(circles);
@@ -173,7 +175,12 @@ describe('migrateFromKikoeru（元数据）', () => {
     const forkDir = join(dir, 'fork');
     const old = makeOldDb(forkDir, 'number178-fork');
     old.close();
-    writeOldConfig(forkDir);
+    const voiceWorkPath = join(dir, 'VoiceWork');
+    writeOldConfig(forkDir, {
+      version: '0.6.14',
+      md5secret: 'old-md5-secret',
+      rootFolders: [{ name: '同人音声', path: voiceWorkPath }],
+    });
 
     const result = await migrateFromKikoeru(forkDir);
     expect(result.ok).toBe(true);
@@ -218,6 +225,15 @@ describe('migrateFromKikoeru（元数据）', () => {
     const vw = await db.select().from(vaWork);
     expect(vw).toHaveLength(1);
     expect(vw[0]?.workId).toBe('VJ000200');
+
+    // root folders 落表：path 从旧 config 取，works.rootFolder 仍是名字
+    expect(result.stats?.rootFolders).toBe(1);
+    const voiceWork = await db
+      .select()
+      .from(rootFolders)
+      .where(eq(rootFolders.name, '同人音声'));
+    expect(voiceWork).toHaveLength(1);
+    expect(voiceWork[0]?.path).toBe(voiceWorkPath);
   });
 
   it('nsfw=0 / nsfw=NULL → ageRating=all（旧库无 r15 信息，不判定 r15）', async () => {
@@ -597,12 +613,11 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     dir = join(tmpdir(), `kiku-mig-side-${Date.now().toString(36)}`);
   });
   afterAll(() => {
-    // 恢复 config，避免 md5secret/rootFolders/迁移标记污染同进程其他测试
+    // 恢复 config，避免 md5secret/迁移标记污染同进程其他测试
     setConfigForTesting({
       ...getConfig(),
       md5secret: 'test-md5-secret',
       jwtsecret: 'test-jwt-secret',
-      rootFolders: [],
       kikoeruMigratedAt: undefined,
     });
     try {
@@ -630,6 +645,8 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
   it('新库 works 非空 → 拒绝迁移', async () => {
     await cleanNewDb();
     await db.insert(circles).values({ id: 'RG98000', name: '占位' });
+    // FK 前置：直插 works 需要同名 root folder 行
+    await db.insert(rootFolders).values({ name: 'x', path: null });
     await db.insert(works).values({
       id: 'RJ999999',
       rootFolder: 'x',
@@ -644,8 +661,9 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(false);
     expect(result.error).toContain('非空');
-    // 清理占位
+    // 清理占位（顺序：works → rootFolders，FK restrict）
     await db.delete(works);
+    await db.delete(rootFolders).where(eq(rootFolders.name, 'x'));
     await db.delete(circles);
   });
 
@@ -674,13 +692,12 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     rmSync(coversDir, { recursive: true, force: true });
   });
 
-  it('md5secret 覆盖 + rootFolders 按 name 合并 + 写迁移标记', async () => {
+  it('md5secret 覆盖 + root folder 落表（同名不覆盖）+ 写迁移标记', async () => {
     await cleanNewDb();
-    // 预置已有 rootFolder：name 相同 → 迁移时保留原 path
-    setConfigForTesting({
-      ...getConfig(),
-      rootFolders: [{ name: 'test', path: '/keep-existing' }],
-    });
+    // 预置已有 rootFolder 行：name 相同 → 迁移 onConflictDoNothing 不覆盖原 path
+    await db
+      .insert(rootFolders)
+      .values({ name: 'test', path: '/keep-existing' });
     const sub = join(dir, 'config-side');
     const old = makeOldDb(sub, 'vanilla');
     old.close();
@@ -701,17 +718,52 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const result = await migrateFromKikoeru(sub);
     expect(result.ok).toBe(true);
 
+    // 同名行保留原 path（onConflictDoNothing），旧 config 只补新名字
+    const testFolder = await db
+      .select()
+      .from(rootFolders)
+      .where(eq(rootFolders.name, 'test'));
+    expect(testFolder[0]?.path).toBe('/keep-existing');
+    const added = await db
+      .select()
+      .from(rootFolders)
+      .where(eq(rootFolders.name, '同人音声'));
+    expect(added[0]?.path).toBe('/usr/src/kikoeru/VoiceWork');
+
     const cfg = getConfig();
     expect(cfg.kikoeruMigratedAt).toBeTruthy();
     expect(cfg.md5secret).toBe('old-md5-secret');
-    // test 是已有 name → 保留原 path
-    const testFolder = cfg.rootFolders.find((r) => r.name === 'test');
-    expect(testFolder?.path).toBe('/keep-existing');
-    // 同人音声为新增
-    const added = cfg.rootFolders.find((r) => r.name === '同人音声');
-    expect(added?.path).toBe('/usr/src/kikoeru/VoiceWork');
+    // rootFolders 已出 config 契约：不再回写 config.json
+    expect(cfg).not.toHaveProperty('rootFolders');
 
     rmSync(join(sub, 'config'), { recursive: true, force: true });
+  });
+
+  it('旧库 root_folder 名不在旧 config → path 落 NULL，works 仍插入成功', async () => {
+    await cleanNewDb();
+    const sub = join(dir, 'unconfigured-folder');
+    const old = makeOldDb(sub, 'vanilla');
+    // 旧 config 从未声明过这个名字（旧配置被改过就会漂移）
+    old.exec(`UPDATE t_work SET root_folder = '未配置目录' WHERE id = 100`);
+    old.close();
+    writeOldConfig(sub);
+
+    const result = await migrateFromKikoeru(sub);
+    expect(result.ok).toBe(true);
+    // 「未配置目录」+「同人音声」（另一条 work 仍引用）：都缺 path
+    expect(result.stats?.rootFolders).toBe(2);
+
+    const folder = await db
+      .select()
+      .from(rootFolders)
+      .where(eq(rootFolders.name, '未配置目录'));
+    expect(folder).toHaveLength(1);
+    expect(folder[0]?.path).toBeNull();
+
+    // FK 前置已满足：works 插入成功，而不是整批失败
+    const w = await db.select().from(works).where(eq(works.id, 'RJ000100'));
+    expect(w).toHaveLength(1);
+    expect(w[0]?.rootFolder).toBe('未配置目录');
   });
 
   it('old-data 无 config.json → 拒绝迁移（需旧配置迁移密钥与根目录）', async () => {
@@ -772,10 +824,20 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const cfg = getConfig();
     expect(cfg.kikoeruMigratedAt).toBeTruthy();
     expect(cfg.md5secret).toBe('baseline-md5'); // 畸形 md5secret 未并入
-    expect(cfg.rootFolders.find((r) => r.name === 'good')?.path).toBe(
-      '/valid/path',
-    );
-    expect(cfg.rootFolders.find((r) => r.name === 'bad')).toBeUndefined();
+    expect(cfg).not.toHaveProperty('rootFolders');
+
+    // path 非字符串 → 丢弃；旧库 works 也没引用 bad → 不应建行
+    const bad = await db
+      .select()
+      .from(rootFolders)
+      .where(eq(rootFolders.name, 'bad'));
+    expect(bad).toHaveLength(0);
+    // 合法 path → 落表（旧库 works 未引用 good，但旧 config 声明过 → 留下供 rescan）
+    const good = await db
+      .select()
+      .from(rootFolders)
+      .where(eq(rootFolders.name, 'good'));
+    expect(good[0]?.path).toBe('/valid/path');
 
     rmSync(join(sub, 'config'), { recursive: true, force: true });
   });

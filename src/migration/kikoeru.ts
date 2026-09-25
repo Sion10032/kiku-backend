@@ -12,6 +12,7 @@ import {
   circles,
   readStates,
   reviews,
+  rootFolders,
   tags,
   tagWork,
   users,
@@ -106,6 +107,7 @@ export function detectKikoeruData(oldDataDir: string): KikoeruDetection | null {
 
 export interface KikoeruMigrationStats {
   circles: number;
+  rootFolders: number;
   works: number;
   worksSkipped: number; // dir 提取不出 RJ/VJ 码
   tags: number;
@@ -264,6 +266,7 @@ export async function migrateFromKikoeru(
 
   const stats: KikoeruMigrationStats = {
     circles: 0,
+    rootFolders: 0,
     works: 0,
     worksSkipped: 0,
     tags: 0,
@@ -359,6 +362,39 @@ export async function migrateFromKikoeru(
           .onConflictDoNothing()
           .run();
         stats.vas = vaRows.length;
+      }
+
+      // 3.5) root folders：以 t_work.root_folder 的名字集合为准，path 从旧 config 的
+      //      rootFolders 取；旧配置里被改过/删除的名字落 path = NULL（解析等价
+      //      root-folder-not-found，设置页可补配）。必须早于 works 插入——FK 非空。
+      const pathByName = new Map<string, string | null>();
+      if (Array.isArray(oldConfig.rootFolders)) {
+        for (const r of oldConfig.rootFolders) {
+          if (
+            r &&
+            typeof (r as { name?: unknown }).name === 'string' &&
+            (r as { name: string }).name &&
+            typeof (r as { path?: unknown }).path === 'string'
+          ) {
+            pathByName.set(
+              (r as { name: string }).name,
+              (r as { path: string }).path,
+            );
+          }
+        }
+      }
+      for (const w of oldWorks) {
+        const name = String(w.root_folder);
+        if (!pathByName.has(name)) pathByName.set(name, null);
+      }
+      // 只保留「有作品引用」与「旧配置声明过」的并集；声明过但没作品的也留下（rescan 用）
+      const folderValues = [...pathByName].map(([name, path]) => ({
+        name,
+        path,
+      }));
+      if (folderValues.length) {
+        tx.insert(rootFolders).values(folderValues).onConflictDoNothing().run();
+        stats.rootFolders = folderValues.length;
       }
 
       // 3) works：ageRating 按旧库 nsfw 布尔列映射（真值 → 'r18'，假值/NULL → 'all'；
@@ -529,30 +565,16 @@ export async function migrateFromKikoeru(
       if (batch.length > 0) await flush();
     }
 
-    // config 副作用：md5secret 覆盖（保旧密码可用）+ rootFolders 按 name 合并 + 迁移标记
+    // config 副作用：md5secret 覆盖（保旧密码可用）+ 迁移标记。
+    // rootFolders 不再回写 config.json —— 已搬进 t_root_folder（见上面 3.5 段）。
     // （oldConfig 已在门禁 3 解析成功；这里只做值级容错：旧 config.json 是用户可
-    // 手改的文件，md5secret/rootFolders 值类型畸形按「不存在」跳过，避免
-    // updateConfig 内 configSchema.parse 抛错 → ok=false 且门禁 2 从此永久拒绝重跑）
+    // 手改的文件，md5secret 值类型畸形按「不存在」跳过，避免 updateConfig 内
+    // configSchema.parse 抛错 → ok=false 且门禁 2 从此永久拒绝重跑）
     const updates: Partial<Config> = {
       kikoeruMigratedAt: new Date().toISOString(),
     };
     if (typeof oldConfig.md5secret === 'string' && oldConfig.md5secret) {
       updates.md5secret = oldConfig.md5secret;
-    }
-    if (Array.isArray(oldConfig.rootFolders)) {
-      const existingNames = new Set(getConfig().rootFolders.map((r) => r.name));
-      const additions = (oldConfig.rootFolders as unknown[])
-        .filter(
-          (r): r is { name: string; path: string } =>
-            !!r &&
-            typeof (r as { name?: unknown }).name === 'string' &&
-            !!(r as { name?: unknown }).name &&
-            typeof (r as { path?: unknown }).path === 'string',
-        )
-        .filter((r) => !existingNames.has(r.name));
-      if (additions.length) {
-        updates.rootFolders = [...getConfig().rootFolders, ...additions];
-      }
     }
     updateConfig(updates);
 
