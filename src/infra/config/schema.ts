@@ -20,14 +20,6 @@ export const configSchema = sharedConfigSchema.extend({
   checkUpdate: z.boolean().default(true),
   checkBetaUpdate: z.boolean().default(false),
   maxParallelism: z.number().min(1).max(64).default(16),
-  rootFolders: z
-    .array(
-      z.object({
-        name: z.string(),
-        path: z.string(),
-      }),
-    )
-    .default([]),
   databaseFolderDir: z.string().default('./data/sqlite'),
   md5secret: z.string(),
   jwtsecret: z.string(),
