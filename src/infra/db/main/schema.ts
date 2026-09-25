@@ -9,6 +9,19 @@ import {
   text,
 } from 'drizzle-orm/sqlite-core';
 
+/**
+ * 媒体根目录（资源库）。原为 config.json 的 rootFolders 数组。
+ * - `name` 直接作主键：全链路（t_work.root_folder / 扫描任务标题 / 设置页）本来就用名字
+ *   标识根目录，换成代理 id 只会把 id 透传进 works，没有任何收益。
+ * - `path` 可空：kikoeru 旧库里 t_work.root_folder 可能指向旧 config.rootFolders 已不存在
+ *   的名字（旧配置被改过就会漂移），这类行路径未知（解析失败 = 旧的 root-folder-not-found），
+ *   设置页可补配。
+ */
+export const rootFolders = sqliteTable('t_root_folder', {
+  name: text('name').primaryKey(),
+  path: text('path'),
+});
+
 export const circles = sqliteTable('t_circle', {
   /**
    * DLsite maker_id（RG/VG + 5 或 8 位数字）。
@@ -23,7 +36,18 @@ export const works = sqliteTable(
   't_work',
   {
     id: text('id').primaryKey(),
-    rootFolder: text('root_folder').notNull(),
+    /**
+     * 所属媒体根目录（外键 → t_root_folder.name）。
+     * ON UPDATE CASCADE：重命名根目录时名下作品的归属自动跟随（依赖运行期
+     *   PRAGMA foreign_keys = ON，见 infra/db/main/index.ts）。
+     * ON DELETE restrict：名下还有作品（含软删）时禁止删除，服务层先行拦截给出 409。
+     */
+    rootFolder: text('root_folder')
+      .notNull()
+      .references(() => rootFolders.name, {
+        onUpdate: 'cascade',
+        onDelete: 'restrict',
+      }),
     dir: text('dir').notNull(),
     title: text('title').notNull(),
     /** FK ON UPDATE CASCADE：circle 占位 id 升级为真实 maker_id 时关联自动跟随。 */
@@ -248,6 +272,9 @@ export const tracks = sqliteTable(
 );
 
 // Export types for all tables
+export type RootFolder = typeof rootFolders.$inferSelect;
+export type NewRootFolder = typeof rootFolders.$inferInsert;
+
 export type Circle = typeof circles.$inferSelect;
 export type NewCircle = typeof circles.$inferInsert;
 
