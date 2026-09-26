@@ -27,8 +27,8 @@ const sqlite = new Database(getDatabasePath(), {
   strict: true,
 });
 
-sqlite.exec('PRAGMA journal_mode = WAL');
-sqlite.exec('PRAGMA busy_timeout = 1000');
+sqlite.run('PRAGMA journal_mode = WAL');
+sqlite.run('PRAGMA busy_timeout = 1000');
 
 export const db = drizzle({ client: sqlite, relations });
 
@@ -46,4 +46,4 @@ export type DbExecutor = typeof db | Tx;
 migrate(db, { migrationsFolder: resolveMigrationsFolder('main') });
 
 // 迁移完成后再打开外键（运行时需要 ON UPDATE CASCADE 与删除级联）。
-sqlite.exec('PRAGMA foreign_keys = ON');
+sqlite.run('PRAGMA foreign_keys = ON');

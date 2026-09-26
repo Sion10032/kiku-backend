@@ -32,7 +32,7 @@ export function makeOldDb(
   const sqliteDir = join(oldDataDir, 'sqlite');
   mkdirSync(sqliteDir, { recursive: true });
   const db = new Database(join(sqliteDir, 'db.sqlite3'));
-  db.exec(`
+  db.run(`
     CREATE TABLE t_circle (id integer not null primary key autoincrement, name varchar(255) not null);
     CREATE TABLE t_work (id integer not null primary key autoincrement,
       root_folder varchar(255) not null, dir varchar(255) not null,
@@ -51,7 +51,7 @@ export function makeOldDb(
       created_at datetime default CURRENT_TIMESTAMP, updated_at datetime default CURRENT_TIMESTAMP,
       primary key (user_name, work_id));
   `);
-  db.exec(`
+  db.run(`
     INSERT INTO t_circle (id, name) VALUES (10001, '社団A'), (10002, 'ブランドB');
     INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
       VALUES (100, 10001, '同人音声', 'A/[RJ000100] テスト作品1', 'テスト作品1', 1);
@@ -67,7 +67,7 @@ export function makeOldDb(
       VALUES ('user1', '100', 5, '良い', 'listening');
   `);
   if (flavor === 'number178-fork') {
-    db.exec(`
+    db.run(`
       CREATE TABLE t_translate_task (id integer primary key autoincrement);
       CREATE TABLE t_play_histroy (user_name varchar(255) NOT NULL, work_id integer NOT NULL,
         created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -240,7 +240,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     await cleanNewDb();
     const sub = join(dir, 'nsfw-mapping');
     const old = makeOldDb(sub, 'vanilla');
-    old.exec(`
+    old.run(`
       INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
         VALUES (700, 1, '同人音声', 'G/[RJ000700] 全年龄作品', '全年龄作品', 0);
       INSERT INTO t_work (id, circle_id, root_folder, dir, title, nsfw)
@@ -268,7 +268,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     await cleanNewDb();
     const vanillaDir = join(dir, 'vanilla');
     const old = makeOldDb(vanillaDir, 'vanilla');
-    old.exec(
+    old.run(
       `INSERT INTO t_work (id, circle_id, root_folder, dir, title) VALUES (300, 1, '同人音声', 'C/提取不出码的作品', 'x')`,
     );
     old.close();
@@ -289,7 +289,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     await cleanNewDb();
     const sub = join(dir, 'pad');
     const old = makeOldDb(sub, 'vanilla');
-    old.exec(`
+    old.run(`
       INSERT INTO t_circle (id, name) VALUES (1000001, 'パディング社');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title)
         VALUES (900, 1000001, '同人音声', 'P/[RJ000900] パディング作品', 'x');
@@ -309,7 +309,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     await cleanNewDb();
     const sub = join(dir, 'mixed');
     const old = makeOldDb(sub, 'vanilla');
-    old.exec(`
+    old.run(`
       INSERT INTO t_circle (id, name) VALUES (10003, '混在社');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title)
         VALUES (910, 10003, '同人音声', 'M/[RJ000910] 混在1', 'x');
@@ -339,8 +339,8 @@ describe('migrateFromKikoeru（元数据）', () => {
     const old = makeOldDb(sub, 'vanilla');
     // 夹具自带的两个 works 会带出 10001/10002 两个占位 circle，
     // 本用例只看「无 works 的 circle」：先清空 works
-    old.exec('DELETE FROM t_work');
-    old.exec(`INSERT INTO t_circle (id, name) VALUES (99999, '孤儿社')`);
+    old.run('DELETE FROM t_work');
+    old.run(`INSERT INTO t_circle (id, name) VALUES (99999, '孤儿社')`);
     old.close();
     writeOldConfig(sub);
 
@@ -355,7 +355,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     await cleanNewDb();
     const sub = join(dir, 'short-id');
     const old = makeOldDb(sub, 'vanilla');
-    old.exec(`
+    old.run(`
       INSERT INTO t_circle (id, name) VALUES (42, '短号社');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title)
         VALUES (930, 42, '同人音声', 'S/[RJ000930] 短号作品', 'x');
@@ -381,7 +381,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     const old = makeOldDb(sub, 'vanilla');
     // 9 位：无法作为 RG/VG + 5/8 位 maker_id 表达 → 必须落 unknown，
     // 绝不能补零成 9 位数字串（MAKER_ID_RE 会拒绝，rescan 无法就地升级）
-    old.exec(`
+    old.run(`
       INSERT INTO t_circle (id, name) VALUES (100000001, '过长社');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title)
         VALUES (940, 100000001, '同人音声', 'L/[RJ000940] 过长作品', 'x');
@@ -408,7 +408,7 @@ describe('migrateFromKikoeru（元数据）', () => {
     await cleanNewDb();
     const sub = join(dir, 'exact-8');
     const old = makeOldDb(sub, 'vanilla');
-    old.exec(`
+    old.run(`
       INSERT INTO t_circle (id, name) VALUES (10000001, '八位社');
       INSERT INTO t_work (id, circle_id, root_folder, dir, title)
         VALUES (950, 10000001, '同人音声', 'E/[RJ000950] 八位作品', 'x');
@@ -449,7 +449,7 @@ describe('migrateFromKikoeru（rate_count_detail / rank 归一化）', () => {
     const old = makeOldDb(sub, 'vanilla');
     // 旧库存的是 DLsite AJAX 原始数组：rate_count_detail 的 ratio 需丢弃；
     // rank 与 kiku 新契约同形状，rank_date 需完整保留（缺省补 ''）
-    old.exec(`
+    old.run(`
       INSERT INTO t_work (id, circle_id, root_folder, dir, title, rate_count_detail, rank)
         VALUES (400, 1, '同人音声', 'D/[RJ000400] 配信作品', '配信作品',
           '[{"review_point":1,"count":18,"ratio":1},{"review_point":2,"count":21,"ratio":2},{"review_point":3,"count":35,"ratio":3}]',
@@ -593,7 +593,7 @@ describe('migrateFromKikoeru（用户数据）', () => {
     await cleanNewDb();
     const vanillaDir = join(dir, 'vanilla-orphan');
     const old = makeOldDb(vanillaDir, 'vanilla');
-    old.exec(
+    old.run(
       `INSERT INTO t_review (user_name, work_id, rating, review_text) VALUES ('user1', '999', 3, '孤儿评论')`,
     );
     old.close();
@@ -744,7 +744,7 @@ describe('migrateFromKikoeru（门禁 + 封面 + config）', () => {
     const sub = join(dir, 'unconfigured-folder');
     const old = makeOldDb(sub, 'vanilla');
     // 旧 config 从未声明过这个名字（旧配置被改过就会漂移）
-    old.exec(`UPDATE t_work SET root_folder = '未配置目录' WHERE id = 100`);
+    old.run(`UPDATE t_work SET root_folder = '未配置目录' WHERE id = 100`);
     old.close();
     writeOldConfig(sub);
 

@@ -33,8 +33,8 @@ const blobSqlite = new Database(getBlobDatabasePath(), {
   strict: true,
 });
 
-blobSqlite.exec('PRAGMA journal_mode = WAL');
-blobSqlite.exec('PRAGMA busy_timeout = 1000');
+blobSqlite.run('PRAGMA journal_mode = WAL');
+blobSqlite.run('PRAGMA busy_timeout = 1000');
 
 export const blobDb = drizzle({ client: blobSqlite });
 
