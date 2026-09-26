@@ -311,7 +311,7 @@ describe('Settings Backup Routes', () => {
   });
 
   describe('payload 严格校验', () => {
-    it('完整快照（11 键齐全）PUT → 200；GET parse 后结构与值原样保留', async () => {
+    it('完整快照（12 键齐全）PUT → 200；GET parse 后结构与值原样保留', async () => {
       const snapshot = {
         dynamicColor: false,
         colorMode: 'auto',
@@ -324,6 +324,7 @@ describe('Settings Backup Routes', () => {
         worksPaginatorPosition: 'bottom',
         worksHistoryStrip: false,
         uiScale: 110,
+        worksPageSize: 50,
       };
       const put = await putBackup(tokenA, 'strict_full', snapshot);
       expect(put.statusCode).toBe(200);
@@ -430,6 +431,20 @@ describe('Settings Backup Routes', () => {
       const res = await putBackup(tokenA, 'strict_bad_ui_scale', {
         uiScale: '110',
       });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('worksPageSize 是已知键：PUT 后原样返回', async () => {
+      const res = await putBackup(tokenA, 'page_size', { worksPageSize: 50 });
+      expect(res.statusCode).toBe(200);
+      const detail = await getBackup(tokenA, 'page_size');
+      expect(JSON.parse(detail.body.payload as string)).toEqual({
+        worksPageSize: 50,
+      });
+    });
+
+    it('worksPageSize 非数字 → 400', async () => {
+      const res = await putBackup(tokenA, 'page_size', { worksPageSize: '50' });
       expect(res.statusCode).toBe(400);
     });
   });

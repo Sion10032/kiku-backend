@@ -59,6 +59,7 @@ const payloadSchema = z.object({
   worksPaginationMode: z.enum(['paginate', 'infinite']).optional(),
   worksPaginatorPosition: z.enum(['top', 'bottom', 'both']).optional(),
   worksHistoryStrip: z.boolean().optional(),
+  worksPageSize: z.number().optional(),
   uiScale: z.number().optional(),
 });
 
