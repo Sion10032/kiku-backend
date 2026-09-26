@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
@@ -52,11 +53,13 @@ describe('resolveCircle', () => {
       { id: `n${RUN}`, name: `占位数字_${RUN}` }, // 模拟 CAST 出来的纯数字串
       { id: 'RG11111', name: `已迁移_${RUN}` },
     ]);
+    await ensureRootFolder(`circletest-${RUN}`);
   });
 
   afterAll(async () => {
     await db.delete(favourites).where(inArray(favourites.userName, [U1, U2]));
     await db.delete(works).where(eq(works.rootFolder, `circletest-${RUN}`));
+    await removeRootFolder(`circletest-${RUN}`);
     await db.delete(users).where(inArray(users.name, [U1, U2]));
     await db
       .delete(circles)

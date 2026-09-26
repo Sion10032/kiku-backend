@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { inArray } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
@@ -7,6 +8,10 @@ import { updateWorkMetadata } from '../scanner/updater.js';
 import { getSeries, getWorkById, upsertWork } from './work.service.js';
 
 setupTestEnvironment();
+
+beforeAll(async () => {
+  await ensureRootFolder('testroot');
+});
 
 // base 取 7 位数字：RJ{base}{1,2,3} 恰为 8 位，符合库内合法 RJ 号格式
 const base = 1000000 + Math.floor(Math.random() * 2000000);
@@ -42,6 +47,7 @@ afterAll(async () => {
     .delete(works)
     .where(inArray(works.id, [W1, W2]))
     .catch(() => {});
+  await removeRootFolder('testroot');
   await db
     .delete(series)
     .where(inArray(series.id, [S1, S3]))

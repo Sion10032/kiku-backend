@@ -52,11 +52,10 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  // 恢复 config，避免 md5secret/rootFolders/迁移标记污染同进程其他测试
+  // 恢复 config，避免 md5secret/迁移标记污染同进程其他测试
   setConfigForTesting({
     ...getConfig(),
     md5secret: 'test-md5-secret',
-    rootFolders: [],
     kikoeruMigratedAt: undefined,
   });
   try {

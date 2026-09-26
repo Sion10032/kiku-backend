@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
@@ -12,6 +13,10 @@ import {
 } from './work.service.js';
 
 setupTestEnvironment();
+
+beforeAll(async () => {
+  await ensureRootFolder('testroot');
+});
 
 const base = 300000 + Math.floor(Math.random() * 500000);
 const ID = `RJ${base}`;
@@ -38,6 +43,7 @@ afterAll(async () => {
     .delete(works)
     .where(eq(works.id, ID))
     .catch(() => {});
+  await removeRootFolder('testroot');
   await db
     .delete(tags)
     .where(eq(tags.name, TAG))

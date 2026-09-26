@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
@@ -26,6 +27,7 @@ describe('workExists / liveWorkExists 的软删语义差异', () => {
     if (!circleRow) throw new Error('circle insert failed');
     circleId = circleRow.id;
 
+    await ensureRootFolder('test');
     await db.insert(works).values([
       {
         id: WORK_ID,
@@ -48,6 +50,7 @@ describe('workExists / liveWorkExists 的软删语义差异', () => {
   afterAll(async () => {
     await db.delete(works).where(eq(works.id, WORK_ID));
     await db.delete(works).where(eq(works.id, DELETED_ID));
+    await removeRootFolder('test');
     await db.delete(circles).where(eq(circles.id, circleId));
   });
 

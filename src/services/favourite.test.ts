@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
@@ -42,6 +43,7 @@ describe('favourite.service', () => {
     circleId = circle[0]!.id;
     await db.insert(series).values({ id: SERIES_ID, name: `测试系列_${RUN}` });
     await db.insert(vas).values({ id: VA_ID, name: `测试声优_${RUN}` });
+    await ensureRootFolder('test');
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
@@ -54,6 +56,7 @@ describe('favourite.service', () => {
 
   afterAll(async () => {
     await db.delete(works).where(eq(works.id, WORK_ID));
+    await removeRootFolder('test');
     await db.delete(favourites).where(eq(favourites.userName, USER));
     await db.delete(users).where(eq(users.name, USER));
     await db.delete(series).where(eq(series.id, SERIES_ID));

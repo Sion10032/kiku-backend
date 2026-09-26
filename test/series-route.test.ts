@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { db } from '../src/infra/db/main/index.js';
 import { series, works } from '../src/infra/db/main/schema.js';
 import { upsertWork } from '../src/services/work.service.js';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
@@ -28,6 +29,7 @@ describe('GET /api/series/ 与作品详情 series 字段', () => {
     await createTestUser(`series_tester_${base}`);
     token = await signTokenFor(app, `series_tester_${base}`);
 
+    await ensureRootFolder('testroot');
     const res = await upsertWork({
       id: W1,
       rootFolder: 'testroot',
@@ -44,6 +46,7 @@ describe('GET /api/series/ 与作品详情 series 字段', () => {
       .delete(works)
       .where(inArray(works.id, [W1]))
       .catch(() => {});
+    await removeRootFolder('testroot');
     await db
       .delete(series)
       .where(inArray(series.id, [S1]))

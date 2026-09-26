@@ -3,6 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildZip } from '@test/helpers/archive.js';
+import {
+  ensureRootFolder,
+  removeRootFolder,
+} from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
 
@@ -29,7 +33,7 @@ mock.module('../services/cover.service.js', () => ({
 
 const { performScan } = await import('./scanner.js');
 const { db } = await import('../infra/db/main/index.js');
-const { works } = await import('../infra/db/main/schema.js');
+const { works, rootFolders } = await import('../infra/db/main/schema.js');
 const { softDeleteWork } = await import('../services/work.service.js');
 
 let root: string;
@@ -48,7 +52,6 @@ async function runScan() {
   for await (const ev of performScan(
     {
       ...(await import('../infra/config/index.js')).getConfig(),
-      rootFolders: [{ name: 'scanroot', path: root }],
       scannerMaxRecursionDepth: 2,
     },
     new AbortController().signal,
@@ -74,8 +77,12 @@ function resultsOf(events: unknown[]) {
   )?.results;
 }
 
-beforeAll(() => {
+beforeAll(async () => {
+  // 同进程共享一个库：先清掉前序测试文件残留的作品/根目录，扫描结果只受本文件影响
+  await db.delete(works);
+  await db.delete(rootFolders);
   root = mkdtempSync(join(tmpdir(), 'kiku-prune-'));
+  await ensureRootFolder('scanroot', root);
   makeSource();
 });
 
@@ -85,6 +92,7 @@ afterAll(async () => {
     .delete(works)
     .where(eq(works.id, id))
     .catch(() => {});
+  await removeRootFolder('scanroot');
 });
 
 describe('performScan 源缺失清理', () => {

@@ -8,6 +8,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  ensureRootFolder,
+  removeRootFolder,
+} from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup';
 
 setupTestEnvironment();
@@ -35,18 +39,19 @@ const { refreshWorkMetadata, syncWorkDurations } = await import('./workOps.js');
 const { db } = await import('../infra/db/main/index.js');
 const { circles, works } = await import('../infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
-const { getConfig, setConfigForTesting } = await import(
-  '../infra/config/index.js'
-);
+const { setConfigForTesting } = await import('../infra/config/index.js');
 const { getTrackRows } = await import('../services/track.service.js');
 const { upsertWork } = await import('../services/work.service.js');
 
 const ROOT_FOLDER = 'workops-root';
+const NULL_ROOT_FOLDER = 'workops-null-root';
 const sine = readFileSync(
   join(import.meta.dir, '../../test/fixtures/audio/sine.wav'),
 );
 const base = 320000 + Math.floor(Math.random() * 600000);
 const ID = `RJ${base}`;
+/** path 为 NULL 的根目录行下的作品：验证 root-folder-not-found 分支 */
+const NULL_ROOT_WORK = `RJ${base + 1}`;
 const CIRCLE = '单作品运维测试社团';
 
 let root: string;
@@ -56,10 +61,7 @@ beforeAll(async () => {
   mkdirSync(join(root, ID), { recursive: true });
   writeFileSync(join(root, ID, 'sine.wav'), sine);
 
-  setConfigForTesting({
-    ...getConfig(),
-    rootFolders: [{ name: ROOT_FOLDER, path: root }],
-  });
+  await ensureRootFolder(ROOT_FOLDER, root);
 
   const seeded = await upsertWork({
     id: ID,
@@ -81,13 +83,15 @@ afterAll(async () => {
     await db.delete(works).where(eq(works.circleId, circle.id));
     await db.delete(circles).where(eq(circles.id, circle.id));
   }
+  await removeRootFolder(ROOT_FOLDER);
+  await removeRootFolder(NULL_ROOT_FOLDER);
   rmSync(root, { recursive: true, force: true });
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离
 });
 
 describe('refreshWorkMetadata', () => {
   it('重抓元数据更新标题，并回填音轨时长', async () => {
-    const result = await refreshWorkMetadata(ID, getConfig());
+    const result = await refreshWorkMetadata(ID);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.title).toBe(`刷新后标题 ${ID}`);
@@ -100,27 +104,29 @@ describe('refreshWorkMetadata', () => {
   });
 
   it('作品不存在 → work-not-found', async () => {
-    const result = await refreshWorkMetadata('RJ99999999', getConfig());
+    const result = await refreshWorkMetadata('RJ99999999');
     expect(result).toEqual({ ok: false, reason: 'work-not-found' });
   });
 
-  it('rootFolder 未配置 → root-folder-not-found', async () => {
-    setConfigForTesting({ ...getConfig(), rootFolders: [] });
-    try {
-      const result = await syncWorkDurations(ID, getConfig());
-      expect(result).toEqual({ ok: false, reason: 'root-folder-not-found' });
-    } finally {
-      setConfigForTesting({
-        ...getConfig(),
-        rootFolders: [{ name: ROOT_FOLDER, path: root }],
-      });
-    }
+  it('rootFolder 行 path 为 NULL → root-folder-not-found', async () => {
+    await ensureRootFolder(NULL_ROOT_FOLDER, null);
+    const seeded = await upsertWork({
+      id: NULL_ROOT_WORK,
+      rootFolder: NULL_ROOT_FOLDER,
+      dir: ID,
+      title: '空路径根目录作品',
+      circleName: CIRCLE,
+    });
+    expect(seeded.success).toBe(true);
+    const result = await syncWorkDurations(NULL_ROOT_WORK);
+    expect(result).toEqual({ ok: false, reason: 'root-folder-not-found' });
+    await db.delete(works).where(eq(works.id, NULL_ROOT_WORK));
   });
 });
 
 describe('syncWorkDurations', () => {
   it('size 未变 → diff 零动作，无重复行', async () => {
-    const result = await syncWorkDurations(ID, getConfig());
+    const result = await syncWorkDurations(ID);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.tracks).toEqual({ added: 0, updated: 0, removed: 0 });

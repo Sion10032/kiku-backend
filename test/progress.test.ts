@@ -10,6 +10,7 @@ import {
   users,
   works,
 } from '../src/infra/db/main/schema.js';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder';
 import { setupTestEnvironment } from './helpers/setup';
 import { signTokenFor } from './helpers/token';
 
@@ -40,6 +41,7 @@ describe('Progress Routes', () => {
       .returning();
     const circleRow = circle[0];
     if (!circleRow) throw new Error('circle insert failed');
+    await ensureRootFolder('test');
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
@@ -55,6 +57,7 @@ describe('Progress Routes', () => {
     // 清理（progress/review 级联删除，仅清用户与作品、社团）
     await db.delete(users).where(eq(users.name, TEST_USER));
     await db.delete(works).where(eq(works.id, WORK_ID));
+    await removeRootFolder('test');
     await db.delete(userProgress).where(eq(userProgress.workId, WORK_ID));
     await db.delete(reviews).where(eq(reviews.workId, WORK_ID));
     const circle = await db.query.circles.findFirst({

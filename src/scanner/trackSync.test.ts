@@ -1,8 +1,15 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { memorySource } from '@test/helpers/memorySource.js';
+import {
+  ensureRootFolder,
+  removeRootFolder,
+} from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup.js';
+import { eq } from 'drizzle-orm';
+import { db } from '../infra/db/main/index.js';
+import { works } from '../infra/db/main/schema.js';
 import { entriesToTrackTree } from '../infra/fs/source/tree.js';
 import { getTrackRows, setTrackLoudness } from '../services/track.service.js';
 import { upsertWork } from '../services/work.service.js';
@@ -11,6 +18,15 @@ import { syncWorkTracks } from './trackSync.js';
 setupTestEnvironment();
 
 const WORK = 'RJ00000002';
+
+beforeAll(async () => {
+  await ensureRootFolder('lib');
+});
+
+afterAll(async () => {
+  await db.delete(works).where(eq(works.id, WORK));
+  await removeRootFolder('lib');
+});
 
 test('syncWorkTracks：首轮入库带时长，次轮无变更零动作', async () => {
   await upsertWork({

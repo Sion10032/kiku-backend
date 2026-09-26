@@ -11,6 +11,7 @@ import {
   users,
   works,
 } from '../src/infra/db/main/schema.js';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder';
 import { setupTestEnvironment } from './helpers/setup';
 import { signTokenFor } from './helpers/token';
 
@@ -79,6 +80,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
       .returning();
     const circleRow = circle[0];
     if (!circleRow) throw new Error('circle insert failed');
+    await ensureRootFolder('test');
     for (const id of [WORK_MAIN, WORK_DEL, WORK_MANUAL, WORK_NULL]) {
       await db.insert(works).values({
         id,
@@ -137,6 +139,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
     for (const wid of [WORK_MAIN, WORK_DEL, WORK_MANUAL, WORK_NULL]) {
       await db.delete(works).where(eq(works.id, wid));
     }
+    await removeRootFolder('test');
     await db.delete(circles).where(eq(circles.name, CIRCLE_NAME));
     await app.close();
   });

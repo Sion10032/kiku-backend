@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { db } from '../src/infra/db/main/index.js';
 import { circles, series, users, works } from '../src/infra/db/main/schema.js';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder';
 import { setupTestEnvironment } from './helpers/setup';
 import { signTokenFor } from './helpers/token';
 
@@ -36,6 +37,7 @@ describe('Favourite Routes', () => {
     await db
       .insert(series)
       .values({ id: SERIES_ID, name: `路由测试系列_${RUN}` });
+    await ensureRootFolder('test');
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
@@ -50,6 +52,7 @@ describe('Favourite Routes', () => {
 
   afterAll(async () => {
     await db.delete(works).where(eq(works.id, WORK_ID));
+    await removeRootFolder('test');
     await db.delete(series).where(eq(series.id, SERIES_ID));
     await db.delete(circles).where(eq(circles.id, circleId));
     await db.delete(users).where(eq(users.name, TEST_USER));

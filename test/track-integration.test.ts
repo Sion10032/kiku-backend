@@ -9,6 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder.js';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
@@ -52,10 +53,10 @@ beforeAll(async () => {
   writeFileSync(join(root, WORK, 'sine.wav'), sine);
   writeFileSync(join(root, WORK, 'bad.mp3'), bad);
 
+  await ensureRootFolder(ROOT_FOLDER, root);
   setConfigForTesting({
     ...getConfig(),
     instanceMode: 'public',
-    rootFolders: [{ name: ROOT_FOLDER, path: root }],
   });
   app = await buildApp();
   await app.ready();
@@ -82,6 +83,7 @@ afterAll(async () => {
     where: { RAW: (t, op) => op.eq(t.name, '时长测试社团') },
   });
   if (circle) await db.delete(circles).where(eq(circles.id, circle.id));
+  await removeRootFolder(ROOT_FOLDER);
   await app.close();
   rmSync(root, { recursive: true, force: true });
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离

@@ -8,6 +8,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  ensureRootFolder,
+  removeRootFolder,
+} from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import type { ScanEvent } from './scanner.js';
 
@@ -34,7 +38,9 @@ mock.module('../services/cover.service.js', () => ({
 
 const { performScan, performUpdate } = await import('./scanner.js');
 const { db } = await import('../infra/db/main/index.js');
-const { circles, works } = await import('../infra/db/main/schema.js');
+const { circles, works, rootFolders } = await import(
+  '../infra/db/main/schema.js'
+);
 const { eq } = await import('drizzle-orm');
 const { getConfig, setConfigForTesting } = await import(
   '../infra/config/index.js'
@@ -57,6 +63,9 @@ const CIRCLE = '回填测试社团';
 let root: string;
 
 beforeAll(async () => {
+  // 同进程共享一个库：先清掉前序测试文件残留的作品/根目录，扫描结果只受本文件影响
+  await db.delete(works);
+  await db.delete(rootFolders);
   root = mkdtempSync(join(tmpdir(), 'kiku-update-'));
   mkdirSync(join(root, ID), { recursive: true });
   writeFileSync(join(root, ID, 'sine.wav'), sine);
@@ -64,10 +73,7 @@ beforeAll(async () => {
   mkdirSync(join(root, ID2), { recursive: true });
   writeFileSync(join(root, ID2, 'sine.wav'), sine);
 
-  setConfigForTesting({
-    ...getConfig(),
-    rootFolders: [{ name: ROOT_FOLDER, path: root }],
-  });
+  await ensureRootFolder(ROOT_FOLDER, root);
 
   // 播种：已入库作品行（update 模式的回填对象）
   const seeded = await upsertWork({
@@ -93,6 +99,7 @@ afterAll(async () => {
     await db.delete(works).where(eq(works.circleId, circle.id));
     await db.delete(circles).where(eq(circles.id, circle.id));
   }
+  await removeRootFolder(ROOT_FOLDER);
   rmSync(root, { recursive: true, force: true });
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离
 });

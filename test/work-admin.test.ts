@@ -9,6 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder.js';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
@@ -72,9 +73,7 @@ const { buildApp } = await import('../src/app');
 const { db } = await import('../src/infra/db/main/index.js');
 const { circles, works } = await import('../src/infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
-const { getConfig, setConfigForTesting } = await import(
-  '../src/infra/config/index.js'
-);
+const { setConfigForTesting } = await import('../src/infra/config/index.js');
 const { upsertWork } = await import('../src/services/work.service.js');
 
 const ROOT_FOLDER = 'workadmin-root';
@@ -89,10 +88,7 @@ beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'kiku-workadmin-'));
   mkdirSync(join(root, ID), { recursive: true });
   writeFileSync(join(root, ID, 'sine.wav'), sine);
-  setConfigForTesting({
-    ...getConfig(),
-    rootFolders: [{ name: ROOT_FOLDER, path: root }],
-  });
+  await ensureRootFolder(ROOT_FOLDER, root);
   const seeded = await upsertWork({
     id: ID,
     rootFolder: ROOT_FOLDER,
@@ -125,6 +121,7 @@ afterAll(async () => {
     await db.delete(works).where(eq(works.circleId, circle.id));
     await db.delete(circles).where(eq(circles.id, circle.id));
   }
+  await removeRootFolder(ROOT_FOLDER);
   rmSync(root, { recursive: true, force: true });
   setConfigForTesting();
 });

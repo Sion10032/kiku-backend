@@ -1,8 +1,19 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
 import { memorySource } from '@test/helpers/memorySource.js';
+import {
+  ensureRootFolder,
+  removeRootFolder,
+} from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup.js';
 import { eq } from 'drizzle-orm';
-import { getConfig, setConfigForTesting } from '../infra/config/index.js';
+import { getConfig } from '../infra/config/index.js';
 import { db } from '../infra/db/main/index.js';
 import { tracks, works } from '../infra/db/main/schema.js';
 import { getTrackRows, upsertTrackRow } from '../services/track.service.js';
@@ -12,6 +23,16 @@ import { performAnalysis } from './analysis.js';
 setupTestEnvironment();
 
 const WORK = 'RJ00000003';
+
+beforeAll(async () => {
+  // analyzeWork 在调 openSource 前会查根目录行（path 不需真实存在，openSource 为注入的 fake）
+  await ensureRootFolder('lib', '/tmp/kiku-analysis-test');
+});
+
+afterAll(async () => {
+  await db.delete(works).where(eq(works.id, WORK));
+  await removeRootFolder('lib');
+});
 
 beforeEach(async () => {
   // preload 仅隔离进程（临时库单例），用例间需自行清残留音轨行
@@ -33,11 +54,6 @@ async function collect<T>(
 
 describe('performAnalysis（注入 fake measure）', () => {
   it('分析音轨、写行、算作品响度、发 RESULTS', async () => {
-    // analyzeWork 在调 openSource 前会查 config.rootFolders，需预置；path 不需真实存在（openSource 为注入的 fake）
-    setConfigForTesting({
-      ...getConfig(),
-      rootFolders: [{ name: 'lib', path: '/tmp/kiku-analysis-test' }],
-    });
     await upsertWork({
       id: WORK,
       rootFolder: 'lib',
@@ -96,10 +112,6 @@ describe('performAnalysis（注入 fake measure）', () => {
   });
 
   it('测量抛错 → 该轨 analyzeError，其余照常', async () => {
-    setConfigForTesting({
-      ...getConfig(),
-      rootFolders: [{ name: 'lib', path: '/tmp/kiku-analysis-test' }],
-    });
     await upsertWork({
       id: WORK,
       rootFolder: 'lib',

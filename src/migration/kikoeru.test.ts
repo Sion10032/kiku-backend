@@ -849,7 +849,11 @@ describe('migrateFromKikoeru 分批封面导入', () => {
   beforeAll(() => {
     dir = join(tmpdir(), `kiku-mig-batch-${Date.now().toString(36)}`);
   });
-  afterAll(() => {
+  afterAll(async () => {
+    // 清掉本文件迁移落下的根目录行（先删 works，FK restrict），
+    // 避免同进程后续测试文件的扫描看到残留根目录
+    await db.delete(works);
+    await db.delete(rootFolders);
     try {
       rmSync(dir, { recursive: true, force: true });
     } catch {

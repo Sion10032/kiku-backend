@@ -162,7 +162,6 @@ describe('Analysis Routes', () => {
       setConfigForTesting({
         ...getConfig(),
         autoLoudnessAnalysis: false,
-        rootFolders: [],
       });
       scanner.startScan(getConfig(), 'scan');
       await waitScanIdle();
@@ -175,7 +174,6 @@ describe('Analysis Routes', () => {
       setConfigForTesting({
         ...getConfig(),
         autoLoudnessAnalysis: true,
-        rootFolders: [],
       });
       scanner.startScan(getConfig(), 'scan');
       await waitScanIdle();

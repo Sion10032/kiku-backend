@@ -2,6 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  ensureRootFolder,
+  removeRootFolder,
+} from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup';
 
 setupTestEnvironment();
@@ -27,7 +31,7 @@ mock.module('../services/cover.service.js', () => ({
 
 const { performScan } = await import('./scanner.js');
 const { db } = await import('../infra/db/main/index.js');
-const { works } = await import('../infra/db/main/schema.js');
+const { works, rootFolders } = await import('../infra/db/main/schema.js');
 const { eq } = await import('drizzle-orm');
 const { buildTar } = await import('@test/helpers/archive.js');
 const { buildZip } = await import('@test/helpers/archive.js');
@@ -46,8 +50,12 @@ const ids = [0, 1, 2, 3, 4, 5].map((i) => `RJ${base + i}`) as [
 // VJ 号文件夹作品（扫描入口需同样识别 VJ 前缀）
 const vjId = `VJ${String(100000 + Math.floor(Math.random() * 800000)).padStart(6, '0')}`;
 
-beforeAll(() => {
+beforeAll(async () => {
+  // 同进程共享一个库：先清掉前序测试文件残留的作品/根目录，扫描结果只受本文件影响
+  await db.delete(works);
+  await db.delete(rootFolders);
   root = mkdtempSync(join(tmpdir(), 'kiku-scan-'));
+  await ensureRootFolder('scanroot', root);
   // 1. 文件夹作品（嵌套一层：root/分类/RJ...）
   mkdirSync(join(root, '分類', ids[0]), { recursive: true });
   writeFileSync(join(root, '分類', ids[0], '01.mp3'), 'x');
@@ -83,6 +91,7 @@ afterAll(async () => {
     await db.delete(works).where(eq(works.id, id));
   }
   await db.delete(works).where(eq(works.id, vjId));
+  await removeRootFolder('scanroot');
 });
 
 async function runScan() {
@@ -90,7 +99,6 @@ async function runScan() {
   for await (const ev of performScan(
     {
       ...(await import('../infra/config/index.js')).getConfig(),
-      rootFolders: [{ name: 'scanroot', path: root }],
       scannerMaxRecursionDepth: 2,
     },
     new AbortController().signal,

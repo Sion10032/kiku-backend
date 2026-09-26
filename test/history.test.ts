@@ -10,6 +10,7 @@ import {
   users,
   works,
 } from '../src/infra/db/main/schema.js';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder';
 import { setupTestEnvironment } from './helpers/setup';
 import { signTokenFor } from './helpers/token';
 
@@ -88,6 +89,7 @@ describe('GET /api/history', () => {
     const circleId = circleRow.id;
 
     // 造 4 个作品（A/B/C 用于核心场景，D 用于分页/软删）
+    await ensureRootFolder('test');
     await insertWork(WORK_A, '作品A', circleId);
     await insertWork(WORK_B, '作品B', circleId);
     await insertWork(WORK_C, '作品C', circleId);
@@ -102,6 +104,7 @@ describe('GET /api/history', () => {
     for (const wid of [WORK_A, WORK_B, WORK_C, WORK_D]) {
       await db.delete(works).where(eq(works.id, wid));
     }
+    await removeRootFolder('test');
     await db.delete(circles).where(eq(circles.name, `历史测试社团_${RUN}`));
     await app.close();
   });

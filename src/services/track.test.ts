@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
-import { tracks } from '../infra/db/main/schema.js';
+import { tracks, works } from '../infra/db/main/schema.js';
 import {
   computeWorkLoudness,
   deleteTrackRows,
@@ -20,6 +21,7 @@ setupTestEnvironment();
 const WORK = 'RJ00000001';
 
 async function seedWork(): Promise<void> {
+  await ensureRootFolder('lib');
   const r = await upsertWork({
     id: WORK,
     rootFolder: 'lib',
@@ -278,4 +280,9 @@ describe('getTotalDurations（批量聚合总时长）', () => {
     const map = await getTotalDurations([]);
     expect(map.size).toBe(0);
   });
+});
+
+afterAll(async () => {
+  await db.delete(works).where(eq(works.rootFolder, 'lib'));
+  await removeRootFolder('lib');
 });

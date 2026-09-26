@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
+import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
@@ -31,6 +32,7 @@ const W2 = `RJ${base}2`; // circleA + tagX + seriesX
 const W3 = `RJ${base}3`; // circleB + tagY，无系列
 
 async function insertFixtures(): Promise<void> {
+  await ensureRootFolder('testroot');
   const rows: UpsertWorkInput[] = [
     {
       id: W1,
@@ -83,6 +85,7 @@ afterAll(async () => {
     .delete(works)
     .where(inArray(works.id, [W1, W2, W3]))
     .catch(() => {});
+  await removeRootFolder('testroot');
   await db
     .delete(tags)
     .where(eq(tags.name, TAG_X))

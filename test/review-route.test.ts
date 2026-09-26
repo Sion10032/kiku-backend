@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { db } from '../src/infra/db/main/index.js';
 import { circles, users, works } from '../src/infra/db/main/schema.js';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder';
 import { setupTestEnvironment } from './helpers/setup';
 import { signTokenFor } from './helpers/token';
 
@@ -37,6 +38,7 @@ describe('Review Routes', () => {
     const circleRow = circle[0];
     if (!circleRow) throw new Error('circle insert failed');
     circleId = circleRow.id;
+    await ensureRootFolder('test');
     await db.insert(works).values({
       id: WORK_ID,
       rootFolder: 'test',
@@ -61,6 +63,7 @@ describe('Review Routes', () => {
     // 且 works.circleId 无级联，必须先于 circle 删除），再删 circle / user
     await db.delete(works).where(eq(works.id, WORK_ID));
     await db.delete(works).where(eq(works.id, DELETED_WORK_ID));
+    await removeRootFolder('test');
     await db.delete(circles).where(eq(circles.id, circleId));
     await db.delete(users).where(eq(users.name, TEST_USER));
     await app.close();

@@ -8,6 +8,7 @@ import {
   works,
 } from '../../src/infra/db/main/schema.js';
 import { upsertWork } from '../../src/services/work.service.js';
+import { ensureRootFolder, removeRootFolder } from '../helpers/rootFolder.js';
 
 /** 同进程所有测试共享一个临时库，fixture 文本一律带随机 base 后缀隔离。 */
 const base = 1000000 + Math.floor(Math.random() * 2000000);
@@ -65,6 +66,8 @@ export async function insertOverrideFixtures(): Promise<void> {
       vas: [],
     },
   ];
+  // FK 前置：works.root_folder → t_root_folder.name
+  await ensureRootFolder('testroot');
   for (const row of rows) {
     const res = await upsertWork(row);
     if (!res.success) throw new Error(res.error);
@@ -101,4 +104,5 @@ export async function cleanupOverrideFixtures(): Promise<void> {
     .delete(series)
     .where(eq(series.id, OVR.seriesX))
     .catch(() => {});
+  await removeRootFolder('testroot');
 }

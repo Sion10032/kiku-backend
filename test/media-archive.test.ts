@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { ensureRootFolder, removeRootFolder } from './helpers/rootFolder.js';
 import { setupTestEnvironment } from './helpers/setup';
 
 setupTestEnvironment();
@@ -42,10 +43,10 @@ beforeAll(async () => {
       { path: `${ZIP_ID}/lyrics/02.lrc`, data: '[00:01.00]test' },
     ]),
   );
+  await ensureRootFolder('media-root', root);
   setConfigForTesting({
     ...getConfig(),
     instanceMode: 'public',
-    rootFolders: [{ name: 'media-root', path: root }],
   });
   app = await buildApp();
   await app.ready();
@@ -74,6 +75,7 @@ afterAll(async () => {
   await db.delete(works).where(eq(works.id, TAR_ID));
   await db.delete(works).where(eq(works.id, ZIP_ID));
   await db.delete(circles).where(eq(circles.id, CIRCLE_ID));
+  await removeRootFolder('media-root');
   await app.close();
   rmSync(root, { recursive: true, force: true });
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离
