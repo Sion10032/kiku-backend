@@ -23,6 +23,7 @@ import { authPlugin } from './routes/plugins/auth.js';
 import { i18nPlugin } from './routes/plugins/i18n.js';
 import { progressRoutes } from './routes/progress.js';
 import { reviewRoutes } from './routes/review.js';
+import { rootFolderRoutes } from './routes/rootFolders.js';
 import { scannerRoutes } from './routes/scanner.js';
 import { settingsBackupRoutes } from './routes/settingsBackup.js';
 import { setupRoutes } from './routes/setup.js';
@@ -67,6 +68,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(settingsBackupRoutes, { prefix: '/api' });
   await app.register(progressRoutes, { prefix: '/api' });
   await app.register(configRoutes, { prefix: '/api/config' });
+  await app.register(rootFolderRoutes, { prefix: '/api/config' });
   await app.register(versionRoutes, { prefix: '/api' });
   await app.register(scannerRoutes, { prefix: '/api/scanner' });
   await app.register(analysisRoutes, { prefix: '/api/analysis' });
