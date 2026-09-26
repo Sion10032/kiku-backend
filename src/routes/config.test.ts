@@ -31,7 +31,11 @@ function auth(): Record<string, string> {
 
 /** 预置非默认标量配置，验证部分更新不互相覆盖 */
 function seedConfig(): void {
-  setConfigForTesting({ ...getConfig(), pageSize: 48, rewindSeekTime: 12 });
+  setConfigForTesting({
+    ...getConfig(),
+    maxParallelism: 3,
+    tagLanguage: 'ja-jp',
+  });
 }
 
 describe('PUT /api/config/admin 部分更新', () => {
@@ -42,7 +46,7 @@ describe('PUT /api/config/admin 部分更新', () => {
       method: 'PUT',
       url: '/api/config/admin',
       headers: auth(),
-      payload: { forwardSeekTime: 60 },
+      payload: { retry: 9 },
     });
     expect(res.statusCode).toBe(200);
 
@@ -52,9 +56,11 @@ describe('PUT /api/config/admin 部分更新', () => {
       headers: auth(),
     });
     const cfg = after.json();
-    expect(cfg.forwardSeekTime).toBe(60);
-    expect(cfg.pageSize).toBe(48);
-    expect(cfg.rewindSeekTime).toBe(12);
+    expect(cfg.retry).toBe(9);
+    expect(cfg.maxParallelism).toBe(3);
+    expect(cfg.tagLanguage).toBe('ja-jp');
+    // pageSize 已从 configSchema 删除，契约里不该再有这个键
+    expect(cfg).not.toHaveProperty('pageSize');
     // rootFolders 已搬进 t_root_folder，config 契约里不该再有这个键
     expect(cfg).not.toHaveProperty('rootFolders');
   });

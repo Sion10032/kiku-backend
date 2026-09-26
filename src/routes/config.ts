@@ -1,15 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import {
-  getConfig,
-  getSharedConfig,
-  updateConfig,
-} from '../infra/config/index.js';
-import {
-  type Config,
-  configSchema,
-  sharedConfigSchema,
-} from '../infra/config/schema.js';
+import { getConfig, updateConfig } from '../infra/config/index.js';
+import { type Config, configSchema } from '../infra/config/schema.js';
 
 // 部分更新 body：全字段 optional 且去除 default。
 // 不能用 configSchema.partial()：zod 4 中 default 在 optional 之下仍生效，
@@ -54,20 +46,6 @@ export const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       return updateConfig(request.body);
-    },
-  );
-
-  fastify.get(
-    '/shared',
-    {
-      schema: {
-        response: {
-          200: sharedConfigSchema,
-        },
-      },
-    },
-    async () => {
-      return getSharedConfig();
     },
   );
 };

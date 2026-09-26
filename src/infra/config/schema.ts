@@ -1,20 +1,10 @@
 import { z } from 'zod';
 
-export const sharedConfigSchema = z.object({
+export const configSchema = z.object({
   instanceMode: z.enum(['private', 'public']).default('private'),
   allowRegistration: z.boolean().default(false),
-  pageSize: z.number().default(12),
   tagLanguage: z.enum(['ja-jp', 'zh-tw', 'zh-cn']).default('zh-cn'),
-  enableGzip: z.boolean().default(true),
-  rewindSeekTime: z.number().default(5),
-  forwardSeekTime: z.number().default(30),
-  offloadMedia: z.boolean().default(false),
-  offloadStreamPath: z.string().default('/media/stream/'),
-  offloadDownloadPath: z.string().default('/media/download/'),
   autoLoudnessAnalysis: z.boolean().default(false),
-});
-
-export const configSchema = sharedConfigSchema.extend({
   production: z.boolean().default(false),
   dbBusyTimeout: z.number().default(1000),
   checkUpdate: z.boolean().default(true),
@@ -41,11 +31,10 @@ export const configSchema = sharedConfigSchema.extend({
   skipCleanup: z.boolean().default(false),
   /** kikoeru 旧数据迁移完成时刻（ISO 8601）；存在即不再迁移。 */
   kikoeruMigratedAt: z.string().optional(),
-  /** 迁移后向导管理员创建已消费；不放 sharedConfigSchema */
+  /** 迁移后向导管理员创建已消费 */
   kikoeruSetupConsumed: z.boolean().optional(),
   ffmpegPath: z.string().default('ffmpeg'),
   analysisParallelism: z.number().min(1).max(8).default(2),
 });
 
 export type Config = z.infer<typeof configSchema>;
-export type SharedConfig = z.infer<typeof sharedConfigSchema>;

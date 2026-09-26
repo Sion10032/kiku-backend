@@ -139,7 +139,7 @@ describe('Setup / Register / Private-mode', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('私有模式：匿名 /api/works → 401；header token → 200；?token= → 200；白名单匿名 → 200', async () => {
+  it('私有模式：匿名 /api/works → 401；header token → 200；?token= → 200；白名单匿名 → 200；已下线端点匿名 → 401', async () => {
     updateConfig({ instanceMode: 'private' });
 
     const anon = await app.inject({ method: 'GET', url: '/api/works' });
@@ -165,7 +165,8 @@ describe('Setup / Register / Private-mode', () => {
       method: 'GET',
       url: '/api/config/shared',
     });
-    expect(shared.statusCode).toBe(200);
+    // 该端点已下线，白名单条目随之删除：匿名请求先被全局守卫拦下
+    expect(shared.statusCode).toBe(401);
   });
 
   it('公开模式：匿名读类 → 200；需鉴权端点匿名 → 401', async () => {

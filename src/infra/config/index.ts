@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { type Config, configSchema, sharedConfigSchema } from './schema.js';
+import { type Config, configSchema } from './schema.js';
 
 const CONFIG_PATH = process.env.CONFIG_PATH || './data/config.json';
 
@@ -48,11 +48,6 @@ export function updateConfig(updates: Partial<Config>): Config {
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 
   return config;
-}
-
-export function getSharedConfig() {
-  const cfg = getConfig();
-  return sharedConfigSchema.parse(cfg);
 }
 
 /** 测试专用：注入配置；省略时清空缓存（下次 getConfig 重新读盘）。 */
