@@ -1,9 +1,12 @@
 import { hashPassword, verifyPassword } from '../auth/utils.js';
 import { getConfig, updateConfig } from '../infra/config/index.js';
+import { db } from '../infra/db/main/index.js';
 import {
   createUser,
+  findAnyUser,
   getUserByName,
   getUsers,
+  insertUser,
   updateUserGroup,
   updateUserPassword,
 } from './user.service.js';
@@ -27,24 +30,31 @@ export type RegisterResult =
   | { ok: true; user: AuthUser }
   | { ok: false; reason: 'registration-disabled' | 'name-taken' };
 
-/** 注册：allowRegistration 开关 → 建户（密码 hash 在此完成）。
- * 重名交给数据库唯一约束判定（先查后插有 TOCTOU 竞态），createUser 返回 undefined 即 name-taken。 */
+/** 注册：用户表为空 → 豁免 allowRegistration 开关，首个注册者成为 administrator；
+ * 非空 → 按开关放行，新户为 user。重名交给数据库唯一约束判定。
+ *
+ * 「判定是否首个用户 + 建户」必须在同一事务内：否则两个并发注册可能都拿到
+ * administrator（或都拿到 user 而永久没有管理员）。
+ * bun:sqlite 是同步驱动，事务回调同步执行，因此函数体内在 db.transaction 之前
+ * 不得出现 await（否则事务会在 await 处提前 commit）。 */
 export async function register(
   name: string,
   password: string,
 ): Promise<RegisterResult> {
-  if (!getConfig().allowRegistration) {
-    return { ok: false, reason: 'registration-disabled' };
-  }
-  const created = await createUser({
-    name,
-    password: hashPassword(password),
-    group: 'user',
+  const hash = hashPassword(password);
+  return db.transaction((tx) => {
+    const existing = findAnyUser(tx);
+    if (existing && !getConfig().allowRegistration) {
+      return { ok: false, reason: 'registration-disabled' } as const;
+    }
+    const created = insertUser(tx, {
+      name,
+      password: hash,
+      group: existing ? 'user' : 'administrator',
+    });
+    if (!created) return { ok: false, reason: 'name-taken' } as const;
+    return { ok: true, user: { name: created.name, group: created.group } };
   });
-  if (!created) {
-    return { ok: false, reason: 'name-taken' };
-  }
-  return { ok: true, user: { name, group: 'user' } };
 }
 
 /** 首次初始化：建管理员 + 写实例配置。

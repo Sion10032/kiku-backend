@@ -3,6 +3,31 @@ import { hashPassword } from '../auth/utils.js';
 import { db } from '../infra/db/main/index.js';
 import { users } from '../infra/db/main/schema.js';
 
+/** 事务句柄类型（bun:sqlite 同步驱动，见 circle.service.ts 同款别名）。 */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** 事务内：用户表是否已有任何一行（不关心是谁，只用于判定「未初始化」）。 */
+export function findAnyUser(tx: Tx): { name: string } | undefined {
+  return tx.select({ name: users.name }).from(users).limit(1).get();
+}
+
+/** 事务内建户：重名由唯一约束用返回值裁决（不抛异常），返回 undefined 即该名已存在。 */
+export function insertUser(
+  tx: Tx,
+  data: { name: string; password: string; group: string },
+): { name: string; group: string } | undefined {
+  return tx
+    .insert(users)
+    .values({
+      name: data.name,
+      password: data.password,
+      group: data.group,
+    })
+    .onConflictDoNothing({ target: users.name })
+    .returning({ name: users.name, group: users.group })
+    .get();
+}
+
 export async function getUserByName(name: string) {
   return db.query.users.findFirst({
     where: { RAW: (t, op) => op.eq(t.name, name) },

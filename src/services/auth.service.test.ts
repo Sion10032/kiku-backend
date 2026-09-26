@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { inArray, sql } from 'drizzle-orm';
 import { hashPassword } from '../auth/utils.js';
@@ -148,5 +155,89 @@ describe('register（并发同名注册）', () => {
     const failures = results.filter((r) => !r.ok);
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatchObject({ reason: 'name-taken' });
+  });
+});
+
+// 未初始化（用户表为空）时注册：豁免 allowRegistration 开关，首个注册者成为管理员。
+// 空表 + 开关关闭下「判定 + 建户」必须原子，否则会出现双管理员。
+describe('register（未初始化实例）', () => {
+  let savedAllowRegistration: boolean;
+
+  beforeAll(() => {
+    savedAllowRegistration = getConfig().allowRegistration;
+  });
+
+  afterAll(async () => {
+    await db.run(sql`DELETE FROM t_user`);
+    setConfigForTesting({
+      ...getConfig(),
+      allowRegistration: savedAllowRegistration,
+    });
+  });
+
+  beforeEach(async () => {
+    await db.run(sql`DELETE FROM t_user`);
+    setConfigForTesting({ ...getConfig(), allowRegistration: false });
+  });
+
+  it('空表 + 开关关闭：注册成功且 group=administrator，开关不被改写', async () => {
+    const result = await register('first_admin', 'reg-pass-123');
+
+    expect(result).toMatchObject({
+      ok: true,
+      user: { name: 'first_admin', group: 'administrator' },
+    });
+    expect(getConfig().allowRegistration).toBe(false);
+  });
+
+  // bun:sqlite 同步驱动下 Promise.all 的两次调用顺序化：race_a 的同步事务提交后
+  // race_b 才开始，看到非空表 + 开关关 → registration-disabled。
+  // 不变式：不能双管理员、不能零管理员（恰有一个 administrator）。
+  it('空表 + 并发两个不同名（同步事务顺序化）：恰好一个 administrator，另一个 registration-disabled', async () => {
+    const [a, b] = await Promise.all([
+      register('race_a', 'reg-pass-123'),
+      register('race_b', 'reg-pass-123'),
+    ]);
+
+    expect(a).toMatchObject({
+      ok: true,
+      user: { name: 'race_a', group: 'administrator' },
+    });
+    expect(b).toEqual({ ok: false, reason: 'registration-disabled' });
+
+    // race_b 被拒绝且不建户：恰有 1 行，且恰有一个 administrator（无双管理员、无零管理员）
+    const rows = await db.select().from(users);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ name: 'race_a', group: 'administrator' });
+  });
+
+  it('非空表 + 开关关闭：registration-disabled，且不建户', async () => {
+    await db.insert(users).values({
+      name: 'existing',
+      password: hashPassword('reg-pass-123'),
+      group: 'user',
+    });
+
+    const result = await register('late_comer', 'reg-pass-123');
+
+    expect(result).toEqual({ ok: false, reason: 'registration-disabled' });
+    const rows = await db.select().from(users);
+    expect(rows.map((r) => r.name)).toEqual(['existing']);
+  });
+
+  it('非空表 + 开关开启：仍建普通用户（回归）', async () => {
+    await db.insert(users).values({
+      name: 'existing2',
+      password: hashPassword('reg-pass-123'),
+      group: 'user',
+    });
+    setConfigForTesting({ ...getConfig(), allowRegistration: true });
+
+    const result = await register('normal_user', 'reg-pass-123');
+
+    expect(result).toMatchObject({
+      ok: true,
+      user: { name: 'normal_user', group: 'user' },
+    });
   });
 });
