@@ -1,9 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import type { db } from '../infra/db/main/index.js';
+import type { Tx } from '../infra/db/main/index.js';
 import { circles, favourites } from '../infra/db/main/schema.js';
-
-/** 事务上下文类型（与 metadataOverride.service.ts 共用同一来源）。 */
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** DLsite maker_id：RG/VG + 5 或 8 位数字。 */
 const MAKER_ID_RE = /^(?:RG|VG)(?:\d{5}|\d{8})$/;

@@ -1,4 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import type { Tx } from '../infra/db/main/index.js';
 import { db } from '../infra/db/main/index.js';
 import {
   circles,
@@ -14,7 +15,7 @@ import {
   workMetaOverride,
   works,
 } from '../infra/db/main/schema.js';
-import { resolveCircle, type Tx } from './circle.service.js';
+import { resolveCircle } from './circle.service.js';
 
 export const OVERRIDE_FIELDS = [
   'title',

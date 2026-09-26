@@ -1,14 +1,11 @@
 import { eq, sql } from 'drizzle-orm';
 import { hashPassword } from '../auth/utils.js';
-import { db } from '../infra/db/main/index.js';
+import { type DbExecutor, db } from '../infra/db/main/index.js';
 import { users } from '../infra/db/main/schema.js';
 
-/** 事务句柄类型（bun:sqlite 同步驱动，见 circle.service.ts 同款别名）。 */
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/** 事务内：用户表是否已有任何一行（不关心是谁，只用于判定「未初始化」）。 */
-export function findAnyUser(tx: Tx): { name: string } | undefined {
-  return tx.select({ name: users.name }).from(users).limit(1).get();
+/** 判用户表是否已有任何一行（不关心是谁，只用于判定「未初始化」）。 */
+export function findAnyUser(exec: DbExecutor): { name: string } | undefined {
+  return exec.select({ name: users.name }).from(users).limit(1).get();
 }
 
 /** 建户（事务句柄或 db 均可——bun:sqlite 同步方言，.get() 在事务内外都能同步终结）。
@@ -16,7 +13,7 @@ export function findAnyUser(tx: Tx): { name: string } | undefined {
  * onConflict target 限定在 name，所以「返回空行」只可能来自 name 唯一约束冲突；
  * NOT NULL / CHECK / 外键 / 其他唯一列冲突 / 写锁 / 磁盘错误一律照旧抛出（已实测）。 */
 export function insertUser(
-  exec: Tx | typeof db,
+  exec: DbExecutor,
   data: { name: string; password: string; group: string },
 ): { name: string; group: string } | undefined {
   return exec
@@ -31,8 +28,8 @@ export function insertUser(
     .get();
 }
 
-/** 按名查用户（事务句柄或 db 均可；全行；事务外对应 getUserByName）。 */
-export function findUserByName(exec: Tx | typeof db, name: string) {
+/** 按名查用户（全行；事务内外皆可，事务外对应 getUserByName）。 */
+export function findUserByName(exec: DbExecutor, name: string) {
   return exec.select().from(users).where(eq(users.name, name)).get();
 }
 
@@ -59,9 +56,9 @@ export async function createUser(data: {
   return insertUser(db, data);
 }
 
-/** 改密（事务句柄或 db 均可）：改密即 bump token 版本，旧 JWT 的 ver 声明不匹配而被吊销。 */
+/** 改密：改密即 bump token 版本，旧 JWT 的 ver 声明不匹配而被吊销。 */
 export function updatePassword(
-  exec: Tx | typeof db,
+  exec: DbExecutor,
   name: string,
   passwordHash: string,
 ) {
@@ -75,8 +72,8 @@ export function updatePassword(
     .run();
 }
 
-/** 改组（事务句柄或 db 均可）。 */
-export function updateGroup(exec: Tx | typeof db, name: string, group: string) {
+/** 改组。 */
+export function updateGroup(exec: DbExecutor, name: string, group: string) {
   exec.update(users).set({ group }).where(eq(users.name, name)).run();
 }
 

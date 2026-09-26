@@ -32,6 +32,13 @@ sqlite.exec('PRAGMA busy_timeout = 1000');
 
 export const db = drizzle({ client: sqlite, relations });
 
+/** 事务回调句柄（bun:sqlite 同步方言，回调必须同步执行）。 */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** 查询执行器：事务句柄或 db 本身。二者都能 .get()/.all()/.run() 同步终结，
+ * 数据访问原语用它作首参，调用方显式表达执行上下文（事务内传 tx，事务外传 db）。 */
+export type DbExecutor = typeof db | Tx;
+
 // Run pending migrations on startup (idempotent via __drizzle_migrations table).
 // 必须在 PRAGMA foreign_keys = ON 之前执行：SQLite 的表重建（DROP + RENAME）在
 // FK 开启时会因隐式 DELETE 触发子表 ON DELETE CASCADE，清空评论/进度/音轨；
