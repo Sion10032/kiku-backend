@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
+import { updateConfig } from '../src/infra/config/index.js';
 import { configSchema } from '../src/infra/config/schema';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
@@ -38,6 +39,9 @@ describe('Config Routes', () => {
     });
 
     it('匿名（私有模式）→ 401（白名单已移除，全局守卫先命中）', async () => {
+      // private 是 schema 默认值，但 config 是同进程共享单例，setup.test 会把它改成 public；
+      // 这里显式置回，使断言不依赖模块隔离 / 文件执行顺序
+      updateConfig({ instanceMode: 'private' });
       const response = await app.inject({
         method: 'GET',
         url: '/api/config/shared',
@@ -59,7 +63,7 @@ describe('Config Routes', () => {
         offloadMedia: true,
         offloadStreamPath: '/media/stream/',
         offloadDownloadPath: '/media/download/',
-      }) as Record<string, unknown>;
+      });
 
       for (const key of [
         'pageSize',

@@ -311,11 +311,14 @@ describe('Settings Backup Routes', () => {
   });
 
   describe('payload 严格校验', () => {
-    it('完整快照（12 键齐全）PUT → 200；GET parse 后结构与值原样保留', async () => {
+    it('完整快照（15 键齐全）PUT → 200；GET parse 后结构与值原样保留', async () => {
       const snapshot = {
         dynamicColor: false,
         colorMode: 'auto',
         mediaNotification: false,
+        loudnessNormalization: true,
+        loudnessTargetLufs: -23,
+        loudnessMaxGainDb: 6,
         floatingLyrics: { enabled: true, fontSize: 16, lines: 3, opacity: 0.5 },
         preview: { textFontSize: 20, textWordWrap: false },
         coverBlurMode: 'hover',
