@@ -72,4 +72,55 @@ describe('GET /api/works query 参数校验', () => {
     expect(Array.isArray(body.works)).toBe(true);
     expect(typeof body.pagination).toBe('object');
   });
+
+  it('pageSize=0 → 400', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/works?pageSize=0',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('pageSize=101 → 400（服务端硬上限 100，不 clamp）', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/works?pageSize=101',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('pageSize=abc → 400', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/works?pageSize=abc',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('pageSize=100 → 200 且 pagination.pageSize 回显 100', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/works?pageSize=100',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      res.json<{ pagination: { pageSize: number } }>().pagination.pageSize,
+    ).toBe(100);
+  });
+
+  it('省略 pageSize → pagination.pageSize = 20（服务端默认）', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/works',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      res.json<{ pagination: { pageSize: number } }>().pagination.pageSize,
+    ).toBe(20);
+  });
 });

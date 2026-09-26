@@ -33,6 +33,7 @@ const worksQuerySchema = z.object({
   /** LQL 查询文本（空/省略 = 全量）。语法：tag:催眠 -tag:百合 circle:"xx" va:x age:r18 裸词 */
   q: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
   order: z
     .enum([
       'id',
@@ -72,12 +73,13 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { q, page, order, sort } = request.query;
+      const { q, page, pageSize, order, sort } = request.query;
       // onRequest 匿名放行，运行时 user 可为 undefined，可选链必需
       const user = request.user?.name;
       try {
         return await queryWorks(q, user, {
           page,
+          pageSize,
           orderBy: order,
           sortDir: sort,
         });
