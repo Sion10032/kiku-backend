@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { getConfig, setConfigForTesting } from '../src/infra/config/index.js';
 import { db } from '../src/infra/db/main/index.js';
-import { updateUserGroup } from '../src/services/user.service.js';
+import { updateGroup } from '../src/services/user.service.js';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
@@ -145,7 +145,7 @@ describe('token 吊销：存在性回查 / ver 改密吊销 / group 以库为准
   describe('管理员降级即时生效（group 以库为准）', () => {
     it('降级后旧 admin token 访问管理路由 → 403（不是 401）', async () => {
       const adminToken = await signTokenFor(app, ADMIN);
-      await updateUserGroup(ADMIN, 'user');
+      updateGroup(db, ADMIN, 'user');
 
       const res = await app.inject({
         method: 'GET',
@@ -155,12 +155,12 @@ describe('token 吊销：存在性回查 / ver 改密吊销 / group 以库为准
       expect(res.statusCode).toBe(403);
 
       // 恢复管理员供 afterAll 清理语义
-      await updateUserGroup(ADMIN, 'administrator');
+      updateGroup(db, ADMIN, 'administrator');
     });
 
     it('降级后普通路由仍 200，且 group 以库为准返回 user', async () => {
       const adminToken = await signTokenFor(app, ADMIN);
-      await updateUserGroup(ADMIN, 'user');
+      updateGroup(db, ADMIN, 'user');
 
       const meRes = await app.inject({
         method: 'GET',
@@ -170,7 +170,7 @@ describe('token 吊销：存在性回查 / ver 改密吊销 / group 以库为准
       expect(meRes.statusCode).toBe(200);
       expect(meRes.json()).toMatchObject({ name: ADMIN, group: 'user' });
 
-      await updateUserGroup(ADMIN, 'administrator');
+      updateGroup(db, ADMIN, 'administrator');
     });
   });
 

@@ -11,12 +11,15 @@ export function findAnyUser(tx: Tx): { name: string } | undefined {
   return tx.select({ name: users.name }).from(users).limit(1).get();
 }
 
-/** 事务内建户：重名由唯一约束用返回值裁决（不抛异常），返回 undefined 即该名已存在。 */
+/** 建户（事务句柄或 db 均可——bun:sqlite 同步方言，.get() 在事务内外都能同步终结）。
+ * 重名由唯一约束用返回值裁决（不抛异常），返回 undefined 即该名已存在。
+ * onConflict target 限定在 name，所以「返回空行」只可能来自 name 唯一约束冲突；
+ * NOT NULL / CHECK / 外键 / 其他唯一列冲突 / 写锁 / 磁盘错误一律照旧抛出（已实测）。 */
 export function insertUser(
-  tx: Tx,
+  exec: Tx | typeof db,
   data: { name: string; password: string; group: string },
 ): { name: string; group: string } | undefined {
-  return tx
+  return exec
     .insert(users)
     .values({
       name: data.name,
@@ -28,10 +31,13 @@ export function insertUser(
     .get();
 }
 
+/** 按名查用户（事务句柄或 db 均可；全行；事务外对应 getUserByName）。 */
+export function findUserByName(exec: Tx | typeof db, name: string) {
+  return exec.select().from(users).where(eq(users.name, name)).get();
+}
+
 export async function getUserByName(name: string) {
-  return db.query.users.findFirst({
-    where: { RAW: (t, op) => op.eq(t.name, name) },
-  });
+  return findUserByName(db, name);
 }
 
 export async function getUsers() {
@@ -43,40 +49,35 @@ export async function getUsers() {
   });
 }
 
-/** 建户：重名由数据库唯一约束裁决（不抛异常），返回 undefined 表示该名已存在。
- * target 限定在 name，所以「返回空行」只可能来自 name 唯一约束冲突；
- * NOT NULL / CHECK / 外键 / 其他唯一列冲突 / 写锁 / 磁盘错误一律照旧抛出（已实测）。 */
+/** 事务外建户（autocommit）：保持既有 async 签名，调用方零改动。
+ * 返回 insertUser 的窄投影 {name, group}——既有消费方只使用这两个字段或仅判空（已核查）。 */
 export async function createUser(data: {
   name: string;
   password: string;
   group: string;
 }) {
-  const [created] = await db
-    .insert(users)
-    .values({
-      name: data.name,
-      password: data.password,
-      group: data.group,
-    })
-    .onConflictDoNothing({ target: users.name })
-    .returning();
-
-  return created;
+  return insertUser(db, data);
 }
 
-export async function updateUserGroup(name: string, group: string) {
-  await db.update(users).set({ group }).where(eq(users.name, name));
-}
-
-export async function updateUserPassword(name: string, newPassword: string) {
-  await db
+/** 改密（事务句柄或 db 均可）：改密即 bump token 版本，旧 JWT 的 ver 声明不匹配而被吊销。 */
+export function updatePassword(
+  exec: Tx | typeof db,
+  name: string,
+  passwordHash: string,
+) {
+  exec
     .update(users)
     .set({
-      password: newPassword,
-      // 改密即 bump token 版本，旧 JWT 的 ver 声明不匹配而被吊销
+      password: passwordHash,
       tokenVersion: sql`${users.tokenVersion} + 1`,
     })
-    .where(eq(users.name, name));
+    .where(eq(users.name, name))
+    .run();
+}
+
+/** 改组（事务句柄或 db 均可）。 */
+export function updateGroup(exec: Tx | typeof db, name: string, group: string) {
+  exec.update(users).set({ group }).where(eq(users.name, name)).run();
 }
 
 export type DeleteUsersResult =
@@ -133,6 +134,6 @@ export async function changePassword(
   newPassword: string,
 ): Promise<'not-found' | 'ok'> {
   if (!(await getUserByName(name))) return 'not-found';
-  await updateUserPassword(name, hashPassword(newPassword));
+  updatePassword(db, name, hashPassword(newPassword));
   return 'ok';
 }

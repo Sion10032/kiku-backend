@@ -241,3 +241,69 @@ describe('register（未初始化实例）', () => {
     });
   });
 });
+
+// setupInstance 与 register 的用户操作各自在单一同步事务内：判定 + 建户/提权原子完成。
+// 事务化前：两个并发 setup 的 await getUsers() 都判空 → 各自建户 → 双管理员。
+describe('setupInstance（事务化：并发与交叠）', () => {
+  let savedAllowRegistration: boolean;
+
+  beforeAll(() => {
+    savedAllowRegistration = getConfig().allowRegistration;
+  });
+
+  afterAll(async () => {
+    await db.run(sql`DELETE FROM t_user`);
+    setConfigForTesting({
+      ...getConfig(),
+      allowRegistration: savedAllowRegistration,
+    });
+  });
+
+  beforeEach(async () => {
+    await db.run(sql`DELETE FROM t_user`);
+    setConfigForTesting({
+      ...getConfig(),
+      allowRegistration: false,
+      kikoeruMigratedAt: undefined,
+      kikoeruSetupConsumed: undefined,
+    });
+  });
+
+  it('并发两个不同名 setup → 恰一成功，表里恰一个 administrator', async () => {
+    const [a, b] = await Promise.all([
+      setupInstance({
+        name: 'setup_a',
+        password: 'setup-pass-123',
+        instanceMode: 'private',
+        allowRegistration: false,
+      }),
+      setupInstance({
+        name: 'setup_b',
+        password: 'setup-pass-123',
+        instanceMode: 'private',
+        allowRegistration: false,
+      }),
+    ]);
+
+    const successes = [a, b].filter((r) => r !== null);
+    expect(successes).toHaveLength(1);
+    const rows = await db.select().from(users);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.group).toBe('administrator');
+  });
+
+  it('空表被 register 抢先建户后 → setup 返回 null（已初始化）', async () => {
+    await register('early_admin', 'reg-pass-123');
+
+    const result = await setupInstance({
+      name: 'late_setup',
+      password: 'setup-pass-123',
+      instanceMode: 'private',
+      allowRegistration: false,
+    });
+
+    expect(result).toBeNull();
+    const rows = await db.select().from(users);
+    expect(rows.map((r) => r.name)).toEqual(['early_admin']);
+  });
+});
