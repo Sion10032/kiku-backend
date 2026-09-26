@@ -61,6 +61,7 @@ const payloadSchema = z.object({
   worksHistoryStrip: z.boolean().optional(),
   worksPageSize: z.number().optional(),
   uiScale: z.number().optional(),
+  contentWidth: z.enum(['standard', 'wide', 'ultra', 'full']).optional(),
 });
 
 // payload 序列化后的文本大小上限（4KB）：在 zod 验证前的 preValidation 中检查，

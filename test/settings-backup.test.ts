@@ -328,6 +328,7 @@ describe('Settings Backup Routes', () => {
         worksHistoryStrip: false,
         uiScale: 110,
         worksPageSize: 50,
+        contentWidth: 'ultra',
       };
       const put = await putBackup(tokenA, 'strict_full', snapshot);
       expect(put.statusCode).toBe(200);
@@ -353,6 +354,10 @@ describe('Settings Backup Routes', () => {
         { worksPaginatorPosition: 'top' },
         { worksPaginatorPosition: 'bottom' },
         { worksPaginatorPosition: 'both' },
+        { contentWidth: 'standard' },
+        { contentWidth: 'wide' },
+        { contentWidth: 'ultra' },
+        { contentWidth: 'full' },
       ] as const;
       for (const payload of others) {
         const res = await putBackup(tokenA, 'strict_enum', payload);
@@ -396,6 +401,13 @@ describe('Settings Backup Routes', () => {
     it('枚举非法值 → 400（colorMode: sepia）', async () => {
       const res = await putBackup(tokenA, 'strict_bad_enum', {
         colorMode: 'sepia',
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('枚举非法值 → 400（contentWidth: super）', async () => {
+      const res = await putBackup(tokenA, 'strict_bad_enum_width', {
+        contentWidth: 'super',
       });
       expect(res.statusCode).toBe(400);
     });
