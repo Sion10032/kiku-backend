@@ -37,6 +37,7 @@ const PUBLIC_PATHS = [
   '/api/auth/register',
   '/api/health',
   '/api/setup',
+  '/api/version',
 ];
 
 /** token 提取：Authorization header → URL 查询参数 token（媒体资源等无法带 header 的场景） */
