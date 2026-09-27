@@ -21,6 +21,16 @@ export const seriesSchema = z.object({
   name: z.string(),
 });
 
+// 实体列表端点（/circles、/vas、/series）专用：内联当前用户收藏状态。
+// 匿名请求全部 false；tag 不支持收藏，无对应变体。
+export const circleListSchema = circleSchema.extend({
+  favourited: z.boolean(),
+});
+export const vaListSchema = vaSchema.extend({ favourited: z.boolean() });
+export const seriesListSchema = seriesSchema.extend({
+  favourited: z.boolean(),
+});
+
 export const userProgressSchema = z.object({
   mediaIndex: z.string(),
   trackTitle: z.string().nullable(),

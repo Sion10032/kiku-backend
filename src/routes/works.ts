@@ -17,12 +17,12 @@ import {
   queryWorks,
 } from '../services/work.service.js';
 import {
-  circleSchema,
+  circleListSchema,
   formattedWorkSchema,
   paginationSchema,
-  seriesSchema,
+  seriesListSchema,
   tagSchema,
-  vaSchema,
+  vaListSchema,
 } from './schemas/work.js';
 
 const idParamsSchema = z.object({
@@ -281,12 +281,13 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         response: {
-          200: z.array(circleSchema),
+          200: z.array(circleListSchema),
         },
       },
     },
-    async () => {
-      return getCircles();
+    async (request) => {
+      // onRequest 匿名放行，运行时 user 可为 undefined，可选链必需
+      return getCircles(request.user?.name);
     },
   );
 
@@ -309,12 +310,12 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         response: {
-          200: z.array(vaSchema),
+          200: z.array(vaListSchema),
         },
       },
     },
-    async () => {
-      return getVas();
+    async (request) => {
+      return getVas(request.user?.name);
     },
   );
 
@@ -323,12 +324,12 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         response: {
-          200: z.array(seriesSchema),
+          200: z.array(seriesListSchema),
         },
       },
     },
-    async () => {
-      return getSeries();
+    async (request) => {
+      return getSeries(request.user?.name);
     },
   );
 };

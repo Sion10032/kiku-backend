@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
 import type {
   AgeRating,
@@ -9,6 +9,7 @@ import type {
   Work,
 } from '../infra/db/main/schema.js';
 import {
+  favourites,
   series,
   tags,
   tagWork,
@@ -680,20 +681,53 @@ export async function queryWorks(
   };
 }
 
-export async function getCircles() {
-  return db.query.circles.findMany();
+/** 给实体列表（社团/声优/系列）批量注入 favourited；一次 inArray 查询，避免 N+1。 */
+async function attachFavourited<T extends { id: string | number }>(
+  items: T[],
+  username: string | undefined,
+  targetType: 'circle' | 'va' | 'series',
+): Promise<(T & { favourited: boolean })[]> {
+  const rows =
+    username && items.length > 0
+      ? await db
+          .select({ targetId: favourites.targetId })
+          .from(favourites)
+          .where(
+            and(
+              eq(favourites.userName, username),
+              eq(favourites.targetType, targetType),
+              inArray(
+                favourites.targetId,
+                items.map((i) => String(i.id)),
+              ),
+            ),
+          )
+      : [];
+  const set = new Set(rows.map((r) => r.targetId));
+  return items.map((item) => ({
+    ...item,
+    favourited: set.has(String(item.id)),
+  }));
+}
+
+export async function getCircles(username?: string) {
+  return attachFavourited(
+    await db.query.circles.findMany(),
+    username,
+    'circle',
+  );
 }
 
 export async function getTags() {
   return db.query.tags.findMany();
 }
 
-export async function getSeries() {
-  return db.query.series.findMany();
+export async function getSeries(username?: string) {
+  return attachFavourited(await db.query.series.findMany(), username, 'series');
 }
 
-export async function getVas() {
-  return db.query.vas.findMany();
+export async function getVas(username?: string) {
+  return attachFavourited(await db.query.vas.findMany(), username, 'va');
 }
 
 export type WorkTracksResult =

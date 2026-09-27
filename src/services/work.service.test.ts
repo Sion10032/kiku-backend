@@ -3,8 +3,21 @@ import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
 import { eq } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
-import { circles, works } from '../infra/db/main/schema.js';
-import { liveWorkExists, workExists } from './work.service.js';
+import {
+  circles,
+  favourites,
+  series,
+  users,
+  vas,
+  works,
+} from '../infra/db/main/schema.js';
+import {
+  getCircles,
+  getSeries,
+  getVas,
+  liveWorkExists,
+  workExists,
+} from './work.service.js';
 
 setupTestEnvironment();
 
@@ -70,5 +83,65 @@ describe('workExists / liveWorkExists 的软删语义差异', () => {
   it('workExists：软删行仍算存在 → true', async () => {
     expect(await workExists(DELETED_ID)).toBe(true);
     expect(await workExists(MISSING_ID)).toBe(false);
+  });
+});
+
+describe('实体列表内联 favourited（getCircles/getVas/getSeries）', () => {
+  const USER = `list_fav_${RUN}`;
+  const SERIES_ID = `SRI${RUN}`;
+  const VA_ID = `VA${RUN}`;
+  const CIRCLE_FAV = `RG98${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
+  const CIRCLE_PLAIN = `RG99${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;
+
+  beforeAll(async () => {
+    await db.insert(users).values({ name: USER, password: 'x', group: 'user' });
+    await db.insert(circles).values([
+      { id: CIRCLE_FAV, name: `favourited 社团_${RUN}` },
+      { id: CIRCLE_PLAIN, name: `未收藏社团_${RUN}` },
+    ]);
+    await db
+      .insert(series)
+      .values({ id: SERIES_ID, name: `favourited 系列_${RUN}` });
+    await db.insert(vas).values({ id: VA_ID, name: `favourited 声优_${RUN}` });
+    await db.insert(favourites).values([
+      { userName: USER, targetType: 'circle', targetId: CIRCLE_FAV },
+      { userName: USER, targetType: 'series', targetId: SERIES_ID },
+      { userName: USER, targetType: 'va', targetId: VA_ID },
+    ]);
+  });
+
+  afterAll(async () => {
+    await db.delete(favourites).where(eq(favourites.userName, USER));
+    await db.delete(users).where(eq(users.name, USER));
+    await db.delete(circles).where(eq(circles.id, CIRCLE_FAV));
+    await db.delete(circles).where(eq(circles.id, CIRCLE_PLAIN));
+    await db.delete(series).where(eq(series.id, SERIES_ID));
+    await db.delete(vas).where(eq(vas.id, VA_ID));
+  });
+
+  it('已登录：收藏的实体 favourited=true，未收藏为 false', async () => {
+    const circlesRows = await getCircles(USER);
+    expect(circlesRows.find((r) => r.id === CIRCLE_FAV)?.favourited).toBe(true);
+    expect(circlesRows.find((r) => r.id === CIRCLE_PLAIN)?.favourited).toBe(
+      false,
+    );
+    expect(
+      (await getSeries(USER)).find((r) => r.id === SERIES_ID)?.favourited,
+    ).toBe(true);
+    expect((await getVas(USER)).find((r) => r.id === VA_ID)?.favourited).toBe(
+      true,
+    );
+  });
+
+  it('匿名（不传 username）：全部 favourited=false', async () => {
+    expect(
+      (await getCircles()).find((r) => r.id === CIRCLE_FAV)?.favourited,
+    ).toBe(false);
+    expect(
+      (await getSeries()).find((r) => r.id === SERIES_ID)?.favourited,
+    ).toBe(false);
+    expect((await getVas()).find((r) => r.id === VA_ID)?.favourited).toBe(
+      false,
+    );
   });
 });
