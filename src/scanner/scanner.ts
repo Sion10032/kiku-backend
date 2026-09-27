@@ -596,10 +596,16 @@ export async function* performUpdate(
   // 已不需要任何配置（根目录路径统一由 syncWorkMetadataAndTracks 查表解析）。
   _config: Config,
   signal: AbortSignal,
+  /** 可选作品 ID 子集：只刷新这些作品；缺省/undefined 全量 */
+  workIds?: string[],
 ): AsyncGenerator<ScanEvent> {
   yield* emitLog('info', 'Starting metadata update...');
 
-  const refs = await getAllWorkRefs();
+  let refs = await getAllWorkRefs();
+  if (workIds) {
+    const wanted = new Set(workIds);
+    refs = refs.filter((ref) => wanted.has(ref.id));
+  }
   yield* emitLog('info', `Found ${refs.length} works in database`);
 
   let added = 0;
@@ -686,7 +692,7 @@ class ScannerManager extends EventEmitter {
   }
 
   /** Start a scan in the background. Throws if a scan is already running. */
-  startScan(config: Config, mode: ScanMode = 'scan'): void {
+  startScan(config: Config, mode: ScanMode = 'scan', workIds?: string[]): void {
     if (this.scanning) {
       throw new Error('Scan is already in progress');
     }
@@ -695,7 +701,7 @@ class ScannerManager extends EventEmitter {
     this.snapshot = emptySnapshot(mode);
 
     // Run async — fire and forget. Errors are handled inside runScan.
-    this.runScan(config, mode).catch((err) => {
+    this.runScan(config, mode, workIds).catch((err) => {
       console.error('[Scanner] Unhandled error:', err);
     });
   }
@@ -707,7 +713,11 @@ class ScannerManager extends EventEmitter {
     }
   }
 
-  private async runScan(config: Config, mode: ScanMode): Promise<void> {
+  private async runScan(
+    config: Config,
+    mode: ScanMode,
+    workIds?: string[],
+  ): Promise<void> {
     this.scanning = true;
     this.currentController = new AbortController();
     const signal = this.currentController.signal;
@@ -715,7 +725,7 @@ class ScannerManager extends EventEmitter {
     try {
       const gen =
         mode === 'update'
-          ? performUpdate(config, signal)
+          ? performUpdate(config, signal, workIds)
           : performScan(config, signal);
       for await (const event of gen) {
         // 维护快照供断线重连补播（SCAN_FINISHED/SCAN_ERROR 不改快照）

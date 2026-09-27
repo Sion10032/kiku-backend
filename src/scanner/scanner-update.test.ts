@@ -104,11 +104,12 @@ afterAll(async () => {
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离
 });
 
-async function runUpdate(): Promise<unknown[]> {
+async function runUpdate(workIds?: string[]): Promise<unknown[]> {
   const events: unknown[] = [];
   for await (const ev of performUpdate(
     getConfig(),
     new AbortController().signal,
+    workIds,
   )) {
     events.push(ev);
   }
@@ -160,5 +161,34 @@ describe('performUpdate（音轨回填）', () => {
     // update metadata：size 未变 → 零动作，不产生重复行
     await runUpdate();
     expect(await getTrackRows(ID2)).toHaveLength(1);
+  });
+
+  it('workIds 子集：只刷新指定作品，未命中的不处理', async () => {
+    // 此用例依赖前序用例：ID（播种入库）与 ID2（scan 入库）均在库内
+    const events = await runUpdate([ID2]);
+    const taskTitles = events
+      .filter(
+        (ev): ev is ScanEvent =>
+          ev.type === 'SCAN_TASK' && ev.task.status === 'completed',
+      )
+      .map((ev) => ev.task.title);
+    expect(taskTitles).toHaveLength(1);
+    expect(taskTitles[0]).toStartWith(ID2);
+
+    const results = events.find((ev) => ev.type === 'SCAN_RESULTS');
+    expect(results).toBeDefined();
+    expect((results as { results: { total: number } }).results.total).toBe(1);
+  });
+
+  it('workIds 全部未命中：空跑，total 为 0', async () => {
+    const events = await runUpdate(['RJ99999999']);
+    const taskEvents = events.filter(
+      (ev): ev is ScanEvent => ev.type === 'SCAN_TASK',
+    );
+    expect(taskEvents).toHaveLength(0);
+
+    const results = events.find((ev) => ev.type === 'SCAN_RESULTS');
+    expect(results).toBeDefined();
+    expect((results as { results: { total: number } }).results.total).toBe(0);
   });
 });

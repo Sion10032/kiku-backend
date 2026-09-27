@@ -33,6 +33,8 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // Start a scan.
   // body 缺省（{} 或无 body）时 mode 默认 scan，旧调用方行为不变。
+  // workIds：update 模式的作品子集（音声管理页按选中项刷新）；
+  // scan 模式扫盘发现新作品，不接受子集，携带即 400；空数组无子集语义，同样 400。
   fastify.post(
     '/scan',
     {
@@ -41,9 +43,14 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z
           .object({
             mode: z.enum(['scan', 'update']).default('scan'),
+            workIds: z.array(z.string()).min(1).optional(),
           })
           // 无 body 时走默认值（zod v4 的 .default() 实参需匹配输出类型）
-          .default({ mode: 'scan' }),
+          .default({ mode: 'scan' })
+          .refine(
+            (body) => body.mode !== 'scan' || body.workIds === undefined,
+            { message: 'workIds is only supported with mode "update"' },
+          ),
         response: {
           200: z.object({ success: z.boolean() }),
         },
@@ -51,7 +58,7 @@ export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       const config = getConfig();
-      scanner.startScan(config, request.body.mode);
+      scanner.startScan(config, request.body.mode, request.body.workIds);
       return { success: true };
     },
   );

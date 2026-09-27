@@ -20,6 +20,7 @@ setupTestEnvironment();
 interface ManagerInternal {
   analyzing: boolean;
   priority: string[];
+  queuedLow: string[];
 }
 
 const internals = () => analysisManager as unknown as ManagerInternal;
@@ -103,7 +104,57 @@ describe('Analysis Routes', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('POST /api/analysis/start {workId} 在跑时走优先队列返回 queued=true', async () => {
+  it('POST /api/analysis/start {workIds, priority:high} 在跑时插队：从 low 移除后入 high 队列', async () => {
+    const m = internals();
+    m.analyzing = true;
+    m.queuedLow = ['RJ00000001', 'RJ00000009'];
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/analysis/start',
+        payload: { workIds: ['RJ00000001'], priority: 'high' },
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
+        success: true,
+        queued: true,
+      });
+      expect(m.priority).toContain('RJ00000001');
+      // 同作品从 low 队列移除，避免双跑；其余 low 任务不受影响
+      expect(m.queuedLow).toEqual(['RJ00000009']);
+    } finally {
+      m.analyzing = false;
+      m.priority = [];
+      m.queuedLow = [];
+    }
+  });
+
+  it('POST /api/analysis/start {workIds} 在跑时（缺省 low）排入 low 队尾 queued=true', async () => {
+    const m = internals();
+    m.analyzing = true;
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/analysis/start',
+        payload: { workIds: ['RJ00000002'] },
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
+        success: true,
+        queued: true,
+      });
+      expect(m.queuedLow).toContain('RJ00000002');
+      expect(m.priority).toEqual([]);
+    } finally {
+      m.analyzing = false;
+      m.priority = [];
+      m.queuedLow = [];
+    }
+  });
+
+  it('POST /api/analysis/start 旧 workId 字段已废弃：strip 后按全量请求排队', async () => {
     const m = internals();
     m.analyzing = true;
     try {
@@ -118,14 +169,15 @@ describe('Analysis Routes', () => {
         success: true,
         queued: true,
       });
-      expect(m.priority).toContain('RJ00000001');
+      expect(m.priority).toEqual([]);
     } finally {
       m.analyzing = false;
       m.priority = [];
+      m.queuedLow = [];
     }
   });
 
-  it('POST /api/analysis/start 已在跑且无 workId → queued=false', async () => {
+  it('POST /api/analysis/start 已在跑全量请求（缺省 low）→ 全量 pending 排入 low，queued=true', async () => {
     const m = internals();
     m.analyzing = true;
     try {
@@ -138,13 +190,58 @@ describe('Analysis Routes', () => {
       expect(res.statusCode).toBe(200);
       expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
         success: true,
-        queued: false,
+        queued: true,
       });
       expect(m.priority).toEqual([]);
     } finally {
       m.analyzing = false;
       m.priority = [];
+      m.queuedLow = [];
     }
+  });
+
+  it('POST /api/analysis/start {workIds:[]} 空数组拒绝 400（空数组无子集语义）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: { workIds: [] },
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /api/analysis/start 已在跑 + priority:high 无 workIds → 按全量请求排队 queued=true', async () => {
+    const m = internals();
+    m.analyzing = true;
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/analysis/start',
+        payload: { priority: 'high' },
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
+        success: true,
+        queued: true,
+      });
+      // 全量请求不带目标作品，不进 high 插队队列
+      expect(m.priority).toEqual([]);
+    } finally {
+      m.analyzing = false;
+      m.priority = [];
+      m.queuedLow = [];
+    }
+  });
+
+  it('POST /api/analysis/start 非法 priority → 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: { workIds: ['RJ00000001'], priority: 'urgent' },
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it('POST /api/analysis/stop 管理员调用返回 success（无分析时 no-op）', async () => {
@@ -222,5 +319,22 @@ describe('Analysis Routes', () => {
     expect(body.snapshot?.failedTasks).toEqual([]);
     expect(body.snapshot?.completed).toBe(0);
     expect(Array.isArray(body.snapshot?.logs)).toBe(true);
+  });
+
+  // 放在末尾：真启动会留下快照，不能污染前面对 snapshot 形状/null 的断言
+  it('POST /api/analysis/start {workIds} 子集启动（空库立即结束）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: { workIds: ['RJ99999999'] },
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
+      success: true,
+      queued: false,
+    });
+    await waitIdle();
+    expect(analysisManager.isAnalyzing).toBe(false);
   });
 });

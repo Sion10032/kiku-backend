@@ -60,7 +60,8 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply.raw.on('close', cleanup);
   });
 
-  // Start a loudness analysis (full queue, or a single work for playback priority).
+  // Start a loudness analysis (full queue, a work-ID subset, or a priority
+  // bump from the work page while a run is already in progress).
   fastify.post(
     '/start',
     {
@@ -68,10 +69,13 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         body: z
           .object({
-            workId: z.string().optional(),
+            // workIds：目标作品子集（缺省 = 全量 pending）；
+            // priority：high（作品页，已跑时插队）| low（管理页，缺省，已跑时不干扰）
+            workIds: z.array(z.string()).min(1).optional(),
+            priority: z.enum(['high', 'low']).default('low'),
           })
           // 无 body 时走默认值（zod v4 的 .default() 实参需匹配输出类型）
-          .default({}),
+          .default({ priority: 'low' }),
         response: {
           200: z.object({ success: z.boolean(), queued: z.boolean() }),
         },
@@ -79,14 +83,14 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       const config = getConfig();
-      const { workId } = request.body;
-      if (analysisManager.startAnalysis(config, workId)) {
-        return { success: true, queued: false }; // 本次启动
-      }
-      if (workId && analysisManager.requestWork(workId)) {
-        return { success: true, queued: true }; // 已在跑，插队
-      }
-      return { success: true, queued: false }; // 已在跑且无需插队（全量模式）
+      const { workIds, priority } = request.body;
+      // 启动 / 插队 / 不干扰的编排都在 manager 内：queued = 已在跑且插队成功
+      const { queued } = analysisManager.startAnalysis(
+        config,
+        workIds,
+        priority,
+      );
+      return { success: true, queued };
     },
   );
 

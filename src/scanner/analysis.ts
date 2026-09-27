@@ -107,10 +107,12 @@ const emitLog = function* (
 };
 
 export interface AnalysisOptions {
-  /** 指定作品集（播放插队用）；缺省 = 全部待分析 */
-  workIds?: string[];
-  /** worker 每取下一个作品前先查此拉取函数（优先队列） */
+  /** low 队列启动快照：仅用于开局 ANALYSIS_TASK pending 事件展示（消费走 pullQueued） */
+  initialLow?: string[];
+  /** 高优先级拉取（每轮最优先消费，插队队列） */
   pullPriority?: () => string | undefined;
+  /** low 队列拉取（FIFO 排队，含全量/子集入队） */
+  pullQueued?: () => string | undefined;
   /** 依赖注入（测试） */
   measure?: typeof measureLoudness;
   openSource?: (rootPath: string, dir: string) => Promise<WorkSource>;
@@ -222,7 +224,7 @@ export async function* performAnalysis(
     return;
   }
 
-  const queue = [...(opts.workIds ?? (await getPendingAnalysisWorkIds()))];
+  const queue = [...(opts.initialLow ?? [])];
   if (queue.length === 0) {
     yield* emitLog('info', 'Nothing to analyze');
   }
@@ -251,8 +253,7 @@ export async function* performAnalysis(
   let pulledCount = 0;
 
   const pull = (): string | undefined => {
-    const id =
-      opts.pullPriority?.() ?? (queue.length > 0 ? queue.shift() : undefined);
+    const id = opts.pullPriority?.() ?? opts.pullQueued?.();
     if (id !== undefined) pulledCount++;
     return id;
   };
@@ -371,7 +372,14 @@ class AnalysisManager extends EventEmitter {
   private currentController: AbortController | null = null;
   private analyzing = false;
   private snapshot: AnalysisSnapshot | null = null;
+  /** high 插队队列：每轮消费最优先（作品页触发） */
   private priority: string[] = [];
+  /** low 排队队列：全量 pending 与管理页子集都入这里，每轮最后消费 */
+  private queuedLow: string[] = [];
+  /** 全量请求待落地标志（落地 = DB pending 并入 queuedLow） */
+  private fullLowRequested = false;
+  /** runAnalysis 轮次（kill 后使飞行中的全量落地失效） */
+  private runSeq = 0;
 
   get isAnalyzing(): boolean {
     return this.analyzing;
@@ -382,39 +390,84 @@ class AnalysisManager extends EventEmitter {
     return this.snapshot;
   }
 
-  /** 启动（全量或单作品）。已在跑返回 false。 */
-  startAnalysis(config: Config, workId?: string): boolean {
-    if (this.analyzing) return false;
+  /**
+   * 触发分析（统一入口）：
+   * - 子集（workIds）：high → 从 low 移除同作品后进插队队列；low → 追加队尾。
+   * - 全量（无 workIds）：把 DB 全部待分析作品并入 low 队尾（已跑时为增量排队）。
+   * 未在跑 → 启动消费两队列；已在跑 → high/全量受理排队（queued=true）。
+   * started = 本次调用触发新分析；queued = 已在跑且受理排队。
+   */
+  startAnalysis(
+    config: Config,
+    workIds?: string[],
+    priority: 'high' | 'low' = 'low',
+  ): { started: boolean; queued: boolean } {
+    if (workIds) {
+      if (priority === 'high') {
+        // 同作品先从 low 移除，避免双跑
+        this.queuedLow = this.queuedLow.filter((id) => !workIds.includes(id));
+        this.priority.push(...workIds);
+      } else {
+        this.queuedLow.push(...workIds);
+      }
+      if (this.analyzing) return { started: false, queued: true };
+    } else {
+      this.fullLowRequested = true;
+      if (this.analyzing) {
+        // 已跑：异步落地为 low 队列增量（worker 拉空竞态由收尾接力兑底）
+        const seq = this.runSeq;
+        void this.drainFullLow(seq, config);
+        return { started: false, queued: true };
+      }
+    }
     this.snapshot = emptyAnalysisSnapshot();
-    this.runAnalysis(config, workId ? [workId] : undefined).catch((err) => {
+    this.runAnalysis(config).catch((err) => {
       console.error('[Analysis] Unhandled error:', err);
     });
-    return true;
+    return { started: true, queued: false };
   }
 
-  /** 分析进行中插入优先作品；未在跑时返回 false（调用方应改用 startAnalysis）。 */
-  requestWork(workId: string): boolean {
-    if (!this.analyzing) return false;
-    this.priority.push(workId);
-    return true;
+  /** 全量请求落地：DB pending（过滤已在队列的）并入 low 队尾。幂等。 */
+  private async drainFullLow(seq: number, config: Config): Promise<void> {
+    if (!this.fullLowRequested) return;
+    this.fullLowRequested = false;
+    const pending = await getPendingAnalysisWorkIds();
+    if (seq !== this.runSeq) return; // 轮次已失效（kill 后）：丢弃本次全量
+    const known = new Set([...this.priority, ...this.queuedLow]);
+    const fresh = pending.filter((id) => !known.has(id));
+    this.queuedLow.push(...fresh);
+    // 落地时分析已收尾（拉空竞态）：主动拉起消费，否则任务滞留
+    if (fresh.length > 0 && !this.analyzing) {
+      this.snapshot = emptyAnalysisSnapshot();
+      this.runAnalysis(config).catch((err) => {
+        console.error('[Analysis] Unhandled error:', err);
+      });
+    }
   }
 
   /** Terminate the current analysis. No-op if no analysis is running. */
   killAnalysis(): void {
     this.currentController?.abort();
+    // 使飞行中的全量落地失效（被终止的批次不重新拉起）
+    this.runSeq++;
   }
 
-  private async runAnalysis(config: Config, workIds?: string[]): Promise<void> {
+  private async runAnalysis(config: Config): Promise<void> {
+    const seq = ++this.runSeq;
     this.analyzing = true;
     this.currentController = new AbortController();
-    this.priority = [];
     const signal = this.currentController.signal;
 
     try {
+      // 全量填充必须在 worker 启动前落地，否则拉空竞态提前收尾
+      await this.drainFullLow(seq, config);
+      const initialLow = [...this.queuedLow];
       const gen = performAnalysis(config, signal, {
-        workIds,
+        initialLow,
         pullPriority: () =>
           this.priority.length > 0 ? this.priority.shift() : undefined,
+        pullQueued: () =>
+          this.queuedLow.length > 0 ? this.queuedLow.shift() : undefined,
       });
       for await (const event of gen) {
         // 维护快照供断线重连补播（ANALYSIS_FINISHED/ERROR 不改快照）
@@ -434,8 +487,26 @@ class AnalysisManager extends EventEmitter {
         this.emit('analysis', { type: 'ANALYSIS_ERROR', error: String(err) });
       }
     } finally {
-      this.analyzing = false;
       this.currentController = null;
+      if (signal.aborted) {
+        // 终止：排队任务一并丢弃
+        this.priority = [];
+        this.queuedLow = [];
+        this.fullLowRequested = false;
+      }
+      this.analyzing = false;
+    }
+    // worker 拉空收尾窗口内到达的排队任务：队列仍非空 → 自动拉起下一轮
+    // （同步检查无 await，无窗口；递归深度受真实请求限制）
+    if (
+      !signal.aborted &&
+      seq === this.runSeq &&
+      (this.priority.length > 0 || this.queuedLow.length > 0)
+    ) {
+      this.snapshot = emptyAnalysisSnapshot();
+      this.runAnalysis(config).catch((err) => {
+        console.error('[Analysis] Unhandled error:', err);
+      });
     }
   }
 }

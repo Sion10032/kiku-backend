@@ -12,8 +12,8 @@ import {
   removeRootFolder,
 } from '@test/helpers/rootFolder.js';
 import { setupTestEnvironment } from '@test/helpers/setup.js';
-import { eq } from 'drizzle-orm';
-import { getConfig } from '../infra/config/index.js';
+import { eq, inArray } from 'drizzle-orm';
+import { getConfig, setConfigForTesting } from '../infra/config/index.js';
 import { db } from '../infra/db/main/index.js';
 import { tracks, works } from '../infra/db/main/schema.js';
 import { getTrackRows, upsertTrackRow } from '../services/track.service.js';
@@ -30,7 +30,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(works).where(eq(works.id, WORK));
+  await db
+    .delete(works)
+    .where(inArray(works.id, [WORK, 'RJ00000011', 'RJ00000012', 'RJ00000013']));
   await removeRootFolder('lib');
 });
 
@@ -85,7 +87,11 @@ describe('performAnalysis（注入 fake measure）', () => {
     const fakeOpenSource = async () => memorySource({});
     const { events } = await collect(
       performAnalysis(getConfig(), new AbortController().signal, {
-        workIds: [WORK],
+        initialLow: [WORK],
+        pullQueued: (() => {
+          const low = [WORK];
+          return () => low.shift();
+        })(),
         measure: fakeMeasure,
         openSource: fakeOpenSource,
       }),
@@ -140,7 +146,11 @@ describe('performAnalysis（注入 fake measure）', () => {
     const fakeOpenSource = async () => memorySource({});
     await collect(
       performAnalysis(getConfig(), new AbortController().signal, {
-        workIds: [WORK],
+        initialLow: [WORK],
+        pullQueued: (() => {
+          const low = [WORK];
+          return () => low.shift();
+        })(),
         measure: fakeMeasure,
         openSource: fakeOpenSource,
       }),
@@ -148,5 +158,68 @@ describe('performAnalysis（注入 fake measure）', () => {
     const rows = await getTrackRows(WORK);
     expect(rows.every((r) => r.analyzeError === 'boom')).toBe(true);
     expect(rows.every((r) => r.loudnessLufs === null)).toBe(true);
+  });
+
+  it('消费顺序：priority 队列先于 low 队列（均 FIFO）', async () => {
+    // 三个作品：H 在 priority 队列，L1/L2 在 low；串行（parallelism 1）下
+    // openSource 调用序 = 消费序，断言 H → L1 → L2
+    const ids = { h: 'RJ00000011', l1: 'RJ00000012', l2: 'RJ00000013' };
+    const dirs: Array<[string, string]> = [
+      ['h', ids.h],
+      ['l1', ids.l1],
+      ['l2', ids.l2],
+    ];
+    for (const [dir, id] of dirs) {
+      await upsertWork({
+        id,
+        rootFolder: 'lib',
+        dir,
+        title: id,
+        circleName: 'C',
+      });
+      await upsertTrackRow({
+        workId: id,
+        mediaIndex: 'a.wav',
+        title: 'a.wav',
+        sizeBytes: 10,
+        durationSec: 60,
+      });
+    }
+
+    const high = [ids.h];
+    const low = [ids.l1, ids.l2];
+    const pulled: string[] = [];
+    const fakeMeasure = async () => ({
+      lufs: -18.5,
+      truePeakDb: -1.2,
+      curve: [-70, null, -18.5],
+    });
+    const fakeOpenSource = async (_root: string, dir: string) => {
+      pulled.push(dir);
+      return memorySource({});
+    };
+
+    setConfigForTesting({ ...getConfig(), analysisParallelism: 1 });
+    try {
+      const { events } = await collect(
+        performAnalysis(getConfig(), new AbortController().signal, {
+          initialLow: [...low],
+          pullPriority: () => high.shift(),
+          pullQueued: () => low.shift(),
+          measure: fakeMeasure,
+          openSource: fakeOpenSource,
+        }),
+      );
+      expect(pulled).toEqual(['h', 'l1', 'l2']);
+      // pending 事件来自 initialLow 快照（high 插队作品不在其中）
+      const pendingIds = events
+        .filter((e) => (e as { type: string }).type === 'ANALYSIS_TASK')
+        .map((e) => (e as { task: { workId: string; status: string } }).task)
+        .filter((t) => t.status === 'pending')
+        .map((t) => t.workId);
+      expect(pendingIds).toEqual([ids.l1, ids.l2]);
+    } finally {
+      setConfigForTesting();
+    }
   });
 });
