@@ -1,7 +1,11 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { refreshWorkMetadata, syncWorkDurations } from '../scanner/workOps.js';
-import { softDeleteWork, workExists } from '../services/work.service.js';
+import {
+  softDeleteWork,
+  softDeleteWorks,
+  workExists,
+} from '../services/work.service.js';
 
 const idParamsSchema = z.object({
   id: z.string(),
@@ -14,8 +18,8 @@ const trackSyncStatsSchema = z.object({
 });
 
 /**
- * 单作品管理端点（管理员专用）：更新元数据 / 更新音轨时长 / 删除。
- * 与 metadata.ts 的公开浏览读端点相对；全部挂 authenticateAdmin。
+ * 作品管理端点（管理员专用）：单作品（更新元数据 / 更新音轨时长 / 删除）
+ * 与批量软删除。与 metadata.ts 的公开浏览读端点相对；全部挂 authenticateAdmin。
  */
 export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // POST /api/work/:id/refresh — 重抓 DLsite 元数据 + 音轨时长同步
@@ -110,6 +114,26 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       await softDeleteWork(id);
       return { success: true };
+    },
+  );
+
+  // POST /api/works/batch-delete — 批量软删除（音声管理页多选），语义同 DELETE /work/:id：
+  // 已软删 id 幂等跳过（不刷新删除时间）；单条 UPDATE，无部分完成状态；返回本次删除数。
+  fastify.post(
+    '/works/batch-delete',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        body: z.object({ ids: z.array(z.string()).min(1) }),
+        response: {
+          200: z.object({ success: z.boolean(), deleted: z.number() }),
+        },
+      },
+    },
+    async (request) => {
+      const ids = [...new Set(request.body.ids)];
+      const deleted = await softDeleteWorks(ids);
+      return { success: true, deleted };
     },
   );
 };

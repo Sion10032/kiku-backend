@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { ensureRootFolder, removeRootFolder } from '@test/helpers/rootFolder';
 import { setupTestEnvironment } from '@test/helpers/setup';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
 import { tags, tagWork, works } from '../infra/db/main/schema.js';
 import {
@@ -9,6 +9,7 @@ import {
   hardDeleteWork,
   queryWorks,
   softDeleteWork,
+  softDeleteWorks,
   upsertWork,
 } from './work.service.js';
 
@@ -110,5 +111,59 @@ describe('软删除 / 恢复 / 物理删除', () => {
     )[0];
     expect(tag).toBeDefined(); // 共享 tag 主记录不误删
     await expect(getWorkById(ID)).rejects.toThrow('not found');
+  });
+});
+
+describe('softDeleteWorks 批量软删除', () => {
+  const ID2 = `RJ${base + 1}`;
+  const ID3 = `RJ${base + 2}`;
+
+  const insertBatchFixture = async (id: string): Promise<void> => {
+    const r = await upsertWork({
+      id,
+      rootFolder: 'testroot',
+      dir: `folder/${id}`,
+      title: `批量软删测试作品 ${id}`,
+      circleName: CIRCLE,
+      ageRating: 'all',
+      release: '2024-01-01',
+      tags: [],
+      vas: [],
+    });
+    if (!r.success) throw new Error(r.error);
+  };
+
+  afterAll(async () => {
+    await db
+      .delete(works)
+      .where(inArray(works.id, [ID2, ID3]))
+      .catch(() => {});
+  });
+
+  const rowOf = async (id: string) =>
+    (await db.select().from(works).where(eq(works.id, id)).limit(1))[0];
+
+  it('批量软删：返回受影响数，全部不可见、deletedAt 置位', async () => {
+    await insertBatchFixture(ID2);
+    await insertBatchFixture(ID3);
+
+    const deleted = await softDeleteWorks([ID2, ID3, 'RJ99999999']);
+    expect(deleted).toBe(2); // 不存在的 id 不计入
+
+    for (const id of [ID2, ID3]) {
+      await expect(getWorkById(id)).rejects.toThrow('not found');
+      expect((await rowOf(id))?.deletedAt).not.toBeNull();
+    }
+  });
+
+  it('含已软删 id：幂等跳过，不刷新其删除时间', async () => {
+    const before = (await rowOf(ID2))?.deletedAt;
+    expect(before).not.toBeNull();
+
+    // ISO 时间串毫秒精度：留出间隔，若被刷新则必不同
+    await new Promise((r) => setTimeout(r, 5));
+    const deleted = await softDeleteWorks([ID2, ID3]);
+    expect(deleted).toBe(0); // 均已软删
+    expect((await rowOf(ID2))?.deletedAt).toBe(before);
   });
 });

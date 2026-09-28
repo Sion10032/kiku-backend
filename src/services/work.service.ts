@@ -311,6 +311,18 @@ export async function softDeleteWork(id: string): Promise<void> {
     .where(eq(works.id, id));
 }
 
+/** 批量软删除（管理页多选）：语义同单删。已软删 id 幂等跳过（不刷新删除时间），
+ * 返回本次真正置删的行数；不存在的 id 不计入。 */
+export async function softDeleteWorks(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await db
+    .update(works)
+    .set({ deletedAt: new Date().toISOString() })
+    .where(and(inArray(works.id, ids), isNull(works.deletedAt)))
+    .returning({ id: works.id });
+  return rows.length;
+}
+
 /** 作品行是否存在（含软删行）；workAdmin 删除路由判 404 用。 */
 export async function workExists(id: string): Promise<boolean> {
   const row = await db.query.works.findFirst({
