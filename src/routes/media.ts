@@ -15,6 +15,7 @@ const mimeTypes: Record<string, string> = {
   '.wav': 'audio/wav',
   '.flac': 'audio/flac',
   '.m4a': 'audio/mp4',
+  '.wv': 'audio/wavpack',
 };
 
 /**

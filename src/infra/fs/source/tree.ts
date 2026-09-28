@@ -14,6 +14,7 @@ const AUDIO_EXTENSIONS = new Set([
   '.webm',
   '.mp4',
   '.m4a',
+  '.wv',
 ]);
 const TEXT_EXTENSIONS = new Set(['.txt', '.lrc', '.vtt', '.srt', '.ass']);
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
