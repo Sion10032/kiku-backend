@@ -21,7 +21,7 @@ import {
   formattedWorkSchema,
   paginationSchema,
   seriesListSchema,
-  tagSchema,
+  tagListSchema,
   vaListSchema,
 } from './schemas/work.js';
 
@@ -296,7 +296,7 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         response: {
-          200: z.array(tagSchema),
+          200: z.array(tagListSchema),
         },
       },
     },

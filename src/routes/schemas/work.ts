@@ -21,15 +21,22 @@ export const seriesSchema = z.object({
   name: z.string(),
 });
 
-// 实体列表端点（/circles、/vas、/series）专用：内联当前用户收藏状态。
-// 匿名请求全部 false；tag 不支持收藏，无对应变体。
+// 实体列表端点（/circles、/vas、/series）专用：内联当前用户收藏状态与生效口径作品数。
+// 匿名请求 favourited 全部 false；tag 不支持收藏，无 favourited 变体。
 export const circleListSchema = circleSchema.extend({
   favourited: z.boolean(),
+  workCount: z.number(),
 });
-export const vaListSchema = vaSchema.extend({ favourited: z.boolean() });
+export const vaListSchema = vaSchema.extend({
+  favourited: z.boolean(),
+  workCount: z.number(),
+});
 export const seriesListSchema = seriesSchema.extend({
   favourited: z.boolean(),
+  workCount: z.number(),
 });
+/** /tags 列表专用：作品详情的 tags 沿用 tagSchema（无 workCount）。 */
+export const tagListSchema = tagSchema.extend({ workCount: z.number() });
 
 export const userProgressSchema = z.object({
   mediaIndex: z.string(),

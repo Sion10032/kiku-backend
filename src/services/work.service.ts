@@ -15,6 +15,9 @@ import {
   tagWork,
   vas,
   vaWork,
+  vTagWork,
+  vVaWork,
+  vWork,
   works,
 } from '../infra/db/main/schema.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
@@ -722,24 +725,80 @@ async function attachFavourited<T extends { id: string | number }>(
   }));
 }
 
+/**
+ * 实体列表的作品计数（生效口径，与 compiler 探针一致）：
+ *
+ * - 社团/系列：v_work 按 circle_id / series_id 分组（视图内已 COALESCE 覆盖值、
+ *   过滤软删，series_id 为 NULL 的行自然不匹配实体 id）
+ * - 标签/声优：v_tag_work / v_va_work 本身即生效关系（add ∪ 原始−remove−cleared），
+ *   但不过滤软删，需 join t_work 补 deleted_at IS NULL
+ *
+ * 每类型一条分组查询，无 N+1；无作品的实体由调用方补 0。
+ */
+async function scalarWorkCounts(
+  column: typeof vWork.circleId | typeof vWork.seriesId,
+): Promise<Map<string | null, number>> {
+  const rows = await db
+    .select({ key: column, count: sql<number>`count(*)`.mapWith(Number) })
+    .from(vWork)
+    .groupBy(column);
+  return new Map(rows.map((r) => [r.key, r.count]));
+}
+
+async function relationWorkCounts(
+  view: typeof vTagWork | typeof vVaWork,
+  key: typeof vTagWork.tagId | typeof vVaWork.vaId,
+): Promise<Map<number | string, number>> {
+  const rows = await db
+    .select({ key, count: sql<number>`count(*)`.mapWith(Number) })
+    .from(view)
+    .innerJoin(works, and(eq(works.id, view.workId), isNull(works.deletedAt)))
+    .groupBy(key);
+  return new Map(rows.map((r) => [r.key as number | string, r.count]));
+}
+
 export async function getCircles(username?: string) {
+  const counts = await scalarWorkCounts(vWork.circleId);
   return attachFavourited(
-    await db.query.circles.findMany(),
+    (await db.query.circles.findMany()).map((c) => ({
+      ...c,
+      workCount: counts.get(c.id) ?? 0,
+    })),
     username,
     'circle',
   );
 }
 
 export async function getTags() {
-  return db.query.tags.findMany();
+  const counts = await relationWorkCounts(vTagWork, vTagWork.tagId);
+  return (await db.query.tags.findMany()).map((t) => ({
+    ...t,
+    workCount: counts.get(t.id) ?? 0,
+  }));
 }
 
 export async function getSeries(username?: string) {
-  return attachFavourited(await db.query.series.findMany(), username, 'series');
+  const counts = await scalarWorkCounts(vWork.seriesId);
+  return attachFavourited(
+    (await db.query.series.findMany()).map((s) => ({
+      ...s,
+      workCount: counts.get(s.id) ?? 0,
+    })),
+    username,
+    'series',
+  );
 }
 
 export async function getVas(username?: string) {
-  return attachFavourited(await db.query.vas.findMany(), username, 'va');
+  const counts = await relationWorkCounts(vVaWork, vVaWork.vaId);
+  return attachFavourited(
+    (await db.query.vas.findMany()).map((v) => ({
+      ...v,
+      workCount: counts.get(v.id) ?? 0,
+    })),
+    username,
+    'va',
+  );
 }
 
 export type WorkTracksResult =
