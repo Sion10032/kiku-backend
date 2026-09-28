@@ -545,7 +545,6 @@ describe('migrateFromKikoeru（用户数据）', () => {
     expect(rev).toHaveLength(1);
     expect(rev[0]?.workId).toBe('RJ000100');
     expect(rev[0]?.rating).toBe(5);
-    expect(rev[0]?.progress).toBe('listening');
 
     const rs = await db.select().from(readStates);
     expect(rs).toHaveLength(1);

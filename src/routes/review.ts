@@ -11,11 +11,7 @@ const reviewSchema = z.object({
   work_id: z.string(),
   rating: z.number().min(1).max(5).optional(),
   review_text: z.string().optional(),
-  progress: z
-    .enum(['marked', 'listening', 'listened', 'replay', 'postponed'])
-    .optional(),
   starOnly: z.boolean().optional(),
-  progressOnly: z.boolean().optional(),
 });
 
 const reviewQuerySchema = z
@@ -36,7 +32,6 @@ const reviewResponseSchema = z.object({
   workId: z.string(),
   rating: z.number().nullable(),
   reviewText: z.string().nullable(),
-  progress: z.string().nullable(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
@@ -82,14 +77,13 @@ export const reviewRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const user = request.user;
-      const { work_id, rating, review_text, progress } = request.body;
+      const { work_id, rating, review_text } = request.body;
 
       const outcome = await upsertReview({
         userName: user.name,
         workId: work_id,
         rating,
         reviewText: review_text,
-        progress,
       });
       if (!outcome.ok) {
         return reply.fail(404, 'errors.work.not-found', { id: work_id });

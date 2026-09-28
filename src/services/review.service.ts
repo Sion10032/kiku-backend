@@ -37,7 +37,6 @@ export async function upsertReview(data: {
   workId: string;
   rating?: number;
   reviewText?: string;
-  progress?: string;
 }): Promise<UpsertReviewOutcome> {
   // FK 防护：作品不在库（或已软删）→ 'work-missing'（route 映射 404），
   // 否则 t_review.work_id 外键违反会抛 500
@@ -55,7 +54,6 @@ export async function upsertReview(data: {
       workId: data.workId,
       rating: data.rating ?? null,
       reviewText: data.reviewText ?? null,
-      progress: data.progress ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -64,7 +62,6 @@ export async function upsertReview(data: {
       set: {
         rating: data.rating ?? existing?.rating ?? null,
         reviewText: data.reviewText ?? existing?.reviewText ?? null,
-        progress: data.progress ?? existing?.progress ?? null,
         updatedAt: now,
       },
     });

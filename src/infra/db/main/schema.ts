@@ -168,12 +168,11 @@ export const reviews = sqliteTable(
     reviewText: text('review_text'),
     createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
     updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
-    progress: text('progress'),
   },
   (t) => [primaryKey({ columns: [t.userName, t.workId] })],
 );
 
-// 动态播放进度：记录用户播放到每个作品的哪个音轨的哪个时间（与 t_review.progress 手动枚举无关）
+// 动态播放进度：记录用户播放到每个作品的哪个音轨的哪个时间
 export const userProgress = sqliteTable(
   't_user_progress',
   {

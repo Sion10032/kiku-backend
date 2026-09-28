@@ -492,7 +492,6 @@ export async function migrateFromKikoeru(
             reviewText: (r.review_text as string | null) ?? null,
             createdAt: (r.created_at as string | null) ?? null,
             updatedAt: (r.updated_at as string | null) ?? null,
-            progress: (r.progress as string | null) ?? null,
           },
         ];
       });
