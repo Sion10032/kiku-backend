@@ -104,8 +104,9 @@ afterAll(async () => {
   setConfigForTesting(); // 清缓存，恢复其他测试文件的配置隔离
 });
 
-async function runUpdate(workIds?: string[]): Promise<unknown[]> {
-  const events: unknown[] = [];
+// performUpdate 产出 ScanEvent 流，直接以真实类型收集，便于下游按事件分支收窄
+async function runUpdate(workIds?: string[]): Promise<ScanEvent[]> {
+  const events: ScanEvent[] = [];
   for await (const ev of performUpdate(
     getConfig(),
     new AbortController().signal,
@@ -168,7 +169,8 @@ describe('performUpdate（音轨回填）', () => {
     const events = await runUpdate([ID2]);
     const taskTitles = events
       .filter(
-        (ev): ev is ScanEvent =>
+        // 收窄到 SCAN_TASK 分支，后续 map 才能访问 task 字段
+        (ev): ev is Extract<ScanEvent, { type: 'SCAN_TASK' }> =>
           ev.type === 'SCAN_TASK' && ev.task.status === 'completed',
       )
       .map((ev) => ev.task.title);
@@ -183,7 +185,8 @@ describe('performUpdate（音轨回填）', () => {
   it('workIds 全部未命中：空跑，total 为 0', async () => {
     const events = await runUpdate(['RJ99999999']);
     const taskEvents = events.filter(
-      (ev): ev is ScanEvent => ev.type === 'SCAN_TASK',
+      (ev): ev is Extract<ScanEvent, { type: 'SCAN_TASK' }> =>
+        ev.type === 'SCAN_TASK',
     );
     expect(taskEvents).toHaveLength(0);
 
