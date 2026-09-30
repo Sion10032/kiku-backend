@@ -1,3 +1,5 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   blobExists,
   deleteBlob,
@@ -127,6 +129,69 @@ export async function downloadCover(
     console.error(`Error downloading cover for ${id}:`, error);
     return false;
   }
+}
+
+/**
+ * 扩展名 → MIME 映射（手动作品本地封面用）
+ */
+const LOCAL_COVER_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
+
+/**
+ * 候选封面文件名与扩展名，按优先级排列（cover 优先于 folder）
+ */
+const LOCAL_COVER_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
+  ['cover', 'jpg'],
+  ['cover', 'jpeg'],
+  ['cover', 'png'],
+  ['cover', 'webp'],
+  ['folder', 'jpg'],
+  ['folder', 'jpeg'],
+  ['folder', 'png'],
+  ['folder', 'webp'],
+];
+
+/**
+ * 从作品目录导入本地封面（手动作品无网络下载，封面只能是目录内图片文件）
+ * 依次探测 cover.{jpg,jpeg,png,webp}、folder.{jpg,jpeg,png,webp}，
+ * 大小写不敏感（readdir 后比对小写文件名），不做递归。
+ * @param id 作品ID（用作存储 key）
+ * @param workDir 作品目录绝对路径
+ * @returns 是否成功导入（目录无图片或读取失败返回 false）
+ */
+export async function importLocalCover(
+  id: string,
+  workDir: string,
+): Promise<boolean> {
+  const key = getCoverKey(id, 'main');
+
+  // 已存过则直接短路，不重复读盘写库
+  if (blobExists(COVER_NAMESPACE, key)) {
+    return true;
+  }
+
+  const entries = await readdir(workDir).catch(() => null);
+  if (!entries) {
+    return false;
+  }
+
+  // 候选文件名与扩展名按优先级排列，与目录内容做大小写不敏感匹配
+  for (const [name, ext] of LOCAL_COVER_CANDIDATES) {
+    const hit = entries.find((e) => e.toLowerCase() === `${name}.${ext}`);
+    if (!hit) continue;
+
+    const data = await readFile(join(workDir, hit)).catch(() => null);
+    if (!data) continue;
+
+    putBlob(COVER_NAMESPACE, key, data, LOCAL_COVER_MIME[ext]);
+    return true;
+  }
+
+  return false;
 }
 
 /**

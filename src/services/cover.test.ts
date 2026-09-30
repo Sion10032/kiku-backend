@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expectNotNull } from '@test/helpers/assert';
 import { setupTestEnvironment } from '@test/helpers/setup';
 
@@ -17,9 +20,14 @@ const fetchMock = mock(
 const realFetch = globalThis.fetch;
 
 // 动态 import：确保 setupTestEnvironment（CONFIG_PATH）先生效
-const { downloadCover, coverExists, getCoverData, deleteAllCovers } =
-  await import('./cover.service');
-const { deleteBlob } = await import('../infra/db/blob/index');
+const {
+  downloadCover,
+  coverExists,
+  getCoverData,
+  deleteAllCovers,
+  importLocalCover,
+} = await import('./cover.service');
+const { deleteBlob, putBlob } = await import('../infra/db/blob/index');
 
 describe('cover.service（blob.db 存储）', () => {
   beforeEach(() => {
@@ -96,5 +104,75 @@ describe('cover.service（blob.db 存储）', () => {
     );
     expect(coverExists('VJ01003042', 'main')).toBe(true);
     deleteBlob('cover', 'VJ01003042_main');
+  });
+});
+
+describe('importLocalCover（手动作品本地封面导入）', () => {
+  // 每个 case 独立 tmp 目录，测试结束后清理
+  const tmpDirs: string[] = [];
+
+  async function makeWorkDir(files: Record<string, Buffer>): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'kiku-cover-test-'));
+    tmpDirs.push(dir);
+    for (const [name, data] of Object.entries(files)) {
+      await writeFile(join(dir, name), data);
+    }
+    return dir;
+  }
+
+  afterEach(async () => {
+    await Promise.all(
+      tmpDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+    );
+  });
+
+  it('命中 cover.jpg：返回 true 且 blob 库可读（mime 为 image/jpeg）', async () => {
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x01, 0x02]);
+    const dir = await makeWorkDir({ 'cover.jpg': jpg });
+
+    expect(await importLocalCover('UW00000001', dir)).toBe(true);
+
+    const got = getCoverData('UW00000001', 'main');
+    expectNotNull(got);
+    expect(got.data.equals(jpg)).toBe(true);
+    expect(got.mimeType).toBe('image/jpeg');
+    deleteBlob('cover', 'UW00000001_main');
+  });
+
+  it('大小写不敏感：Cover.PNG 命中', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const dir = await makeWorkDir({ 'Cover.PNG': png });
+
+    expect(await importLocalCover('UW00000002', dir)).toBe(true);
+
+    const got = getCoverData('UW00000002', 'main');
+    expectNotNull(got);
+    expect(got.data.equals(png)).toBe(true);
+    expect(got.mimeType).toBe('image/png');
+    deleteBlob('cover', 'UW00000002_main');
+  });
+
+  it('目录里没有图片：返回 false', async () => {
+    const dir = await makeWorkDir({ 'readme.txt': Buffer.from('hi') });
+
+    expect(await importLocalCover('UW00000003', dir)).toBe(false);
+    expect(coverExists('UW00000003', 'main')).toBe(false);
+  });
+
+  it('blob 已存在：短路返回 true，不重新读取文件', async () => {
+    const existing = Buffer.from([0xaa, 0xbb]);
+    putBlob('cover', 'UW00000004_main', existing, 'image/webp');
+    const dir = await makeWorkDir({
+      'cover.jpg': Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+    });
+
+    expect(await importLocalCover('UW00000004', dir)).toBe(true);
+
+    // 内容未被覆盖，说明走了短路分支
+    const got = getCoverData('UW00000004', 'main');
+    expectNotNull(got);
+    expect(got.data.equals(existing)).toBe(true);
+    expect(got.mimeType).toBe('image/webp');
+    deleteBlob('cover', 'UW00000004_main');
   });
 });
