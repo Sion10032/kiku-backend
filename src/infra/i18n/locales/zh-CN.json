@@ -7,6 +7,7 @@
   "errors.user.cannot-delete-self": "不能删除当前登录用户",
   "errors.media.file-not-found": "文件不存在",
   "errors.media.work-not-found": "作品不存在",
+  "errors.media.manual-work-no-remote": "手动作品无 DLsite 来源，无法重抓元数据",
   "errors.media.cover-not-found": "作品 {{id}} 的封面不存在",
   "errors.work.not-found": "作品 {{id}} 不存在",
   "errors.work.root-folder-not-found": "根目录 \"{{folder}}\" 不存在",

@@ -1,11 +1,15 @@
 import { db } from '../infra/db/main/index.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
+import { workSourceResolver } from '../infra/sources/index.js';
 import { getRootFolderPathByName } from '../services/rootFolder.service.js';
 import { syncWorkMetadata } from './scanner.js';
 import { syncWorkTracks } from './trackSync.js';
 
 /** 单作品运维操作的结构化失败原因。 */
-export type WorkOpFailureReason = 'work-not-found' | 'root-folder-not-found';
+export type WorkOpFailureReason =
+  | 'work-not-found'
+  | 'root-folder-not-found'
+  | 'manual-work-no-remote';
 
 /** 音轨同步统计（同 syncWorkTracks 返回值）。 */
 export interface TrackSyncStats {
@@ -38,12 +42,17 @@ function resolveRootPath(rootFolder: string): Promise<string | null> {
  * 单作品「更新元数据」：重抓 DLsite 元数据（upsert + 补缺失封面）+ 音轨时长
  * 同步——对齐 performUpdate 单次迭代的动作集合。日志事件就地丢弃；
  * DLsite 抓取/入库失败时抛错（与扫描任务 failed 语义一致），由路由层映射
- * HTTP 状态。
+ * HTTP 状态。手动作品无远端元数据，入口直接拒绝（不触网）。
  */
 export async function refreshWorkMetadata(
   workId: string,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<WorkOpResult<{ title: string; tracks: TrackSyncStats }>> {
+  // 手动作品无 DLsite 远端可抓：直接拒绝，不触网
+  if (workSourceResolver.classify(workId) === 'manual') {
+    return { ok: false, reason: 'manual-work-no-remote' };
+  }
+
   const location = await getWorkLocation(workId);
   if (!location) return { ok: false, reason: 'work-not-found' };
   const rootPath = await resolveRootPath(location.rootFolder);

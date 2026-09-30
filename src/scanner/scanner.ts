@@ -1,14 +1,20 @@
 import { EventEmitter } from 'node:events';
+import { join } from 'node:path';
 import type { Config } from '../infra/config/schema.js';
+import { db } from '../infra/db/main/index.js';
+import { circles } from '../infra/db/main/schema.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
 import { treeHasAudio } from '../infra/fs/source/tree.js';
 import { UnsupportedArchiveError } from '../infra/fs/source/types.js';
 import { collectWorkEntries } from '../infra/fs/utils.js';
 import { fetchDLsiteWorkInfo } from '../infra/scraper/dlsite.js';
+import { workSourceResolver } from '../infra/sources/index.js';
+import { deriveManualTitle, MANUAL_PREFIXES } from '../infra/sources/manual.js';
 import {
   type CoverType,
   coverExists,
   downloadCover,
+  importLocalCover,
 } from '../services/cover.service.js';
 import {
   getRootFolderPathByName,
@@ -33,10 +39,13 @@ interface ScanTask {
   title: string;
   relativePath: string;
   rootFolder: string;
-  rjCode: string; // Full RJ code like "RJ01578781"
+  /** 作品代码（RJ/VJ/UW…，保持原样不规范化） */
+  workCode: string;
   dirName: string;
   status: 'pending' | 'scanning' | 'completed' | 'failed';
   error?: string;
+  /** 作品目录绝对路径（根目录绝对路径 + relativePath；手动分支导入本地封面用） */
+  absDir?: string;
 }
 
 /** 软删作品超过该天数仍缺失 → 物理清理（级联 + 封面） */
@@ -245,6 +254,84 @@ export async function* syncWorkMetadata(
 }
 
 /**
+ * 手动作品（非 DLsite）元数据同步：与 syncWorkMetadata 同构的 AsyncGenerator，
+ * 但全程零网络——标题由目录名推导（deriveManualTitle），社团落 unknown 占位行，
+ * 封面只从作品目录导入本地图片（importLocalCover）。
+ * 音轨回填镜像 syncWorkMetadataAndTracks 的 syncWorkTracks 部分。
+ */
+export async function* syncManualWorkMetadata(
+  workCode: string,
+  rootFolder: string,
+  relativePath: string,
+  folderName: string,
+  absDir: string,
+  signal: AbortSignal,
+): AsyncGenerator<ScanEvent, { title: string; created: boolean }> {
+  if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+  // 标题全部本地推导：去掉作品代码后的剩余部分，不访问任何远端
+  const title = deriveManualTitle(folderName, workCode);
+  yield* emitLog('info', `Manual work ${workCode}: ${title}`);
+
+  // unknown 占位社团行（镜像 migration/kikoeru.ts 的 unknown 兕底），幂等
+  await db
+    .insert(circles)
+    .values({ id: 'unknown', name: 'unknown' })
+    .onConflictDoNothing();
+
+  const result = await upsertWork({
+    id: workCode,
+    title,
+    rootFolder,
+    dir: relativePath,
+    circleName: 'unknown',
+    circleId: 'unknown',
+  });
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to save work');
+  }
+
+  // 本地封面导入（cover.* / folder.*；目录无图片则静默跳过，不判任务失败）
+  try {
+    const imported = await importLocalCover(workCode, absDir);
+    if (imported) {
+      yield* emitLog('info', `Local cover imported for ${workCode}`);
+    } else {
+      yield* emitLog('warning', `No local cover found for ${workCode}`);
+    }
+  } catch (coverErr) {
+    yield* emitLog(
+      'warning',
+      `Error importing local cover for ${workCode}: ${String(coverErr)}`,
+    );
+  }
+
+  // 音轨行回填（镜像 syncWorkMetadataAndTracks）：失败仅记 warning，不判任务失败
+  try {
+    const rootPath = await getRootFolderPathByName(rootFolder);
+    if (!rootPath) {
+      yield* emitLog(
+        'warning',
+        `Track sync skipped, root folder not found: ${rootFolder}`,
+      );
+    } else {
+      const source = await openWorkSource(rootPath, relativePath);
+      await syncWorkTracks(workCode, source, await source.buildTree());
+    }
+  } catch (err) {
+    yield* emitLog(
+      'warning',
+      `Track sync failed for ${workCode}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  return { title, created: result.created };
+}
+
+/**
  * 单作品完整同步：DLsite 元数据（upsert + 补封面）+ 音轨时长 diff 回填。
  * scan 任务分支与 update 模式共用的动作集合；音轨同步失败仅记 warning 日志，
  * 不判任务失败（DLsite 元数据已保存）。
@@ -298,8 +385,8 @@ export async function* performScan(
 ): AsyncGenerator<ScanEvent> {
   const tasks: ScanTask[] = [];
   const failedTasks: ScanTask[] = [];
-  /** 本次扫描在磁盘上发现的全部 RJ 码（含 unsupported-archive：源还在就不算缺失） */
-  const onDiskRjCodes = new Set<string>();
+  /** 本次扫描在磁盘上发现的全部作品代码（含 unsupported-archive：源还在就不算缺失） */
+  const onDiskWorkCodes = new Set<string>();
   /** 本次枚举失败的 root 路径（path 才是 readdir 失败的身份标识） */
   const failedRootPaths = new Set<string>();
   /** 本次因已扫描（路径未变、未软删）而跳过的作品数 */
@@ -329,6 +416,8 @@ export async function* performScan(
     const collected = await collectWorkEntries(
       rootFolder.path,
       config.scannerMaxRecursionDepth,
+      0,
+      MANUAL_PREFIXES,
     );
     if (!collected.complete) {
       // 枚举失败 ≠ 目录为空（fail-safe）：该 root 的扫描结果视为未知，
@@ -340,7 +429,7 @@ export async function* performScan(
         title: `${rootFolder.name} (unreadable)`,
         relativePath: rootFolder.path,
         rootFolder: rootFolder.name,
-        rjCode: '',
+        workCode: '',
         dirName: rootFolder.name,
         status: 'failed',
         error: detail,
@@ -365,16 +454,19 @@ export async function* performScan(
       if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
       // 源文件在磁盘上即计入集合（差集清理的依据），与能否解析/是否有音频无关
-      onDiskRjCodes.add(entry.rjCode);
+      onDiskWorkCodes.add(entry.workCode);
+
+      // 手动作品判定：RJ/VJ → dlsite 走原路径；人工前缀 → manual
+      const isManual = workSourceResolver.classify(entry.workCode) === 'manual';
 
       // unsupported-archive: 明确失败而非静默跳过
       if (entry.kind === 'unsupported-archive') {
         const task: ScanTask = {
           id: tasks.length + failedTasks.length + 1,
-          title: `${entry.rjCode} ${entry.name}`,
+          title: `${entry.workCode} ${entry.name}`,
           relativePath: entry.relativePath,
           rootFolder: rootFolder.name,
-          rjCode: entry.rjCode,
+          workCode: entry.workCode,
           dirName: entry.name,
           status: 'failed',
           error: String(
@@ -404,10 +496,10 @@ export async function* performScan(
         const errMsg = err instanceof Error ? err.message : String(err);
         const task: ScanTask = {
           id: tasks.length + failedTasks.length + 1,
-          title: `${entry.rjCode} ${entry.name}`,
+          title: `${entry.workCode} ${entry.name}`,
           relativePath: entry.relativePath,
           rootFolder: rootFolder.name,
-          rjCode: entry.rjCode,
+          workCode: entry.workCode,
           dirName: entry.name,
           status: 'failed',
           error: errMsg,
@@ -415,7 +507,7 @@ export async function* performScan(
         failedTasks.push(task);
         yield* emitLog(
           'error',
-          `Failed to open: ${entry.rjCode} ${entry.name} - ${errMsg}`,
+          `Failed to open: ${entry.workCode} ${entry.name} - ${errMsg}`,
         );
         yield { type: 'SCAN_TASK', task: stripTask(task) };
         continue;
@@ -425,27 +517,30 @@ export async function* performScan(
         // 无音频只记日志，不产生任务事件
         yield* emitLog(
           'info',
-          `Skipped (no audio): ${entry.rjCode} ${entry.name}`,
+          `Skipped (no audio): ${entry.workCode} ${entry.name}`,
         );
         continue;
       }
 
       // 已完成元数据抓取的作品：路径未变且未被软删 → 不建任务、不抓取、不推送，
-      // 仅静默补下缺失封面（本地 blob 检查 + 按需下载；sam 等 404 快速失败）
-      const known = knownWorks.get(entry.rjCode);
+      // 仅静默补下缺失封面（本地 blob 检查 + 按需下载；sam 等 404 快速失败）。
+      // 手动作品无远端，跳过 DLsite 补图（零网络红线）。
+      const known = knownWorks.get(entry.workCode);
       if (
         known &&
         known.deletedAt === null &&
         known.dir === entry.relativePath
       ) {
-        for (const type of SCAN_COVER_TYPES) {
-          if (!coverExists(entry.rjCode, type)) {
-            await downloadCover(
-              entry.rjCode,
-              type,
-              signal,
-              known.sourceId ?? undefined,
-            );
+        if (!isManual) {
+          for (const type of SCAN_COVER_TYPES) {
+            if (!coverExists(entry.workCode, type)) {
+              await downloadCover(
+                entry.workCode,
+                type,
+                signal,
+                known.sourceId ?? undefined,
+              );
+            }
           }
         }
         skipped++;
@@ -456,12 +551,14 @@ export async function* performScan(
 
       const task: ScanTask = {
         id: tasks.length + 1,
-        title: `${entry.rjCode} ${entry.name}`,
+        title: `${entry.workCode} ${entry.name}`,
         relativePath: entry.relativePath,
         rootFolder: rootFolder.name,
-        rjCode: entry.rjCode,
+        workCode: entry.workCode,
         dirName: entry.name,
         status: 'pending',
+        // 手动分支导入本地封面需要绝对路径（根目录绝对路径 + relativePath）
+        absDir: join(rootFolder.path, entry.relativePath),
       };
       tasks.push(task);
       yield { type: 'SCAN_TASK', task: stripTask(task) };
@@ -486,13 +583,24 @@ export async function* performScan(
       task.status = 'scanning';
       yield { type: 'SCAN_TASK', task: stripTask(task) };
 
-      // 元数据 + 音轨时长：事件流逐条转发（日志即时推送），return 值计数
-      const gen = syncWorkMetadataAndTracks(
-        task.rjCode,
-        task.rootFolder,
-        task.relativePath,
-        signal,
-      );
+      // 元数据 + 音轨时长：事件流逐条转发（日志即时推送），return 值计数。
+      // 手动作品走本地同步分支（零网络），其余走 DLsite 抓取。
+      const gen =
+        workSourceResolver.classify(task.workCode) === 'manual'
+          ? syncManualWorkMetadata(
+              task.workCode,
+              task.rootFolder,
+              task.relativePath,
+              task.dirName,
+              task.absDir ?? '',
+              signal,
+            )
+          : syncWorkMetadataAndTracks(
+              task.workCode,
+              task.rootFolder,
+              task.relativePath,
+              signal,
+            );
       let r = await gen.next();
       while (!r.done) {
         yield r.value;
@@ -501,10 +609,10 @@ export async function* performScan(
       const { title, created } = r.value;
       if (created) {
         added++;
-        yield* emitLog('info', `Added: ${task.rjCode} - ${title}`);
+        yield* emitLog('info', `Added: ${task.workCode} - ${title}`);
       } else {
         updated++;
-        yield* emitLog('info', `Updated: ${task.rjCode} - ${title}`);
+        yield* emitLog('info', `Updated: ${task.workCode} - ${title}`);
       }
 
       task.status = 'completed';
@@ -537,7 +645,7 @@ export async function* performScan(
 
     const decision = classifyMissingWorks(
       inDb,
-      onDiskRjCodes,
+      onDiskWorkCodes,
       new Date(),
       SCAN_PURGE_DAYS,
     );
@@ -616,13 +724,22 @@ export async function* performUpdate(
   for (const ref of refs) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
+    // 手动作品无 DLsite 远端元数据：记日志跳过，不建任务
+    if (workSourceResolver.classify(ref.id) === 'manual') {
+      yield* emitLog(
+        'info',
+        `Skipped (manual work, no remote source): ${ref.id}`,
+      );
+      continue;
+    }
+
     taskId++;
     const task: ScanTask = {
       id: taskId,
       title: `${ref.id} ${ref.dir}`,
       relativePath: ref.dir,
       rootFolder: ref.rootFolder,
-      rjCode: ref.id,
+      workCode: ref.id,
       dirName: ref.dir,
       status: 'scanning',
     };

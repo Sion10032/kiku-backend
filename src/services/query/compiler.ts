@@ -3,7 +3,8 @@ import type { LiqeQuery, TagToken } from 'liqe';
 import { db } from '../../infra/db/main/index.js';
 import type { AgeRating } from '../../infra/db/main/schema.js';
 import { circles, series, works } from '../../infra/db/main/schema.js';
-import { extractWorkCode } from '../../utils/workcode.js';
+import { MANUAL_PREFIXES } from '../../infra/sources/manual.js';
+import { DLSITE_PREFIXES, extractWorkCode } from '../../utils/workcode.js';
 import { QueryParseError } from './parser.js';
 
 const FIELD_WHITELIST = [
@@ -331,8 +332,9 @@ function compileBareTerm(
     });
   }
   const text = String(value);
-  const rj = extractWorkCode(text);
-  if (rj) return eq(t.id, rj);
+  // 裸词为作品代码时直接等值匹配；前缀集合 = DLsite + 人工（代码常量，无需读配置）
+  const code = extractWorkCode(text, [...DLSITE_PREFIXES, ...MANUAL_PREFIXES]);
+  if (code) return eq(t.id, code);
 
   // 裸词含语义：标题用生效值（COALESCE 必须在子查询外——放进子查询内是静默错误）
   const pattern = `%${escapeLike(text)}%`;

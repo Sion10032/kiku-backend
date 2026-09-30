@@ -32,6 +32,7 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.object({ title: z.string(), tracks: trackSyncStatsSchema }),
           404: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
           500: z.object({ error: z.string() }),
         },
       },
@@ -43,6 +44,10 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!result.ok) {
           if (result.reason === 'work-not-found') {
             return reply.fail(404, 'errors.media.work-not-found');
+          }
+          if (result.reason === 'manual-work-no-remote') {
+            // 手动作品无 DLsite 来源：语义冲突（非服务器错误），409
+            return reply.fail(409, 'errors.media.manual-work-no-remote');
           }
           return reply.fail(500, 'errors.work-admin.failed', {
             reason: result.reason,

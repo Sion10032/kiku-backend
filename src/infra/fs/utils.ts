@@ -1,7 +1,7 @@
 import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { extractWorkCode } from '../../utils/workcode.js';
+import { DLSITE_PREFIXES, extractWorkCode } from '../../utils/workcode.js';
 import { collectDirPaths } from './source/folder.js';
 import { entriesToTrackTree } from './source/tree.js';
 
@@ -24,7 +24,8 @@ export interface WorkEntry {
   kind: 'folder' | 'archive' | 'unsupported-archive';
   /** 相对 root folder 的路径，'/' 分隔（文件夹不含尾部斜杠）。 */
   relativePath: string;
-  rjCode: string;
+  /** 作品代码（RJ/VJ/UW…，保持原样不规范化）。 */
+  workCode: string;
   /** 展示名：文件夹名或压缩包完整文件名。 */
   name: string;
 }
@@ -39,9 +40,9 @@ export type CollectWorkEntriesResult =
   | { complete: false; failedPath: string; reason: string };
 
 /**
- * 递归收集 root 下的 RJ 作品条目。
- * 规则：RJ 目录不深入、非 RJ 目录下探一层直至 maxDepth。
- * RJ 命名文件按扩展名分类：tar/zip → archive，其余 → unsupported-archive。
+ * 递归收集 root 下的作品条目（DLsite 前缀 + extraPrefixes 人工作品前缀）。
+ * 规则：作品代码目录不深入、非作品目录下探一层直至 maxDepth。
+ * 作品代码命名文件按扩展名分类：tar/zip → archive，其余 → unsupported-archive。
  * 任一层 readdir 失败（EACCES / EIO / 路径消失等）即短路返回
  * complete=false（携带失败路径与原因）：枚举失败 ≠ 目录为空；
  * 不以异常传递枚举失败，非枚举类意外错误仍自然上抛。
@@ -50,6 +51,8 @@ export async function collectWorkEntries(
   rootPath: string,
   maxDepth: number,
   currentDepth = 0,
+  /** 额外作品代码前缀（如人工作品 UW，代码常量传入，非配置）。 */
+  extraPrefixes: readonly string[] = [],
 ): Promise<CollectWorkEntriesResult> {
   if (currentDepth >= maxDepth) return { complete: true, entries: [] };
   const out: WorkEntry[] = [];
@@ -64,13 +67,16 @@ export async function collectWorkEntries(
     };
   }
   for (const entry of dirents) {
-    const rj = extractWorkCode(entry.name);
+    const code = extractWorkCode(entry.name, [
+      ...DLSITE_PREFIXES,
+      ...extraPrefixes,
+    ]);
     if (entry.isDirectory()) {
-      if (rj) {
+      if (code) {
         out.push({
           kind: 'folder',
           relativePath: entry.name,
-          rjCode: rj,
+          workCode: code,
           name: entry.name,
         });
       } else {
@@ -78,6 +84,7 @@ export async function collectWorkEntries(
           join(rootPath, entry.name),
           maxDepth,
           currentDepth + 1,
+          extraPrefixes,
         );
         if (!nested.complete) {
           // 短路：子层失败视为整个 root 枚举失败，结果直接透传
@@ -91,20 +98,20 @@ export async function collectWorkEntries(
           })),
         );
       }
-    } else if (entry.isFile() && rj) {
+    } else if (entry.isFile() && code) {
       const ext = extname(entry.name).toLowerCase();
       if (ARCHIVE_EXTS.has(ext)) {
         out.push({
           kind: 'archive',
           relativePath: entry.name,
-          rjCode: rj,
+          workCode: code,
           name: entry.name,
         });
       } else if (UNSUPPORTED_ARCHIVE_EXTS.has(ext)) {
         out.push({
           kind: 'unsupported-archive',
           relativePath: entry.name,
-          rjCode: rj,
+          workCode: code,
           name: entry.name,
         });
       }

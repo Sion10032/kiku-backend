@@ -7,6 +7,7 @@
   "errors.user.cannot-delete-self": "Cannot delete the currently logged-in user",
   "errors.media.file-not-found": "File not found",
   "errors.media.work-not-found": "Work not found",
+  "errors.media.manual-work-no-remote": "Manual works have no DLsite source to refresh from",
   "errors.media.cover-not-found": "Cover for work {{id}} not found",
   "errors.work.not-found": "Work {{id}} not found",
   "errors.work.root-folder-not-found": "Root folder \"{{folder}}\" not found",
