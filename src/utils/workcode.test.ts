@@ -6,7 +6,7 @@ import {
   extractWorkCode,
   isValidWorkId,
   parseWorkCode,
-} from './rjcode';
+} from './workcode';
 
 describe('extractWorkCode（提取第一个作品代码）', () => {
   it.each([

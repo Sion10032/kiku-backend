@@ -5,7 +5,7 @@ import {
   putBlob,
 } from '../infra/db/blob/index.js';
 import { HttpError, retryFetch } from '../infra/scraper/client.js';
-import { dlsiteImgSegment, parseWorkCode } from '../utils/rjcode.js';
+import { dlsiteImgSegment, parseDlsiteCode } from '../utils/workcode.js';
 import { getWorkById } from './work.service.js';
 
 /**
@@ -25,7 +25,7 @@ const COVER_NAMESPACE = 'cover';
  * @returns 封面图片的URL
  */
 function getCoverUrl(rjcode: string, type: CoverType): string {
-  const parsed = parseWorkCode(rjcode);
+  const parsed = parseDlsiteCode(rjcode);
   if (!parsed) {
     throw new Error(`Invalid work ID: ${rjcode}`);
   }

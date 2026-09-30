@@ -21,7 +21,7 @@ import {
   works,
 } from '../infra/db/main/schema.js';
 import type { WorkRankEntry } from '../infra/scraper/dlsite.js';
-import { extractWorkCode, parseWorkCode } from '../utils/rjcode.js';
+import { extractWorkCode, parseWorkCode } from '../utils/workcode.js';
 
 /** kikoeru 旧数据目录（与 config.databaseFolderDir 同规则解析） */
 export function getOldDataDir(): string {

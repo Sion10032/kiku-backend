@@ -3,7 +3,7 @@ import type { LiqeQuery, TagToken } from 'liqe';
 import { db } from '../../infra/db/main/index.js';
 import type { AgeRating } from '../../infra/db/main/schema.js';
 import { circles, series, works } from '../../infra/db/main/schema.js';
-import { extractWorkCode } from '../../utils/rjcode.js';
+import { extractWorkCode } from '../../utils/workcode.js';
 import { QueryParseError } from './parser.js';
 
 const FIELD_WHITELIST = [

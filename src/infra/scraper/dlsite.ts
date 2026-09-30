@@ -2,10 +2,10 @@ import * as cheerio from 'cheerio';
 import {
   dlsiteAjaxSegment,
   dlsiteSiteSegment,
-  parseWorkCode,
+  parseDlsiteCode,
   WORK_CODE_SOURCE,
   type WorkCodePrefix,
-} from '../../utils/rjcode.js';
+} from '../../utils/workcode.js';
 import { getConfig } from '../config/index.js';
 import type { AgeRating } from '../db/main/schema.js';
 import { hasLetter, nameToUUID } from '../fs/utils.js';
@@ -14,7 +14,7 @@ import { fetchHVDBWorkInfo } from './hvdb.js';
 
 /** 取作品代码前缀；非法输入回退 RJ（URL 拼接错误由后续抓取失败暴露，与旧行为一致）。 */
 function prefixOf(id: string): WorkCodePrefix {
-  return parseWorkCode(id)?.prefix ?? 'RJ';
+  return parseDlsiteCode(id)?.prefix ?? 'RJ';
 }
 
 /** 抓取到的系列信息（DLsite SRI 编号 + 系列名；一个作品至多属于一个系列）。 */

@@ -1,7 +1,7 @@
 import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { extractWorkCode } from '../../utils/rjcode.js';
+import { extractWorkCode } from '../../utils/workcode.js';
 import { collectDirPaths } from './source/folder.js';
 import { entriesToTrackTree } from './source/tree.js';
 
