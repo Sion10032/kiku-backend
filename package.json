@@ -1,6 +1,6 @@
 {
   "name": "kiku-backend",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A self-hosted media server for listening to your DLsite voice works.",
   "license": "GPL-3.0-or-later",
   "type": "module",
