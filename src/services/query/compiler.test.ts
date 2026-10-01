@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 // drizzle 1.0.0-rc 移除了 SQL.toSQL()，用方言的 sqlToQuery() 取得 { sql, params }
 import { SQLiteDialect } from 'drizzle-orm/sqlite-core';
 import type { LiqeQuery } from 'liqe';
+import { works } from '../../infra/db/main/schema';
 import { compileQuery } from './compiler';
 import { parseQuery, QueryParseError } from './parser';
 
@@ -10,6 +11,13 @@ const dialect = new SQLiteDialect();
 function compile(q: string) {
   const ast: LiqeQuery = parseQuery(q);
   const cond = compileQuery(ast);
+  return cond && dialect.sqlToQuery(cond);
+}
+
+/** 带用户上下文编译（read/progress 探针依赖 username）。 */
+function compileAs(q: string, username?: string) {
+  const ast: LiqeQuery = parseQuery(q);
+  const cond = compileQuery(ast, works, username);
   return cond && dialect.sqlToQuery(cond);
 }
 
@@ -166,6 +174,64 @@ describe('compileQuery：不支持构造 → QueryParseError', () => {
       expect((err as Error).message).toContain(fragment);
     }
   });
+});
+
+describe('compileQuery：read/progress 用户态字段', () => {
+  it('read:true → read_states EXISTS（按 user_name 过滤）', () => {
+    const s = compileAs('read:true', 'alice');
+    expect(s?.sql).toContain('EXISTS');
+    expect(s?.sql).toContain('read_states');
+    expect(s?.params).toContain('alice');
+  });
+
+  it('read:false → NOT EXISTS', () => {
+    const s = compileAs('read:false', 'alice');
+    expect(s?.sql).toContain('NOT');
+    expect(s?.sql).toContain('read_states');
+    expect(s?.params).toContain('alice');
+  });
+
+  it('progress:true → user_progress EXISTS', () => {
+    const s = compileAs('progress:true', 'alice');
+    expect(s?.sql).toContain('EXISTS');
+    expect(s?.sql).toContain('user_progress');
+    expect(s?.params).toContain('alice');
+  });
+
+  it('progress:false → NOT EXISTS user_progress', () => {
+    const s = compileAs('progress:false', 'alice');
+    expect(s?.sql).toContain('NOT');
+    expect(s?.sql).toContain('user_progress');
+  });
+
+  it('布尔字面量与大小写变体同义（liqe 对裸 true/false 产 boolean，其余字符串小写归一）', () => {
+    for (const q of ['read:true', 'read:True', 'read:"true"']) {
+      const s = compileAs(q, 'alice');
+      expect(s?.sql).not.toContain('NOT');
+    }
+  });
+
+  it('未登录：read:true / progress:true 恒假，read:false 恒真', () => {
+    expect(compileAs('read:true')?.sql).toContain('1 = 0');
+    expect(compileAs('progress:true')?.sql).toContain('1 = 0');
+    expect(compileAs('read:false')?.sql).toContain('1 = 1');
+    expect(compileAs('progress:false')?.sql).toContain('1 = 1');
+  });
+
+  it('与 age 组合（AND）', () => {
+    const s = compileAs('age:r18 read:true', 'alice');
+    expect(s?.sql).toContain('AND');
+    expect(s?.sql).toContain('read_states');
+    expect(s?.params).toContain('r18');
+    expect(s?.params).toContain('alice');
+  });
+
+  it.each(['read:yes', 'progress:maybe', 'read:123'])(
+    '非法值 %s → QueryParseError',
+    (q) => {
+      expect(() => compileAs(q, 'alice')).toThrow(QueryParseError);
+    },
+  );
 });
 
 describe('compileQuery：空查询', () => {

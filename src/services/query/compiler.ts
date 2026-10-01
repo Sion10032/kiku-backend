@@ -14,6 +14,8 @@ const FIELD_WHITELIST = [
   'series',
   'age',
   'overridden',
+  'read',
+  'progress',
 ] as const;
 type FieldName = (typeof FIELD_WHITELIST)[number];
 
@@ -25,31 +27,39 @@ type FieldName = (typeof FIELD_WHITELIST)[number];
  * worksTable：外层 works 表引用。默认用 schema 的 works（渲染 "works"），
  * 适用于普通 select/count；db.query.*.findMany 的 RAW where 回调中主表被
  * drizzle 别名化（"d0"），此时须传入回调的 t 参数，否则列引用无法解析。
+ *
+ * username：read/progress 用户态探针的归属用户；未登录传 undefined，
+ * 此时 true 恒假、false 恒真（匿名无任何用户态行）。
  */
 export function compileQuery(
   ast: LiqeQuery,
   worksTable: typeof works = works,
+  username?: string,
 ): SQL | undefined {
-  return compileNode(ast, worksTable);
+  return compileNode(ast, worksTable, username);
 }
 
-function compileNode(node: LiqeQuery, t: typeof works): SQL | undefined {
+function compileNode(
+  node: LiqeQuery,
+  t: typeof works,
+  username: string | undefined,
+): SQL | undefined {
   switch (node.type) {
     case 'EmptyExpression':
       return undefined;
     case 'ParenthesizedExpression': {
-      const inner = compileNode(node.expression, t);
+      const inner = compileNode(node.expression, t, username);
       if (!inner) return undefined;
       return sql`(${inner})`;
     }
     case 'UnaryOperator': {
-      const inner = compileNode(node.operand, t);
+      const inner = compileNode(node.operand, t, username);
       if (!inner) return undefined;
       return sql`NOT (${inner})`;
     }
     case 'LogicalExpression': {
-      const left = compileNode(node.left, t);
-      const right = compileNode(node.right, t);
+      const left = compileNode(node.left, t, username);
+      const right = compileNode(node.right, t, username);
       const op = node.operator.operator; // 'AND' | 'OR'（隐式 AND 同 'AND'）
       if (!left && !right) return undefined;
       if (!left) return right;
@@ -59,11 +69,15 @@ function compileNode(node: LiqeQuery, t: typeof works): SQL | undefined {
         : sql`(${left} OR ${right})`;
     }
     case 'Tag':
-      return compileTag(node, t);
+      return compileTag(node, t, username);
   }
 }
 
-function compileTag(node: TagToken, t: typeof works): SQL | undefined {
+function compileTag(
+  node: TagToken,
+  t: typeof works,
+  username: string | undefined,
+): SQL | undefined {
   const { field, expression, operator } = node;
 
   if (field.type === 'Field') {
@@ -140,6 +154,11 @@ function compileTag(node: TagToken, t: typeof works): SQL | undefined {
       return ageRatingCondition(expression, t);
     case 'overridden':
       return overriddenProbe(expression, t);
+    case 'read':
+    case 'progress': {
+      const value = flagValue(expression, field.name);
+      return userFlagProbe(field.name, value, username, t);
+    }
   }
 }
 
@@ -283,6 +302,26 @@ function overriddenProbe(
   throw new QueryParseError('errors.query.overridden-value');
 }
 
+/**
+ * 用户态布尔探针（read → read_states、progress → user_progress，按当前用户）。
+ * 未登录：true 恒假、false 恒真（匿名无任何用户态行）。
+ * 否定走 NOT EXISTS 而非外层 NOT 包裹，保持 SQL 紧凑。
+ */
+function userFlagProbe(
+  kind: 'read' | 'progress',
+  value: boolean,
+  username: string | undefined,
+  t: typeof works,
+): SQL {
+  if (!username) return value ? sql`1 = 0` : sql`1 = 1`;
+  const table = kind === 'read' ? 'read_states' : 'user_progress';
+  const exists = sql`EXISTS (
+    SELECT 1 FROM ${sql.raw(table)} f
+     WHERE f.work_id = ${t.id} AND f.user_name = ${username}
+  )`;
+  return value ? exists : sql`NOT ${exists}`;
+}
+
 // ---------- 值提取 ----------
 
 /** 字符串值 + 是否模糊（unquoted 且含 * / ? 才做通配；引号值永远字面） */
@@ -316,6 +355,27 @@ function ageRatingCondition(
     throw new QueryParseError('errors.query.age-value');
   }
   return ageRatingProbe(value as AgeRating, t);
+}
+
+/**
+ * 布尔字段值提取：liqe 对裸 true/false 产 boolean 字面量，其余为字符串
+ * （"true"/"True" 等，大小写归一）；两者之外 → flag-value 400。
+ */
+function flagValue(
+  expression: TagToken['expression'],
+  fieldName: string,
+): boolean {
+  if (expression.type !== 'LiteralExpression') {
+    throw new QueryParseError('errors.query.flag-value', { field: fieldName });
+  }
+  const { value } = expression;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const lowered = value.toLowerCase();
+    if (lowered === 'true') return true;
+    if (lowered === 'false') return false;
+  }
+  throw new QueryParseError('errors.query.flag-value', { field: fieldName });
 }
 
 // ---------- 裸词（自由文本） ----------

@@ -657,8 +657,9 @@ export async function queryWorks(
   // count 查询未别名化，用默认 works 表编译即可；
   // findMany 的 RAW 回调中主表被 drizzle 别名化（"d0"），须用回调的 t 重新编译，
   // 否则 "works"."col" 列引用无法解析（SQLiteError: no such column）。
+  // read/progress 用户态探针两处都传 username。
   const countWhere = ast
-    ? and(compileQuery(ast), isNull(works.deletedAt))
+    ? and(compileQuery(ast, works, username), isNull(works.deletedAt))
     : isNull(works.deletedAt);
 
   const [items, countResult] = await Promise.all([
@@ -671,7 +672,7 @@ export async function queryWorks(
       },
       where: {
         RAW: (t, op) => {
-          const filter = ast ? compileQuery(ast, t) : undefined;
+          const filter = ast ? compileQuery(ast, t, username) : undefined;
           // biome-ignore lint/style/noNonNullAssertion: drizzle 的 and() 返回 SQL | undefined，RAW where 需要 SQL
           return op.and(filter, op.isNull(t.deletedAt))!;
         },

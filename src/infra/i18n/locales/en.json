@@ -33,6 +33,7 @@
   "errors.query.text-required": "Field \"{{field}}\" requires a text value",
   "errors.query.text-required-numeric": "Field \"{{field}}\" requires a text value (numeric filters may come later)",
   "errors.query.age-value": "Field \"age\" requires one of all/r15/r18",
+  "errors.query.flag-value": "Field \"{{field}}\" only accepts true or false",
   "errors.query.empty-term": "Query term cannot be empty",
   "errors.query.unsupported-term": "Unsupported query term \"{{value}}\"",
   "errors.query.syntax-error": "Query syntax error: {{detail}}",

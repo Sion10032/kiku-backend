@@ -33,6 +33,7 @@
   "errors.query.text-required": "字段 \"{{field}}\" 需要文本值",
   "errors.query.text-required-numeric": "字段 \"{{field}}\" 需要文本值（数值筛选后续版本支持）",
   "errors.query.age-value": "字段 \"age\" 需要 all/r15/r18 之一",
+  "errors.query.flag-value": "字段 \"{{field}}\" 只接受 true/false",
   "errors.query.empty-term": "查询词不能为空",
   "errors.query.unsupported-term": "不支持的查询词 \"{{value}}\"",
   "errors.query.syntax-error": "查询语法错误：{{detail}}",
