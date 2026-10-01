@@ -18,7 +18,7 @@ setupTestEnvironment();
 
 /** 场景基线：用户表已有迁移导入的旧账号（group=user 模拟提权场景） */
 async function seedMigratedUsers() {
-  await db.run(sql`DELETE FROM t_user`);
+  await db.run(sql`DELETE FROM users`);
   await db.insert(users).values([
     { name: 'oldadmin', password: 'old-hash', group: 'user' },
     { name: 'other', password: 'h', group: 'user' },
@@ -37,7 +37,7 @@ describe('setupInstance（迁移后场景）', () => {
 
   afterAll(async () => {
     // 清理：用户表 + 迁移标记，避免污染同进程后续测试
-    await db.run(sql`DELETE FROM t_user`);
+    await db.run(sql`DELETE FROM users`);
     setConfigForTesting({
       ...getConfig(),
       kikoeruMigratedAt: undefined,
@@ -168,7 +168,7 @@ describe('register（未初始化实例）', () => {
   });
 
   afterAll(async () => {
-    await db.run(sql`DELETE FROM t_user`);
+    await db.run(sql`DELETE FROM users`);
     setConfigForTesting({
       ...getConfig(),
       allowRegistration: savedAllowRegistration,
@@ -176,7 +176,7 @@ describe('register（未初始化实例）', () => {
   });
 
   beforeEach(async () => {
-    await db.run(sql`DELETE FROM t_user`);
+    await db.run(sql`DELETE FROM users`);
     setConfigForTesting({ ...getConfig(), allowRegistration: false });
   });
 
@@ -252,7 +252,7 @@ describe('setupInstance（事务化：并发与交叠）', () => {
   });
 
   afterAll(async () => {
-    await db.run(sql`DELETE FROM t_user`);
+    await db.run(sql`DELETE FROM users`);
     setConfigForTesting({
       ...getConfig(),
       allowRegistration: savedAllowRegistration,
@@ -260,7 +260,7 @@ describe('setupInstance（事务化：并发与交叠）', () => {
   });
 
   beforeEach(async () => {
-    await db.run(sql`DELETE FROM t_user`);
+    await db.run(sql`DELETE FROM users`);
     setConfigForTesting({
       ...getConfig(),
       allowRegistration: false,

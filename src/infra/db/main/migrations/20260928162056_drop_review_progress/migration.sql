@@ -1,1 +1,0 @@
-ALTER TABLE `t_review` DROP COLUMN `progress`;

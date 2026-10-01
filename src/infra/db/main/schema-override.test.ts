@@ -8,12 +8,12 @@ describe('元数据覆盖迁移产物', () => {
   it('3 张覆盖表存在', async () => {
     const rows = await db.all<{ name: string }>(
       sql`SELECT name FROM sqlite_master WHERE type = 'table'
-           AND name IN ('t_work_meta_override', 'r_tag_work_override', 'r_va_work_override')`,
+           AND name IN ('work_meta_overrides', 'tag_work_override', 'va_work_override')`,
     );
     expect(rows.map((r) => r.name).sort()).toEqual([
-      'r_tag_work_override',
-      'r_va_work_override',
-      't_work_meta_override',
+      'tag_work_override',
+      'va_work_override',
+      'work_meta_overrides',
     ]);
   });
 
@@ -29,10 +29,10 @@ describe('元数据覆盖迁移产物', () => {
     ]);
   });
 
-  it('r_tag_work_override 带 tag_id 索引（add 探针按 tag 查找用）', async () => {
+  it('tag_work_override 带 tag_id 索引（add 探针按 tag 查找用）', async () => {
     const rows = await db.all<{ name: string }>(
       sql`SELECT name FROM sqlite_master WHERE type = 'index'
-           AND tbl_name = 'r_tag_work_override' AND sql LIKE '%tag_id%'`,
+           AND tbl_name = 'tag_work_override' AND sql LIKE '%tag_id%'`,
     );
     expect(rows.length).toBeGreaterThanOrEqual(1);
   });

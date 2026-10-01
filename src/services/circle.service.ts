@@ -69,8 +69,8 @@ export function resolveCircle(
 
 /**
  * 占位 id → 真实 maker_id：PK 原地升级。
- * works / t_work_meta_override 由 FK ON UPDATE CASCADE 自动跟随；
- * t_favourite 无 FK，需手动改指（冲突时保留目标、丢弃旧行）。
+ * works / work_meta_overrides 由 FK ON UPDATE CASCADE 自动跟随；
+ * favourites 无 FK，需手动改指（冲突时保留目标、丢弃旧行）。
  */
 function upgradeCircleId(tx: Tx, from: string, to: string): void {
   const dupUsers = tx

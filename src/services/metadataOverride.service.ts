@@ -69,7 +69,7 @@ function upsertSeriesByName(tx: Tx, name: string): string {
     .where(eq(series.name, name))
     .get();
   if (found) return found.id;
-  // 手工新增的系列没有 DLsite SRI 编号，以名字作 id（t_series.id 为 text）
+  // 手工新增的系列没有 DLsite SRI 编号，以名字作 id（series.id 为 text）
   const inserted = tx
     .insert(series)
     .values({ id: name, name })
@@ -112,7 +112,7 @@ function upsertVa(tx: Tx, input: { id?: string; name: string }): string {
     tx.insert(vas).values({ id: input.id, name: input.name }).run();
     return input.id;
   }
-  // 无 DLsite 声优 id 的手工条目：以名字作 id（t_va.id 为 text）
+  // 无 DLsite 声优 id 的手工条目：以名字作 id（vas.id 为 text）
   tx.insert(vas).values({ id: input.name, name: input.name }).run();
   return input.name;
 }
@@ -247,14 +247,14 @@ export async function saveOverride(
 
   db.transaction((tx) => {
     tx.run(sql`
-      DELETE FROM r_tag_work_override
+      DELETE FROM tag_work_override
        WHERE work_id = ${workId} AND action = 'remove'
-         AND tag_id NOT IN (SELECT tag_id FROM r_tag_work WHERE work_id = ${workId})
+         AND tag_id NOT IN (SELECT tag_id FROM tag_work WHERE work_id = ${workId})
     `);
     tx.run(sql`
-      DELETE FROM r_va_work_override
+      DELETE FROM va_work_override
        WHERE work_id = ${workId} AND action = 'remove'
-         AND va_id NOT IN (SELECT va_id FROM r_va_work WHERE work_id = ${workId})
+         AND va_id NOT IN (SELECT va_id FROM va_work WHERE work_id = ${workId})
     `);
 
     // step 1（resetFields）：

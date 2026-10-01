@@ -33,7 +33,7 @@ async function workSeries(
   return row?.series ? { id: row.series.id, name: row.series.name } : null;
 }
 
-/** 直接读 t_work.series_id 列 */
+/** 直接读 works.series_id 列 */
 async function workSeriesIdColumn(workId: string): Promise<string | null> {
   const row = await db.query.works.findFirst({
     where: { RAW: (t, op) => op.eq(t.id, workId) },
@@ -55,7 +55,7 @@ afterAll(async () => {
 });
 
 describe('series persistence (upsertWork / updateWorkMetadata)', () => {
-  it('upsert 带系列的作品 → t_series 行创建且 t_work.series_id 正确', async () => {
+  it('upsert 带系列的作品 → series 行创建且 works.series_id 正确', async () => {
     const res = await upsertWork({
       id: W1,
       rootFolder: 'testroot',

@@ -66,7 +66,7 @@ export async function insertOverrideFixtures(): Promise<void> {
       vas: [],
     },
   ];
-  // FK 前置：works.root_folder → t_root_folder.name
+  // FK 前置：works.root_folder → root_folders.name
   await ensureRootFolder('testroot');
   for (const row of rows) {
     const res = await upsertWork(row);

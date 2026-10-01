@@ -16,28 +16,28 @@ function compile(q: string) {
 describe('compileQuery：字段条件', () => {
   it('tag 精确 → JOIN 子查询等值', () => {
     const s = compile('tag:催眠');
-    expect(s?.sql).toContain('r_tag_work');
+    expect(s?.sql).toContain('tag_work');
     expect(s?.sql).toContain('join');
     expect(s?.params).toContain('催眠');
   });
 
   it('circle 精确 → circleId IN 子查询', () => {
     const s = compile('circle:"夜の ひつじ"');
-    expect(s?.sql).toContain('t_circle');
+    expect(s?.sql).toContain('circles');
     expect(s?.params).toContain('夜の ひつじ');
   });
 
   it('va 精确', () => {
     const s = compile('va:花澤');
-    expect(s?.sql).toContain('r_va_work');
+    expect(s?.sql).toContain('va_work');
     expect(s?.params).toContain('花澤');
   });
 
-  it('series 精确（引号含空格）→ series_id IN t_series 子查询', () => {
+  it('series 精确（引号含空格）→ series_id IN series 子查询', () => {
     const s = compile('series:"○○シリーズ 第2章"');
     expect(s?.sql).toContain('series_id');
-    expect(s?.sql).toContain('t_series');
-    expect(s?.sql).not.toContain('r_series_work');
+    expect(s?.sql).toContain('join series');
+    expect(s?.sql).not.toContain('series_work');
     expect(s?.params).toContain('○○シリーズ 第2章');
   });
 
@@ -179,14 +179,14 @@ describe('compileQuery：overridden 覆盖探针', () => {
   it('overridden:title → EXISTS 主行 title 非空', () => {
     const s = compile('overridden:title');
     expect(s?.sql).toContain('EXISTS');
-    expect(s?.sql).toContain('t_work_meta_override');
+    expect(s?.sql).toContain('work_meta_overrides');
     expect(s?.sql).toContain('title IS NOT NULL');
   });
 
   it('overridden:any → EXISTS 主行存在（prune 保证存在即有覆盖）', () => {
     const s = compile('overridden:any');
     expect(s?.sql).toContain('EXISTS');
-    expect(s?.sql).toContain('t_work_meta_override');
+    expect(s?.sql).toContain('work_meta_overrides');
     expect(s?.sql).not.toContain('IS NOT NULL');
   });
 

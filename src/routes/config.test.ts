@@ -61,7 +61,7 @@ describe('PUT /api/config/admin 部分更新', () => {
     expect(cfg.tagLanguage).toBe('ja-jp');
     // pageSize 已从 configSchema 删除，契约里不该再有这个键
     expect(cfg).not.toHaveProperty('pageSize');
-    // rootFolders 已搬进 t_root_folder，config 契约里不该再有这个键
+    // rootFolders 已搬进 root_folders，config 契约里不该再有这个键
     expect(cfg).not.toHaveProperty('rootFolders');
   });
 });

@@ -52,7 +52,7 @@ async function getWorkRead(
   return (res.json() as { read: boolean }).read;
 }
 
-/** 直查 t_read_state 行（存在即已读） */
+/** 直查 read_states 行（存在即已读） */
 function getReadStateRow(workId: string) {
   return db
     .select()
@@ -62,7 +62,7 @@ function getReadStateRow(workId: string) {
     );
 }
 
-describe('已读状态（t_read_state，听完自动置）', () => {
+describe('已读状态（read_states，听完自动置）', () => {
   let app: FastifyInstance;
   let token: string;
 
@@ -70,7 +70,7 @@ describe('已读状态（t_read_state，听完自动置）', () => {
     app = await buildApp();
     await app.ready();
 
-    // 造数：用户 + 社团 + 3 个作品 + 音轨（作品听完判定依赖 t_track.duration_sec）
+    // 造数：用户 + 社团 + 3 个作品 + 音轨（作品听完判定依赖 tracks.duration_sec）
     await db
       .insert(users)
       .values({ name: TEST_USER, password: 'test-password', group: 'user' });

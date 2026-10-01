@@ -11,21 +11,21 @@ import {
 
 /**
  * 媒体根目录（资源库）。原为 config.json 的 rootFolders 数组。
- * - `name` 直接作主键：全链路（t_work.root_folder / 扫描任务标题 / 设置页）本来就用名字
+ * - `name` 直接作主键：全链路（works.root_folder / 扫描任务标题 / 设置页）本来就用名字
  *   标识根目录，换成代理 id 只会把 id 透传进 works，没有任何收益。
  * - `path` 可空：kikoeru 旧库里 t_work.root_folder 可能指向旧 config.rootFolders 已不存在
  *   的名字（旧配置被改过就会漂移），这类行路径未知（解析失败 = 旧的 root-folder-not-found），
  *   设置页可补配。
  */
-export const rootFolders = sqliteTable('t_root_folder', {
+export const rootFolders = sqliteTable('root_folders', {
   name: text('name').primaryKey(),
   path: text('path'),
 });
 
-export const circles = sqliteTable('t_circle', {
+export const circles = sqliteTable('circles', {
   /**
    * DLsite maker_id（RG/VG + 5 或 8 位数字）。
-   * 旧库迁移无法确定时为 'unknown'；手工新建以 name 作 id（同 t_series 先例）；
+   * 旧库迁移无法确定时为 'unknown'；手工新建以 name 作 id（同 series 先例）；
    * rescan 拿到真实 maker_id 后就地升级（见 services/circle.service.ts）。
    */
   id: text('id').primaryKey(),
@@ -33,11 +33,11 @@ export const circles = sqliteTable('t_circle', {
 });
 
 export const works = sqliteTable(
-  't_work',
+  'works',
   {
     id: text('id').primaryKey(),
     /**
-     * 所属媒体根目录（外键 → t_root_folder.name）。
+     * 所属媒体根目录（外键 → root_folders.name）。
      * ON UPDATE CASCADE：重命名根目录时名下作品的归属自动跟随（依赖运行期
      *   PRAGMA foreign_keys = ON，见 infra/db/main/index.ts）。
      * ON DELETE restrict：名下还有作品（含软删）时禁止删除，服务层先行拦截给出 409。
@@ -81,39 +81,37 @@ export const works = sqliteTable(
   (t) => [
     // 列表端点按这些列排序且恒带 deleted_at IS NULL，用部分索引精确匹配查询形状；
     // 排序索引让 SQLite 流式输出、取满一页即停（配合关系表索引消除逐行全表扫描）。
-    index('t_work_release_idx')
-      .on(t.release)
-      .where(sql`${t.deletedAt} is null`),
-    index('t_work_dl_count_idx')
+    index('works_release_idx').on(t.release).where(sql`${t.deletedAt} is null`),
+    index('works_dl_count_idx')
       .on(t.dlCount)
       .where(sql`${t.deletedAt} is null`),
-    index('t_work_price_idx').on(t.price).where(sql`${t.deletedAt} is null`),
-    index('t_work_rate_average_2dp_idx')
+    index('works_price_idx').on(t.price).where(sql`${t.deletedAt} is null`),
+    index('works_rate_average_2dp_idx')
       .on(t.rateAverage2dp)
       .where(sql`${t.deletedAt} is null`),
-    index('t_work_review_count_idx')
+    index('works_review_count_idx')
       .on(t.reviewCount)
       .where(sql`${t.deletedAt} is null`),
   ],
 );
 
-export const tags = sqliteTable('t_tag', {
+export const tags = sqliteTable('tags', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
 });
 
-export const vas = sqliteTable('t_va', {
+export const vas = sqliteTable('vas', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
 });
 
-export const series = sqliteTable('t_series', {
+export const series = sqliteTable('series', {
   id: text('id').primaryKey(), // DLsite SRI 编号，如 'SRI0000027029'
   name: text('name').notNull(), // 不设唯一：存在同名不同系列
 });
 
 export const tagWork = sqliteTable(
-  'r_tag_work',
+  'tag_work',
   {
     tagId: integer('tag_id')
       .notNull()
@@ -126,12 +124,12 @@ export const tagWork = sqliteTable(
     primaryKey({ columns: [t.tagId, t.workId] }),
     // 关系列表按 work_id 过滤（drizzle 关系子查询 where d0.id = work_id）；
     // 主键 (tag_id, work_id) 的第二列无法服务该查询，缺索引会逐行全表扫描。
-    index('r_tag_work_work_id_idx').on(t.workId),
+    index('tag_work_work_id_idx').on(t.workId),
   ],
 );
 
 export const vaWork = sqliteTable(
-  'r_va_work',
+  'va_work',
   {
     vaId: text('va_id')
       .notNull()
@@ -142,12 +140,12 @@ export const vaWork = sqliteTable(
   },
   (t) => [
     primaryKey({ columns: [t.vaId, t.workId] }),
-    // 同 r_tag_work：主键第二列 work_id 无法服务按作品查声优的关联子查询。
-    index('r_va_work_work_id_idx').on(t.workId),
+    // 同 tag_work：主键第二列 work_id 无法服务按作品查声优的关联子查询。
+    index('va_work_work_id_idx').on(t.workId),
   ],
 );
 
-export const users = sqliteTable('t_user', {
+export const users = sqliteTable('users', {
   name: text('name').primaryKey(),
   password: text('password').notNull(),
   group: text('group').notNull(),
@@ -156,7 +154,7 @@ export const users = sqliteTable('t_user', {
 });
 
 export const reviews = sqliteTable(
-  't_review',
+  'reviews',
   {
     userName: text('user_name')
       .notNull()
@@ -174,7 +172,7 @@ export const reviews = sqliteTable(
 
 // 动态播放进度：记录用户播放到每个作品的哪个音轨的哪个时间
 export const userProgress = sqliteTable(
-  't_user_progress',
+  'user_progress',
   {
     userName: text('user_name')
       .notNull()
@@ -198,7 +196,7 @@ export const userProgress = sqliteTable(
 // 作品已读标记（独立于播放进度：标记 = 1 行；首次产生进度时自动写入，可手动覆盖）。
 // 存在即已读，删除即未读；标记未读不清理进度（D3）。
 export const readStates = sqliteTable(
-  't_read_state',
+  'read_states',
   {
     userName: text('user_name')
       .notNull()
@@ -214,9 +212,9 @@ export const readStates = sqliteTable(
 
 // 多态收藏：作品 / 系列 / 声优 / 社团，按用户隔离。
 // 多态目标无法做 FK（targetId 统一存 text：work→RJ 号、series→SRI 号、
-// va→DLsite 声优 id、circle→t_circle.id（maker_id）），完整性由 favourite.service 校验。
+// va→DLsite 声优 id、circle→circles.id（maker_id）），完整性由 favourite.service 校验。
 export const favourites = sqliteTable(
-  't_favourite',
+  'favourites',
   {
     userName: text('user_name')
       .notNull()
@@ -233,7 +231,7 @@ export const favourites = sqliteTable(
 // payload 为前端 settingsStore 持久化字段的 JSON 快照，结构由前端保证，
 // 后端仅校验是合法 JSON 文本；上限每用户 10 条，由 service 层强制。
 export const settingsBackups = sqliteTable(
-  't_settings_backup',
+  'settings_backups',
   {
     userName: text('user_name')
       .notNull()
@@ -246,7 +244,7 @@ export const settingsBackups = sqliteTable(
 );
 
 export const tracks = sqliteTable(
-  't_track',
+  'tracks',
   {
     workId: text('work_id')
       .notNull()
@@ -280,7 +278,7 @@ export type NewCircle = typeof circles.$inferInsert;
 export type Work = typeof works.$inferSelect;
 export type NewWork = typeof works.$inferInsert;
 
-/** 年龄分级三档（与 t_work.age_rating 的 enum 一致），全后端共用。 */
+/** 年龄分级三档（与 works.age_rating 的 enum 一致），全后端共用。 */
 export type AgeRating = Work['ageRating'];
 
 export type Tag = typeof tags.$inferSelect;
@@ -316,7 +314,7 @@ export type NewSettingsBackup = typeof settingsBackups.$inferInsert;
 // —— 元数据覆盖层（A' 方案：标量 takeover + 关系 delta，见 plans/2026-09-03-metadata-override.md）——
 
 /** 标量覆盖：NULL = 该字段未覆盖。tags/vas 的 cleared 标记表达「稳定空列表」（对 rescan 未来新增免疫）。 */
-export const workMetaOverride = sqliteTable('t_work_meta_override', {
+export const workMetaOverride = sqliteTable('work_meta_overrides', {
   workId: text('work_id')
     .primaryKey()
     .references(() => works.id, { onDelete: 'cascade' }),
@@ -334,7 +332,7 @@ export const workMetaOverride = sqliteTable('t_work_meta_override', {
 
 /** 关系覆盖（delta）：仅被编辑的作品有行；add = 覆盖新增，remove = 屏蔽原始关系。 */
 export const tagWorkOverride = sqliteTable(
-  'r_tag_work_override',
+  'tag_work_override',
   {
     workId: text('work_id')
       .notNull()
@@ -347,13 +345,13 @@ export const tagWorkOverride = sqliteTable(
   (t) => [
     primaryKey({ columns: [t.workId, t.tagId] }),
     // 生效探针按 work_id 前缀扫描；tag:/裸词 的 add 分支按 tag_id 探测（性能结论回填）
-    index('r_tag_work_override_work_id_idx').on(t.workId),
-    index('r_tag_work_override_tag_id_idx').on(t.tagId),
+    index('tag_work_override_work_id_idx').on(t.workId),
+    index('tag_work_override_tag_id_idx').on(t.tagId),
   ],
 );
 
 export const vaWorkOverride = sqliteTable(
-  'r_va_work_override',
+  'va_work_override',
   {
     workId: text('work_id')
       .notNull()
@@ -365,8 +363,8 @@ export const vaWorkOverride = sqliteTable(
   },
   (t) => [
     primaryKey({ columns: [t.workId, t.vaId] }),
-    index('r_va_work_override_work_id_idx').on(t.workId),
-    index('r_va_work_override_va_id_idx').on(t.vaId),
+    index('va_work_override_work_id_idx').on(t.workId),
+    index('va_work_override_va_id_idx').on(t.vaId),
   ],
 );
 
@@ -385,8 +383,8 @@ export const vWork = sqliteView('v_work', {
          COALESCE(m.circle_id, w.circle_id) AS circle_id,
          COALESCE(m.series_id, w.series_id) AS series_id,
          COALESCE(m.age_rating, w.age_rating) AS age_rating
-    FROM t_work w
-    LEFT JOIN t_work_meta_override m ON m.work_id = w.id
+    FROM works w
+    LEFT JOIN work_meta_overrides m ON m.work_id = w.id
    WHERE w.deleted_at IS NULL
 `);
 
@@ -396,17 +394,17 @@ export const vTagWork = sqliteView('v_tag_work', {
   tagId: integer('tag_id'),
 }).as(sql`
   SELECT o.work_id AS work_id, o.tag_id AS tag_id
-    FROM r_tag_work_override o
+    FROM tag_work_override o
    WHERE o.action = 'add'
   UNION
   SELECT w.work_id AS work_id, w.tag_id AS tag_id
-    FROM r_tag_work w
+    FROM tag_work w
    WHERE NOT EXISTS (
-           SELECT 1 FROM t_work_meta_override m
+           SELECT 1 FROM work_meta_overrides m
             WHERE m.work_id = w.work_id AND m.tags_cleared = 1
          )
      AND NOT EXISTS (
-           SELECT 1 FROM r_tag_work_override o
+           SELECT 1 FROM tag_work_override o
             WHERE o.work_id = w.work_id AND o.tag_id = w.tag_id
               AND o.action = 'remove'
          )
@@ -417,17 +415,17 @@ export const vVaWork = sqliteView('v_va_work', {
   vaId: text('va_id'),
 }).as(sql`
   SELECT o.work_id AS work_id, o.va_id AS va_id
-    FROM r_va_work_override o
+    FROM va_work_override o
    WHERE o.action = 'add'
   UNION
   SELECT w.work_id AS work_id, w.va_id AS va_id
-    FROM r_va_work w
+    FROM va_work w
    WHERE NOT EXISTS (
-           SELECT 1 FROM t_work_meta_override m
+           SELECT 1 FROM work_meta_overrides m
             WHERE m.work_id = w.work_id AND m.vas_cleared = 1
          )
      AND NOT EXISTS (
-           SELECT 1 FROM r_va_work_override o
+           SELECT 1 FROM va_work_override o
             WHERE o.work_id = w.work_id AND o.va_id = w.va_id
               AND o.action = 'remove'
          )

@@ -59,7 +59,7 @@ describe('setup routes', () => {
 
   /** 清空迁移门禁（新库 works 非空 + config 迁移标记），使下一次 run 可执行 */
   async function resetGates(): Promise<void> {
-    await db.run(sql`DELETE FROM t_work`);
+    await db.run(sql`DELETE FROM works`);
     setConfigForTesting({ ...getConfig(), kikoeruMigratedAt: undefined });
   }
 
@@ -119,8 +119,8 @@ describe('setup routes', () => {
   });
 
   it('GET /api/setup：空库 → needed=true；POST 创建管理员返回登录态；重复提交 403', async () => {
-    // 清空用户表回到未初始化状态（reviews/readStates 对 t_user 级联删除）
-    await db.run(sql`DELETE FROM t_work`);
+    // 清空用户表回到未初始化状态（reviews/readStates 对 users 级联删除）
+    await db.run(sql`DELETE FROM works`);
     await db.delete(users);
     setConfigForTesting({
       ...getConfig(),
@@ -212,7 +212,7 @@ describe('setup routes', () => {
   it('前端编排（先 run 后 setup）：迁移用户就位后提交 → 同名改密提权 200', async () => {
     // 重建 old-data 后回到空库未初始化状态
     buildOldData();
-    await db.run(sql`DELETE FROM t_work`);
+    await db.run(sql`DELETE FROM works`);
     await db.delete(users);
     setConfigForTesting({
       ...getConfig(),

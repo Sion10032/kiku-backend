@@ -1,77 +1,81 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "514f9bfb-e801-45b5-bb18-83e01c807633",
+  "id": "6f8993c0-f85a-40ed-b412-3011a5d07214",
   "prevIds": [
-    "48c7ff7a-9958-4485-b3af-c0143e70f01e"
+    "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
     {
-      "name": "t_circle",
+      "name": "circles",
       "entityType": "tables"
     },
     {
-      "name": "t_favourite",
+      "name": "favourites",
       "entityType": "tables"
     },
     {
-      "name": "t_read_state",
+      "name": "read_states",
       "entityType": "tables"
     },
     {
-      "name": "t_review",
+      "name": "reviews",
       "entityType": "tables"
     },
     {
-      "name": "t_series",
+      "name": "root_folders",
       "entityType": "tables"
     },
     {
-      "name": "t_settings_backup",
+      "name": "series",
       "entityType": "tables"
     },
     {
-      "name": "r_tag_work",
+      "name": "settings_backups",
       "entityType": "tables"
     },
     {
-      "name": "r_tag_work_override",
+      "name": "tag_work",
       "entityType": "tables"
     },
     {
-      "name": "t_tag",
+      "name": "tag_work_override",
       "entityType": "tables"
     },
     {
-      "name": "t_track",
+      "name": "tags",
       "entityType": "tables"
     },
     {
-      "name": "t_user_progress",
+      "name": "tracks",
       "entityType": "tables"
     },
     {
-      "name": "t_user",
+      "name": "user_progress",
       "entityType": "tables"
     },
     {
-      "name": "r_va_work",
+      "name": "users",
       "entityType": "tables"
     },
     {
-      "name": "r_va_work_override",
+      "name": "va_work",
       "entityType": "tables"
     },
     {
-      "name": "t_va",
+      "name": "va_work_override",
       "entityType": "tables"
     },
     {
-      "name": "t_work_meta_override",
+      "name": "vas",
       "entityType": "tables"
     },
     {
-      "name": "t_work",
+      "name": "work_meta_overrides",
+      "entityType": "tables"
+    },
+    {
+      "name": "works",
       "entityType": "tables"
     },
     {
@@ -82,7 +86,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "t_circle"
+      "table": "circles"
     },
     {
       "type": "text",
@@ -92,7 +96,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "t_circle"
+      "table": "circles"
     },
     {
       "type": "text",
@@ -102,7 +106,7 @@
       "generated": null,
       "name": "user_name",
       "entityType": "columns",
-      "table": "t_favourite"
+      "table": "favourites"
     },
     {
       "type": "text",
@@ -112,7 +116,7 @@
       "generated": null,
       "name": "target_type",
       "entityType": "columns",
-      "table": "t_favourite"
+      "table": "favourites"
     },
     {
       "type": "text",
@@ -122,7 +126,7 @@
       "generated": null,
       "name": "target_id",
       "entityType": "columns",
-      "table": "t_favourite"
+      "table": "favourites"
     },
     {
       "type": "text",
@@ -132,7 +136,7 @@
       "generated": null,
       "name": "created_at",
       "entityType": "columns",
-      "table": "t_favourite"
+      "table": "favourites"
     },
     {
       "type": "text",
@@ -142,7 +146,7 @@
       "generated": null,
       "name": "user_name",
       "entityType": "columns",
-      "table": "t_read_state"
+      "table": "read_states"
     },
     {
       "type": "text",
@@ -152,7 +156,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "t_read_state"
+      "table": "read_states"
     },
     {
       "type": "text",
@@ -162,7 +166,7 @@
       "generated": null,
       "name": "read_at",
       "entityType": "columns",
-      "table": "t_read_state"
+      "table": "read_states"
     },
     {
       "type": "text",
@@ -172,7 +176,7 @@
       "generated": null,
       "name": "user_name",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "type": "text",
@@ -182,7 +186,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "type": "integer",
@@ -192,7 +196,7 @@
       "generated": null,
       "name": "rating",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "type": "text",
@@ -202,7 +206,7 @@
       "generated": null,
       "name": "review_text",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "type": "text",
@@ -212,7 +216,7 @@
       "generated": null,
       "name": "created_at",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "type": "text",
@@ -222,7 +226,7 @@
       "generated": null,
       "name": "updated_at",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "type": "text",
@@ -230,9 +234,19 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "progress",
+      "name": "name",
       "entityType": "columns",
-      "table": "t_review"
+      "table": "root_folders"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "path",
+      "entityType": "columns",
+      "table": "root_folders"
     },
     {
       "type": "text",
@@ -242,7 +256,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "t_series"
+      "table": "series"
     },
     {
       "type": "text",
@@ -252,7 +266,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "t_series"
+      "table": "series"
     },
     {
       "type": "text",
@@ -262,7 +276,7 @@
       "generated": null,
       "name": "user_name",
       "entityType": "columns",
-      "table": "t_settings_backup"
+      "table": "settings_backups"
     },
     {
       "type": "text",
@@ -272,7 +286,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "t_settings_backup"
+      "table": "settings_backups"
     },
     {
       "type": "text",
@@ -282,7 +296,7 @@
       "generated": null,
       "name": "payload",
       "entityType": "columns",
-      "table": "t_settings_backup"
+      "table": "settings_backups"
     },
     {
       "type": "text",
@@ -292,7 +306,7 @@
       "generated": null,
       "name": "updated_at",
       "entityType": "columns",
-      "table": "t_settings_backup"
+      "table": "settings_backups"
     },
     {
       "type": "integer",
@@ -302,7 +316,7 @@
       "generated": null,
       "name": "tag_id",
       "entityType": "columns",
-      "table": "r_tag_work"
+      "table": "tag_work"
     },
     {
       "type": "text",
@@ -312,7 +326,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "r_tag_work"
+      "table": "tag_work"
     },
     {
       "type": "text",
@@ -322,7 +336,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "type": "integer",
@@ -332,7 +346,7 @@
       "generated": null,
       "name": "tag_id",
       "entityType": "columns",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "type": "text",
@@ -342,7 +356,7 @@
       "generated": null,
       "name": "action",
       "entityType": "columns",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "type": "integer",
@@ -352,7 +366,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "t_tag"
+      "table": "tags"
     },
     {
       "type": "text",
@@ -362,7 +376,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "t_tag"
+      "table": "tags"
     },
     {
       "type": "text",
@@ -372,7 +386,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "text",
@@ -382,7 +396,7 @@
       "generated": null,
       "name": "media_index",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "text",
@@ -392,7 +406,7 @@
       "generated": null,
       "name": "title",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "real",
@@ -402,7 +416,7 @@
       "generated": null,
       "name": "duration_sec",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "integer",
@@ -412,7 +426,7 @@
       "generated": null,
       "name": "size_bytes",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "real",
@@ -422,7 +436,7 @@
       "generated": null,
       "name": "loudness_lufs",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "real",
@@ -432,7 +446,7 @@
       "generated": null,
       "name": "loudness_true_peak_db",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "text",
@@ -442,7 +456,7 @@
       "generated": null,
       "name": "analyzed_at",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "text",
@@ -452,7 +466,7 @@
       "generated": null,
       "name": "analyze_error",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "text",
@@ -462,7 +476,7 @@
       "generated": null,
       "name": "loudness_curve",
       "entityType": "columns",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "type": "text",
@@ -472,7 +486,7 @@
       "generated": null,
       "name": "user_name",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "text",
@@ -482,7 +496,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "text",
@@ -492,7 +506,7 @@
       "generated": null,
       "name": "media_index",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "text",
@@ -502,7 +516,7 @@
       "generated": null,
       "name": "track_title",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "real",
@@ -512,7 +526,7 @@
       "generated": null,
       "name": "position",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "real",
@@ -522,7 +536,7 @@
       "generated": null,
       "name": "duration",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "text",
@@ -532,7 +546,7 @@
       "generated": null,
       "name": "updated_at",
       "entityType": "columns",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "type": "text",
@@ -542,7 +556,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "t_user"
+      "table": "users"
     },
     {
       "type": "text",
@@ -552,7 +566,7 @@
       "generated": null,
       "name": "password",
       "entityType": "columns",
-      "table": "t_user"
+      "table": "users"
     },
     {
       "type": "text",
@@ -562,7 +576,7 @@
       "generated": null,
       "name": "group",
       "entityType": "columns",
-      "table": "t_user"
+      "table": "users"
     },
     {
       "type": "integer",
@@ -572,7 +586,7 @@
       "generated": null,
       "name": "token_version",
       "entityType": "columns",
-      "table": "t_user"
+      "table": "users"
     },
     {
       "type": "text",
@@ -582,7 +596,7 @@
       "generated": null,
       "name": "va_id",
       "entityType": "columns",
-      "table": "r_va_work"
+      "table": "va_work"
     },
     {
       "type": "text",
@@ -592,7 +606,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "r_va_work"
+      "table": "va_work"
     },
     {
       "type": "text",
@@ -602,7 +616,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "type": "text",
@@ -612,7 +626,7 @@
       "generated": null,
       "name": "va_id",
       "entityType": "columns",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "type": "text",
@@ -622,7 +636,7 @@
       "generated": null,
       "name": "action",
       "entityType": "columns",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "type": "text",
@@ -632,7 +646,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "t_va"
+      "table": "vas"
     },
     {
       "type": "text",
@@ -642,7 +656,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "t_va"
+      "table": "vas"
     },
     {
       "type": "text",
@@ -652,7 +666,7 @@
       "generated": null,
       "name": "work_id",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -662,7 +676,7 @@
       "generated": null,
       "name": "title",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -672,7 +686,7 @@
       "generated": null,
       "name": "circle_id",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -682,7 +696,7 @@
       "generated": null,
       "name": "series_id",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -692,7 +706,7 @@
       "generated": null,
       "name": "age_rating",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "integer",
@@ -702,7 +716,7 @@
       "generated": null,
       "name": "tags_cleared",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "integer",
@@ -712,7 +726,7 @@
       "generated": null,
       "name": "vas_cleared",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -722,7 +736,7 @@
       "generated": null,
       "name": "updated_by",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -732,7 +746,7 @@
       "generated": null,
       "name": "updated_at",
       "entityType": "columns",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "type": "text",
@@ -742,7 +756,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -752,7 +766,7 @@
       "generated": null,
       "name": "root_folder",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -762,7 +776,7 @@
       "generated": null,
       "name": "dir",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -772,7 +786,7 @@
       "generated": null,
       "name": "title",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -782,7 +796,7 @@
       "generated": null,
       "name": "circle_id",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -792,7 +806,7 @@
       "generated": null,
       "name": "age_rating",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -802,7 +816,7 @@
       "generated": null,
       "name": "release",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "integer",
@@ -812,7 +826,7 @@
       "generated": null,
       "name": "dl_count",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "integer",
@@ -822,7 +836,7 @@
       "generated": null,
       "name": "price",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "integer",
@@ -832,7 +846,7 @@
       "generated": null,
       "name": "review_count",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "integer",
@@ -842,7 +856,7 @@
       "generated": null,
       "name": "rate_count",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "real",
@@ -852,7 +866,7 @@
       "generated": null,
       "name": "rate_average_2dp",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -862,7 +876,7 @@
       "generated": null,
       "name": "rate_count_detail",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -872,7 +886,7 @@
       "generated": null,
       "name": "rank",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -882,7 +896,7 @@
       "generated": null,
       "name": "language",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -892,7 +906,7 @@
       "generated": null,
       "name": "source_id",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -902,7 +916,7 @@
       "generated": null,
       "name": "series_id",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "text",
@@ -912,7 +926,7 @@
       "generated": null,
       "name": "deleted_at",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "real",
@@ -922,7 +936,7 @@
       "generated": null,
       "name": "loudness_lufs",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "type": "real",
@@ -932,337 +946,352 @@
       "generated": null,
       "name": "loudness_true_peak_db",
       "entityType": "columns",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
         "user_name"
       ],
-      "tableTo": "t_user",
+      "tableTo": "users",
       "columnsTo": [
         "name"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_t_favourite_user_name_t_user_name_fk",
+      "name": "fk_favourites_user_name_users_name_fk",
       "entityType": "fks",
-      "table": "t_favourite"
+      "table": "favourites"
     },
     {
       "columns": [
         "user_name"
       ],
-      "tableTo": "t_user",
+      "tableTo": "users",
       "columnsTo": [
         "name"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_t_read_state_user_name_t_user_name_fk",
+      "name": "fk_read_states_user_name_users_name_fk",
       "entityType": "fks",
-      "table": "t_read_state"
+      "table": "read_states"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_t_read_state_work_id_t_work_id_fk",
+      "name": "fk_read_states_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "t_read_state"
+      "table": "read_states"
     },
     {
       "columns": [
         "user_name"
       ],
-      "tableTo": "t_user",
+      "tableTo": "users",
       "columnsTo": [
         "name"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "t_review_user_name_t_user_name_fk",
+      "name": "fk_reviews_user_name_users_name_fk",
       "entityType": "fks",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "t_review_work_id_t_work_id_fk",
+      "name": "fk_reviews_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "columns": [
         "user_name"
       ],
-      "tableTo": "t_user",
+      "tableTo": "users",
       "columnsTo": [
         "name"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_t_settings_backup_user_name_t_user_name_fk",
+      "name": "fk_settings_backups_user_name_users_name_fk",
       "entityType": "fks",
-      "table": "t_settings_backup"
+      "table": "settings_backups"
     },
     {
       "columns": [
         "tag_id"
       ],
-      "tableTo": "t_tag",
+      "tableTo": "tags",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "r_tag_work_tag_id_t_tag_id_fk",
+      "name": "fk_tag_work_tag_id_tags_id_fk",
       "entityType": "fks",
-      "table": "r_tag_work"
+      "table": "tag_work"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "r_tag_work_work_id_t_work_id_fk",
+      "name": "fk_tag_work_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "r_tag_work"
+      "table": "tag_work"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_r_tag_work_override_work_id_t_work_id_fk",
+      "name": "fk_tag_work_override_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "columns": [
         "tag_id"
       ],
-      "tableTo": "t_tag",
+      "tableTo": "tags",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_r_tag_work_override_tag_id_t_tag_id_fk",
+      "name": "fk_tag_work_override_tag_id_tags_id_fk",
       "entityType": "fks",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_t_track_work_id_t_work_id_fk",
+      "name": "fk_tracks_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "columns": [
         "user_name"
       ],
-      "tableTo": "t_user",
+      "tableTo": "users",
       "columnsTo": [
         "name"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "t_user_progress_user_name_t_user_name_fk",
+      "name": "fk_user_progress_user_name_users_name_fk",
       "entityType": "fks",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "t_user_progress_work_id_t_work_id_fk",
+      "name": "fk_user_progress_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "columns": [
         "va_id"
       ],
-      "tableTo": "t_va",
+      "tableTo": "vas",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "r_va_work_va_id_t_va_id_fk",
+      "name": "fk_va_work_va_id_vas_id_fk",
       "entityType": "fks",
-      "table": "r_va_work"
+      "table": "va_work"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "r_va_work_work_id_t_work_id_fk",
+      "name": "fk_va_work_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "r_va_work"
+      "table": "va_work"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_r_va_work_override_work_id_t_work_id_fk",
+      "name": "fk_va_work_override_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "columns": [
         "va_id"
       ],
-      "tableTo": "t_va",
+      "tableTo": "vas",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_r_va_work_override_va_id_t_va_id_fk",
+      "name": "fk_va_work_override_va_id_vas_id_fk",
       "entityType": "fks",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "columns": [
         "work_id"
       ],
-      "tableTo": "t_work",
+      "tableTo": "works",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_t_work_meta_override_work_id_t_work_id_fk",
+      "name": "fk_work_meta_overrides_work_id_works_id_fk",
       "entityType": "fks",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "columns": [
         "circle_id"
       ],
-      "tableTo": "t_circle",
+      "tableTo": "circles",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "CASCADE",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_t_work_meta_override_circle_id_t_circle_id_fk",
+      "name": "fk_work_meta_overrides_circle_id_circles_id_fk",
       "entityType": "fks",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
     },
     {
       "columns": [
         "series_id"
       ],
-      "tableTo": "t_series",
+      "tableTo": "series",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_t_work_meta_override_series_id_t_series_id_fk",
+      "name": "fk_work_meta_overrides_series_id_series_id_fk",
       "entityType": "fks",
-      "table": "t_work_meta_override"
+      "table": "work_meta_overrides"
+    },
+    {
+      "columns": [
+        "root_folder"
+      ],
+      "tableTo": "root_folders",
+      "columnsTo": [
+        "name"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_works_root_folder_root_folders_name_fk",
+      "entityType": "fks",
+      "table": "works"
     },
     {
       "columns": [
         "circle_id"
       ],
-      "tableTo": "t_circle",
+      "tableTo": "circles",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "CASCADE",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_t_work_circle_id_t_circle_id_fk",
+      "name": "fk_works_circle_id_circles_id_fk",
       "entityType": "fks",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
         "series_id"
       ],
-      "tableTo": "t_series",
+      "tableTo": "series",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_t_work_series_id_t_series_id_fk",
+      "name": "fk_works_series_id_series_id_fk",
       "entityType": "fks",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
@@ -1271,9 +1300,9 @@
         "target_id"
       ],
       "nameExplicit": false,
-      "name": "t_favourite_pk",
+      "name": "favourites_pk",
       "entityType": "pks",
-      "table": "t_favourite"
+      "table": "favourites"
     },
     {
       "columns": [
@@ -1281,9 +1310,9 @@
         "work_id"
       ],
       "nameExplicit": false,
-      "name": "t_read_state_pk",
+      "name": "read_states_pk",
       "entityType": "pks",
-      "table": "t_read_state"
+      "table": "read_states"
     },
     {
       "columns": [
@@ -1291,9 +1320,9 @@
         "work_id"
       ],
       "nameExplicit": false,
-      "name": "t_review_user_name_work_id_pk",
+      "name": "reviews_pk",
       "entityType": "pks",
-      "table": "t_review"
+      "table": "reviews"
     },
     {
       "columns": [
@@ -1301,9 +1330,9 @@
         "name"
       ],
       "nameExplicit": false,
-      "name": "t_settings_backup_pk",
+      "name": "settings_backups_pk",
       "entityType": "pks",
-      "table": "t_settings_backup"
+      "table": "settings_backups"
     },
     {
       "columns": [
@@ -1311,9 +1340,9 @@
         "work_id"
       ],
       "nameExplicit": false,
-      "name": "r_tag_work_tag_id_work_id_pk",
+      "name": "tag_work_pk",
       "entityType": "pks",
-      "table": "r_tag_work"
+      "table": "tag_work"
     },
     {
       "columns": [
@@ -1321,9 +1350,9 @@
         "tag_id"
       ],
       "nameExplicit": false,
-      "name": "r_tag_work_override_pk",
+      "name": "tag_work_override_pk",
       "entityType": "pks",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "columns": [
@@ -1331,9 +1360,9 @@
         "media_index"
       ],
       "nameExplicit": false,
-      "name": "t_track_pk",
+      "name": "tracks_pk",
       "entityType": "pks",
-      "table": "t_track"
+      "table": "tracks"
     },
     {
       "columns": [
@@ -1342,9 +1371,9 @@
         "media_index"
       ],
       "nameExplicit": false,
-      "name": "t_user_progress_user_name_work_id_media_index_pk",
+      "name": "user_progress_pk",
       "entityType": "pks",
-      "table": "t_user_progress"
+      "table": "user_progress"
     },
     {
       "columns": [
@@ -1352,9 +1381,9 @@
         "work_id"
       ],
       "nameExplicit": false,
-      "name": "r_va_work_va_id_work_id_pk",
+      "name": "va_work_pk",
       "entityType": "pks",
-      "table": "r_va_work"
+      "table": "va_work"
     },
     {
       "columns": [
@@ -1362,35 +1391,17 @@
         "va_id"
       ],
       "nameExplicit": false,
-      "name": "r_va_work_override_pk",
+      "name": "va_work_override_pk",
       "entityType": "pks",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "columns": [
         "id"
       ],
       "nameExplicit": false,
-      "name": "t_circle_pk",
-      "table": "t_circle",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "t_series_pk",
-      "table": "t_series",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "t_tag_pk",
-      "table": "t_tag",
+      "name": "circles_pk",
+      "table": "circles",
       "entityType": "pks"
     },
     {
@@ -1398,8 +1409,8 @@
         "name"
       ],
       "nameExplicit": false,
-      "name": "t_user_pk",
-      "table": "t_user",
+      "name": "root_folders_pk",
+      "table": "root_folders",
       "entityType": "pks"
     },
     {
@@ -1407,8 +1418,35 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "t_va_pk",
-      "table": "t_va",
+      "name": "series_pk",
+      "table": "series",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "tags_pk",
+      "table": "tags",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "name"
+      ],
+      "nameExplicit": false,
+      "name": "users_pk",
+      "table": "users",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "vas_pk",
+      "table": "vas",
       "entityType": "pks"
     },
     {
@@ -1416,8 +1454,8 @@
         "work_id"
       ],
       "nameExplicit": false,
-      "name": "t_work_meta_override_pk",
-      "table": "t_work_meta_override",
+      "name": "work_meta_overrides_pk",
+      "table": "work_meta_overrides",
       "entityType": "pks"
     },
     {
@@ -1425,8 +1463,8 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "t_work_pk",
-      "table": "t_work",
+      "name": "works_pk",
+      "table": "works",
       "entityType": "pks"
     },
     {
@@ -1439,9 +1477,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "r_tag_work_work_id_idx",
+      "name": "tag_work_work_id_idx",
       "entityType": "indexes",
-      "table": "r_tag_work"
+      "table": "tag_work"
     },
     {
       "columns": [
@@ -1453,9 +1491,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "r_tag_work_override_work_id_idx",
+      "name": "tag_work_override_work_id_idx",
       "entityType": "indexes",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "columns": [
@@ -1467,9 +1505,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "r_tag_work_override_tag_id_idx",
+      "name": "tag_work_override_tag_id_idx",
       "entityType": "indexes",
-      "table": "r_tag_work_override"
+      "table": "tag_work_override"
     },
     {
       "columns": [
@@ -1481,9 +1519,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "r_va_work_work_id_idx",
+      "name": "va_work_work_id_idx",
       "entityType": "indexes",
-      "table": "r_va_work"
+      "table": "va_work"
     },
     {
       "columns": [
@@ -1495,9 +1533,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "r_va_work_override_work_id_idx",
+      "name": "va_work_override_work_id_idx",
       "entityType": "indexes",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "columns": [
@@ -1509,9 +1547,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "r_va_work_override_va_id_idx",
+      "name": "va_work_override_va_id_idx",
       "entityType": "indexes",
-      "table": "r_va_work_override"
+      "table": "va_work_override"
     },
     {
       "columns": [
@@ -1521,11 +1559,11 @@
         }
       ],
       "isUnique": false,
-      "where": "\"t_work\".\"deleted_at\" is null",
+      "where": "\"works\".\"deleted_at\" is null",
       "origin": "manual",
-      "name": "t_work_release_idx",
+      "name": "works_release_idx",
       "entityType": "indexes",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
@@ -1535,11 +1573,11 @@
         }
       ],
       "isUnique": false,
-      "where": "\"t_work\".\"deleted_at\" is null",
+      "where": "\"works\".\"deleted_at\" is null",
       "origin": "manual",
-      "name": "t_work_dl_count_idx",
+      "name": "works_dl_count_idx",
       "entityType": "indexes",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
@@ -1549,11 +1587,11 @@
         }
       ],
       "isUnique": false,
-      "where": "\"t_work\".\"deleted_at\" is null",
+      "where": "\"works\".\"deleted_at\" is null",
       "origin": "manual",
-      "name": "t_work_price_idx",
+      "name": "works_price_idx",
       "entityType": "indexes",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
@@ -1563,11 +1601,11 @@
         }
       ],
       "isUnique": false,
-      "where": "\"t_work\".\"deleted_at\" is null",
+      "where": "\"works\".\"deleted_at\" is null",
       "origin": "manual",
-      "name": "t_work_rate_average_2dp_idx",
+      "name": "works_rate_average_2dp_idx",
       "entityType": "indexes",
-      "table": "t_work"
+      "table": "works"
     },
     {
       "columns": [
@@ -1577,28 +1615,28 @@
         }
       ],
       "isUnique": false,
-      "where": "\"t_work\".\"deleted_at\" is null",
+      "where": "\"works\".\"deleted_at\" is null",
       "origin": "manual",
-      "name": "t_work_review_count_idx",
+      "name": "works_review_count_idx",
       "entityType": "indexes",
-      "table": "t_work"
+      "table": "works"
     },
     {
-      "definition": "\n  SELECT o.work_id AS work_id, o.tag_id AS tag_id\n    FROM r_tag_work_override o\n   WHERE o.action = 'add'\n  UNION\n  SELECT w.work_id AS work_id, w.tag_id AS tag_id\n    FROM r_tag_work w\n   WHERE NOT EXISTS (\n           SELECT 1 FROM t_work_meta_override m\n            WHERE m.work_id = w.work_id AND m.tags_cleared = 1\n         )\n     AND NOT EXISTS (\n           SELECT 1 FROM r_tag_work_override o\n            WHERE o.work_id = w.work_id AND o.tag_id = w.tag_id\n              AND o.action = 'remove'\n         )\n",
+      "definition": "\n  SELECT o.work_id AS work_id, o.tag_id AS tag_id\n    FROM tag_work_override o\n   WHERE o.action = 'add'\n  UNION\n  SELECT w.work_id AS work_id, w.tag_id AS tag_id\n    FROM tag_work w\n   WHERE NOT EXISTS (\n           SELECT 1 FROM work_meta_overrides m\n            WHERE m.work_id = w.work_id AND m.tags_cleared = 1\n         )\n     AND NOT EXISTS (\n           SELECT 1 FROM tag_work_override o\n            WHERE o.work_id = w.work_id AND o.tag_id = w.tag_id\n              AND o.action = 'remove'\n         )\n",
       "isExisting": false,
       "error": null,
       "name": "v_tag_work",
       "entityType": "views"
     },
     {
-      "definition": "\n  SELECT o.work_id AS work_id, o.va_id AS va_id\n    FROM r_va_work_override o\n   WHERE o.action = 'add'\n  UNION\n  SELECT w.work_id AS work_id, w.va_id AS va_id\n    FROM r_va_work w\n   WHERE NOT EXISTS (\n           SELECT 1 FROM t_work_meta_override m\n            WHERE m.work_id = w.work_id AND m.vas_cleared = 1\n         )\n     AND NOT EXISTS (\n           SELECT 1 FROM r_va_work_override o\n            WHERE o.work_id = w.work_id AND o.va_id = w.va_id\n              AND o.action = 'remove'\n         )\n",
+      "definition": "\n  SELECT o.work_id AS work_id, o.va_id AS va_id\n    FROM va_work_override o\n   WHERE o.action = 'add'\n  UNION\n  SELECT w.work_id AS work_id, w.va_id AS va_id\n    FROM va_work w\n   WHERE NOT EXISTS (\n           SELECT 1 FROM work_meta_overrides m\n            WHERE m.work_id = w.work_id AND m.vas_cleared = 1\n         )\n     AND NOT EXISTS (\n           SELECT 1 FROM va_work_override o\n            WHERE o.work_id = w.work_id AND o.va_id = w.va_id\n              AND o.action = 'remove'\n         )\n",
       "isExisting": false,
       "error": null,
       "name": "v_va_work",
       "entityType": "views"
     },
     {
-      "definition": "\n  SELECT w.id AS work_id,\n         COALESCE(m.title, w.title) AS title,\n         COALESCE(m.circle_id, w.circle_id) AS circle_id,\n         COALESCE(m.series_id, w.series_id) AS series_id,\n         COALESCE(m.age_rating, w.age_rating) AS age_rating\n    FROM t_work w\n    LEFT JOIN t_work_meta_override m ON m.work_id = w.id\n   WHERE w.deleted_at IS NULL\n",
+      "definition": "\n  SELECT w.id AS work_id,\n         COALESCE(m.title, w.title) AS title,\n         COALESCE(m.circle_id, w.circle_id) AS circle_id,\n         COALESCE(m.series_id, w.series_id) AS series_id,\n         COALESCE(m.age_rating, w.age_rating) AS age_rating\n    FROM works w\n    LEFT JOIN work_meta_overrides m ON m.work_id = w.id\n   WHERE w.deleted_at IS NULL\n",
       "isExisting": false,
       "error": null,
       "name": "v_work",

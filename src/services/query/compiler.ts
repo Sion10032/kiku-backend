@@ -22,7 +22,7 @@ type FieldName = (typeof FIELD_WHITELIST)[number];
  * 语义见计划 D2/D3：默认精确、通配符模糊、裸词五字段 LIKE、白名单外 400。
  * 返回 undefined = 查询无实质条件（如空括号）。
  *
- * worksTable：外层 t_work 表引用。默认用 schema 的 works（渲染 "t_work"），
+ * worksTable：外层 works 表引用。默认用 schema 的 works（渲染 "works"），
  * 适用于普通 select/count；db.query.*.findMany 的 RAW where 回调中主表被
  * drizzle 别名化（"d0"），此时须传入回调的 t 参数，否则列引用无法解析。
  */
@@ -164,9 +164,9 @@ function relationProbe(
   t: typeof works,
   match: NameMatch,
 ): SQL {
-  const rel = kind === 'tag' ? 'r_tag_work' : 'r_va_work';
-  const ovr = kind === 'tag' ? 'r_tag_work_override' : 'r_va_work_override';
-  const dim = kind === 'tag' ? 't_tag' : 't_va';
+  const rel = kind === 'tag' ? 'tag_work' : 'va_work';
+  const ovr = kind === 'tag' ? 'tag_work_override' : 'va_work_override';
+  const dim = kind === 'tag' ? 'tags' : 'vas';
   const fk = kind === 'tag' ? 'tag_id' : 'va_id';
   const clearedCol = kind === 'tag' ? 'tags_cleared' : 'vas_cleared';
   return sql`(
@@ -175,7 +175,7 @@ function relationProbe(
         join ${sql.raw(dim)} x ON x.id = tw.${sql.raw(fk)}
        WHERE tw.work_id = ${t.id} AND ${nameMatch('x', match)}
          AND NOT EXISTS (
-           SELECT 1 FROM t_work_meta_override m
+           SELECT 1 FROM work_meta_overrides m
             WHERE m.work_id = ${t.id}
               AND (m.${sql.raw(clearedCol)} = 1
                OR EXISTS (
@@ -206,12 +206,12 @@ function circleProbe(t: typeof works, match: NameMatch): SQL {
         db.select({ id: circles.id }).from(circles).where(baseCond),
       )}
       AND NOT EXISTS (
-        SELECT 1 FROM t_work_meta_override m
+        SELECT 1 FROM work_meta_overrides m
          WHERE m.work_id = ${t.id} AND m.circle_id IS NOT NULL
       )
     ) OR EXISTS (
-      SELECT 1 FROM t_work_meta_override m
-        join t_circle c ON c.id = m.circle_id
+      SELECT 1 FROM work_meta_overrides m
+        join circles c ON c.id = m.circle_id
        WHERE m.work_id = ${t.id} AND ${nameMatch('c', match)}
     )
   )`;
@@ -229,12 +229,12 @@ function seriesProbe(t: typeof works, match: NameMatch): SQL {
         db.select({ id: series.id }).from(series).where(baseCond),
       )}
       AND NOT EXISTS (
-        SELECT 1 FROM t_work_meta_override m
+        SELECT 1 FROM work_meta_overrides m
          WHERE m.work_id = ${t.id} AND m.series_id IS NOT NULL
       )
     ) OR EXISTS (
-      SELECT 1 FROM t_work_meta_override m
-        join t_series s ON s.id = m.series_id
+      SELECT 1 FROM work_meta_overrides m
+        join series s ON s.id = m.series_id
        WHERE m.work_id = ${t.id} AND ${nameMatch('s', match)}
     )
   )`;
@@ -245,11 +245,11 @@ function ageRatingProbe(value: AgeRating, t: typeof works): SQL {
     (
       ${t.ageRating} = ${value}
       AND NOT EXISTS (
-        SELECT 1 FROM t_work_meta_override m
+        SELECT 1 FROM work_meta_overrides m
          WHERE m.work_id = ${t.id} AND m.age_rating IS NOT NULL
       )
     ) OR EXISTS (
-      SELECT 1 FROM t_work_meta_override m
+      SELECT 1 FROM work_meta_overrides m
        WHERE m.work_id = ${t.id} AND m.age_rating = ${value}
     )
   )`;
@@ -269,14 +269,14 @@ function overriddenProbe(
   const field = expression.value.toLowerCase();
   if (field === 'title') {
     return sql`EXISTS (
-      SELECT 1 FROM t_work_meta_override m
+      SELECT 1 FROM work_meta_overrides m
        WHERE m.work_id = ${t.id} AND m.title IS NOT NULL
     )`;
   }
   if (field === 'any') {
     // pruneIfEmpty 保证覆盖主行存在即有有效覆盖内容
     return sql`EXISTS (
-      SELECT 1 FROM t_work_meta_override m
+      SELECT 1 FROM work_meta_overrides m
        WHERE m.work_id = ${t.id}
     )`;
   }
@@ -341,7 +341,7 @@ function compileBareTerm(
   const match: NameMatch = { like: pattern };
   const combined = or(
     sql`COALESCE(
-          (SELECT m.title FROM t_work_meta_override m WHERE m.work_id = ${t.id}),
+          (SELECT m.title FROM work_meta_overrides m WHERE m.work_id = ${t.id}),
           ${t.title}
         ) LIKE ${pattern} ESCAPE '\\'`,
     likeSql(t.id, pattern),

@@ -1,5 +1,5 @@
 /**
- * 临时：向 t_user 插入测试用户（与后端 hashPassword 同算法：md5(password + md5secret)）。
+ * 临时：向 users 插入测试用户（与后端 hashPassword 同算法：md5(password + md5secret)）。
  *
  * 运行：bun run scripts/create-test-users.ts
  * 可重复执行（用户存在则重置为脚本内密码）。
@@ -38,7 +38,7 @@ const USERS = [
 
 for (const u of USERS) {
   db.run(
-    'INSERT INTO t_user (name, password, "group") VALUES (?, ?, ?) ' +
+    'INSERT INTO users (name, password, "group") VALUES (?, ?, ?) ' +
       'ON CONFLICT(name) DO UPDATE SET password = excluded.password, "group" = excluded."group"',
     [u.name, hashPassword(u.password), u.group],
   );

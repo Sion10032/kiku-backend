@@ -42,7 +42,7 @@ function buildOldData(opts: { withConfig?: boolean; covers?: number } = {}) {
 
 /** 清空迁移门禁（新库 works 非空 + config 迁移标记），使下一次 start 可执行 */
 async function resetGates(): Promise<void> {
-  await db.run(sql`DELETE FROM t_work`);
+  await db.run(sql`DELETE FROM works`);
   setConfigForTesting({ ...getConfig(), kikoeruMigratedAt: undefined });
 }
 

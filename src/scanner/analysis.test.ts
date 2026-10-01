@@ -103,7 +103,7 @@ describe('performAnalysis（注入 fake measure）', () => {
       [-70, null, -18.5],
       [-70, null, -18.5],
     ]);
-    // Task 4 阶段 formatWork 尚未带响度字段（Task 6 才加），直接断言 t_work 行
+    // Task 4 阶段 formatWork 尚未带响度字段（Task 6 才加），直接断言 works 行
     const [row] = await db
       .select({ lufs: works.loudnessLufs })
       .from(works)

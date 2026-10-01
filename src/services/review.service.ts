@@ -39,7 +39,7 @@ export async function upsertReview(data: {
   reviewText?: string;
 }): Promise<UpsertReviewOutcome> {
   // FK 防护：作品不在库（或已软删）→ 'work-missing'（route 映射 404），
-  // 否则 t_review.work_id 外键违反会抛 500
+  // 否则 reviews.work_id 外键违反会抛 500
   if (!(await liveWorkExists(data.workId))) {
     return { ok: false, reason: 'work-missing' };
   }

@@ -152,7 +152,7 @@ async function cleanNewDb() {
   await db.delete(tags);
   await db.delete(vas);
   await db.delete(circles);
-  await db.run(sql`DELETE FROM t_user`);
+  await db.run(sql`DELETE FROM users`);
   setConfigForTesting({ ...getConfig(), kikoeruMigratedAt: undefined });
 }
 

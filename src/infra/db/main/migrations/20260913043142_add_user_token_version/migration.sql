@@ -1,1 +1,0 @@
-ALTER TABLE `t_user` ADD `token_version` integer DEFAULT 0 NOT NULL;

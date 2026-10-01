@@ -1,1 +1,0 @@
-ALTER TABLE `t_work` ADD `deleted_at` text;

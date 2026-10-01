@@ -91,7 +91,7 @@ export const formattedWorkSchema = z.object({
   userProgress: userProgressSchema.nullable(),
   /** 当前用户已读标记（独立于进度；未登录恒 false） */
   read: z.boolean(),
-  /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
+  /** 作品总时长（秒，SUM(tracks.duration_sec)）；无音轨/全未知为 null */
   duration: z.number().nullable(),
   /** 作品整合响度（LUFS，已分析音轨按时长加权）；null = 未分析 */
   loudnessLufs: z.number().nullable(),

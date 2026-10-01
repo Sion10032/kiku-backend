@@ -13,7 +13,7 @@ setupTestEnvironment();
 const RUN = Date.now().toString(36);
 const TEST_USER = `review_route_${RUN}`;
 const WORK_ID = `RJ${RUN.padStart(8, '0').slice(-8)}`;
-// 软删作品用不同的前缀构造，避免与 WORK_ID 撞 id（都进 t_work 主键）
+// 软删作品用不同的前缀构造，避免与 WORK_ID 撞 id（都进 works 主键）
 const DELETED_WORK_ID = `RJDEL${RUN}`;
 // circle 主键是 DLsite maker_id 形态的 text；RUN 的 base36 串未必含足够数字，补齐 3 位
 const CIRCLE_ID = `RG91${RUN.replace(/\D/g, '').padEnd(3, '0').slice(0, 3)}`;

@@ -45,7 +45,7 @@ const SAMPLE_LIMIT = 50;
 
 /**
  * 标题净化（管理员一次性工具，批量正则替换）。
- * - 基准 = original title（t_work.title），不是生效值——避免二次叠加；
+ * - 基准 = original title（works.title），不是生效值——避免二次叠加；
  * - 命中即净化（含已有 title 覆盖的作品）：排除/圈定由查询条件
  *   `overridden:title` / `-overridden:title` 表达，`overridden` 计数仅作预览信息；
  * - 替换无变化的作品忽略（不计入 matched、不写覆盖行）；

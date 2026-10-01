@@ -565,7 +565,7 @@ export async function migrateFromKikoeru(
     }
 
     // config 副作用：md5secret 覆盖（保旧密码可用）+ 迁移标记。
-    // rootFolders 不再回写 config.json —— 已搬进 t_root_folder（见上面 3.5 段）。
+    // rootFolders 不再回写 config.json —— 已搬进 root_folders（见上面 3.5 段）。
     // （oldConfig 已在门禁 3 解析成功；这里只做值级容错：旧 config.json 是用户可
     // 手改的文件，md5secret 值类型畸形按「不存在」跳过，避免 updateConfig 内
     // configSchema.parse 抛错 → ok=false 且门禁 2 从此永久拒绝重跑）

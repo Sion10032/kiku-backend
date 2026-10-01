@@ -396,7 +396,7 @@ export interface FormattedWork {
   userProgress: WorkProgressSummary | null;
   /** 当前用户已读标记（独立于进度；未登录恒 false） */
   read: boolean;
-  /** 作品总时长（秒，SUM(t_track.duration_sec)）；无音轨/全未知为 null */
+  /** 作品总时长（秒，SUM(tracks.duration_sec)）；无音轨/全未知为 null */
   duration: number | null;
   /** 作品整合响度（LUFS，已分析音轨按时长加权）；null = 未分析 */
   loudnessLufs: number | null;
@@ -442,7 +442,7 @@ function formatWork(row: WorkWithRelations): FormattedWork {
 }
 
 /**
- * 批量注入作品总时长（SUM(t_track.duration_sec)，匿名也注入）。
+ * 批量注入作品总时长（SUM(tracks.duration_sec)，匿名也注入）。
  * 整页一次聚合查询，避免 N+1。
  */
 async function attachTotalDuration(items: FormattedWork[]): Promise<void> {
@@ -656,7 +656,7 @@ export async function queryWorks(
   // 常规路径（有筛选 or 非随机排序）。
   // count 查询未别名化，用默认 works 表编译即可；
   // findMany 的 RAW 回调中主表被 drizzle 别名化（"d0"），须用回调的 t 重新编译，
-  // 否则 "t_work"."col" 列引用无法解析（SQLiteError: no such column）。
+  // 否则 "works"."col" 列引用无法解析（SQLiteError: no such column）。
   const countWhere = ast
     ? and(compileQuery(ast), isNull(works.deletedAt))
     : isNull(works.deletedAt);
@@ -731,7 +731,7 @@ async function attachFavourited<T extends { id: string | number }>(
  * - 社团/系列：v_work 按 circle_id / series_id 分组（视图内已 COALESCE 覆盖值、
  *   过滤软删，series_id 为 NULL 的行自然不匹配实体 id）
  * - 标签/声优：v_tag_work / v_va_work 本身即生效关系（add ∪ 原始−remove−cleared），
- *   但不过滤软删，需 join t_work 补 deleted_at IS NULL
+ *   但不过滤软删，需 join works 补 deleted_at IS NULL
  *
  * 每类型一条分组查询，无 N+1；无作品的实体由调用方补 0。
  */
