@@ -3,10 +3,11 @@ import { join } from 'node:path';
 import type { Config } from '../infra/config/schema.js';
 import { db } from '../infra/db/main/index.js';
 import { circles } from '../infra/db/main/schema.js';
+import { folderHasAudio } from '../infra/fs/source/folder.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
 import { treeHasAudio } from '../infra/fs/source/tree.js';
 import { UnsupportedArchiveError } from '../infra/fs/source/types.js';
-import { collectWorkEntries } from '../infra/fs/utils.js';
+import { collectWorkEntries, type WorkEntry } from '../infra/fs/utils.js';
 import { fetchDLsiteWorkInfo } from '../infra/scraper/dlsite.js';
 import { workSourceResolver } from '../infra/sources/index.js';
 import { deriveManualTitle, MANUAL_PREFIXES } from '../infra/sources/manual.js';
@@ -148,15 +149,18 @@ export function applyScanEvent(
   }
 }
 
-/** 单条日志事件（模块级，scan/update 两模式共享）。 */
+/** 单条日志事件构造（模块级，scan/update 两模式共享；顺序 yield* 与并发收集共用）。 */
+const logEvent = (level: string, message: string): ScanEvent => ({
+  type: 'SCAN_LOG',
+  log: { level, message, timestamp: new Date().toISOString() },
+});
+
+/** 单条日志事件 generator（logEvent 的 yield* 包装）。 */
 const emitLog = function* (
   level: string,
   message: string,
 ): Generator<ScanEvent, void, unknown> {
-  yield {
-    type: 'SCAN_LOG',
-    log: { level, message, timestamp: new Date().toISOString() },
-  };
+  yield logEvent(level, message);
 };
 
 /** 任务快照（模块级，两模式共享）。 */
@@ -374,6 +378,95 @@ async function* syncWorkMetadataAndTracks(
 }
 
 /**
+ * 单任务执行体（并发池 worker 调用）：DLsite 元数据 + 音轨同步，
+ * 事件缓冲为整组返回（避免跨任务交错，快照与日志按任务成组）。
+ * created 缺省表示任务失败（错误已写入 task.error 并包含在事件里）；
+ * added/updated/failed 计数由调用方按返回值累计。
+ */
+async function runWorkTask(
+  task: ScanTask,
+  signal: AbortSignal,
+): Promise<{ events: ScanEvent[]; created?: boolean }> {
+  const events: ScanEvent[] = [];
+  task.status = 'scanning';
+  events.push({ type: 'SCAN_TASK', task: stripTask(task) });
+
+  try {
+    // 手动作品走本地同步分支（零网络），其余走 DLsite 抓取。
+    const gen =
+      workSourceResolver.classify(task.workCode) === 'manual'
+        ? syncManualWorkMetadata(
+            task.workCode,
+            task.rootFolder,
+            task.relativePath,
+            task.dirName,
+            task.absDir ?? '',
+            signal,
+          )
+        : syncWorkMetadataAndTracks(
+            task.workCode,
+            task.rootFolder,
+            task.relativePath,
+            signal,
+          );
+    let r = await gen.next();
+    while (!r.done) {
+      events.push(r.value);
+      r = await gen.next();
+    }
+    const { title, created } = r.value;
+    if (created) {
+      events.push(logEvent('info', `Added: ${task.workCode} - ${title}`));
+    } else {
+      events.push(logEvent('info', `Updated: ${task.workCode} - ${title}`));
+    }
+
+    task.status = 'completed';
+    events.push({ type: 'SCAN_TASK', task: stripTask(task) });
+    return { events, created };
+  } catch (err) {
+    task.status = 'failed';
+    const errMsg = err instanceof Error ? err.message : String(err);
+    task.error = errMsg;
+    events.push(logEvent('error', `Failed: ${task.title} - ${errMsg}`));
+    events.push({ type: 'SCAN_TASK', task: stripTask(task) });
+    return { events };
+  }
+}
+
+/**
+ * 有界并发任务池：保持提交顺序的滑动窗口。
+ * maxParallelism 控制同时在飞的任务数（DLsite 抓取受其限流约束，默认保守）；
+ * 各任务的事件组按提交顺序 yield（确定性输出，快照/测试友好）；
+ * abort 时停止提交新任务并传播 AbortError（in-flight 任务由各自 catch 收尾）。
+ */
+async function* runTaskPool(
+  items: readonly ScanTask[],
+  parallelism: number,
+  runTask: (task: ScanTask) => Promise<ScanEvent[]>,
+  signal: AbortSignal,
+): AsyncGenerator<ScanEvent> {
+  const width = Math.max(1, Math.min(parallelism, items.length));
+  if (items.length > 0) {
+    yield* emitLog(
+      'info',
+      `Processing ${items.length} tasks (parallelism ${width})`,
+    );
+  }
+  const inflight: Promise<ScanEvent[]>[] = [];
+  for (const item of items) {
+    if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+    inflight.push(runTask(item));
+    if (inflight.length >= width) {
+      for (const ev of await inflight.shift()!) yield ev;
+    }
+  }
+  while (inflight.length > 0) {
+    for (const ev of await inflight.shift()!) yield ev;
+  }
+}
+
+/**
  * Async generator that performs a scan, yielding events as it progresses.
  * Checks the abort signal between operations so the scan can be terminated.
  * 任务分支（新作品/路径变更）走完整同步流程（元数据 + 音轨时长）；
@@ -445,10 +538,15 @@ export async function* performScan(
     }
     const entries = collected.entries;
 
-    // 已扫描作品索引：存在且路径未变、未软删的在下方直接跳过
+    // 已扫描作品索引：存在且路径未变、未软删的先分流跳过（含封面补图），
+    // 其余（新作品/路径变更/软删复活/unsupported）进入逐条处理
     const knownWorks = new Map(
       (await getWorksByRootFolder(rootFolder.name)).map((w) => [w.id, w]),
     );
+
+    /** 分流后待逐条处理的条目 */
+    const pending: WorkEntry[] = [];
+    let skippedInRoot = 0;
 
     for (const entry of entries) {
       if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
@@ -456,8 +554,44 @@ export async function* performScan(
       // 源文件在磁盘上即计入集合（差集清理的依据），与能否解析/是否有音频无关
       onDiskWorkCodes.add(entry.workCode);
 
-      // 手动作品判定：RJ/VJ → dlsite 走原路径；人工前缀 → manual
-      const isManual = workSourceResolver.classify(entry.workCode) === 'manual';
+      // 已完成元数据抓取的作品：路径未变且未被软删 → 不建任务、不抓取、不推送，
+      // 也不打开源目录校验音频（重扫全库逐作品枚举是网络存储上扫描卡顿的主因），
+      // 仅静默补下缺失封面（本地 blob 检查 + 按需下载；sam 等 404 快速失败）。
+      // 手动作品无远端，跳过 DLsite 补图（零网络红线）。
+      const known = knownWorks.get(entry.workCode);
+      if (
+        known &&
+        known.deletedAt === null &&
+        known.dir === entry.relativePath
+      ) {
+        if (workSourceResolver.classify(entry.workCode) !== 'manual') {
+          for (const type of SCAN_COVER_TYPES) {
+            if (!coverExists(entry.workCode, type)) {
+              await downloadCover(
+                entry.workCode,
+                type,
+                signal,
+                known.sourceId ?? undefined,
+              );
+            }
+          }
+        }
+        skippedInRoot++;
+        continue;
+      }
+
+      pending.push(entry);
+    }
+
+    skipped += skippedInRoot;
+
+    yield* emitLog(
+      'info',
+      `Enumerated ${entries.length} work entries in ${rootFolder.name} (${pending.length} to process, ${skippedInRoot} already scanned)`,
+    );
+
+    for (const entry of pending) {
+      if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
       // unsupported-archive: 明确失败而非静默跳过
       if (entry.kind === 'unsupported-archive') {
@@ -483,14 +617,22 @@ export async function* performScan(
         continue;
       }
 
-      // folder/archive：打开 source，校验含音频才建任务
+      // 新作品/路径变更/软删复活：校验含音频才建任务。
+      // folder 用可提前退出的轻量遍历（首个可服务音频即返回，避免全量建树）；
+      // archive 仍打开 source 建索引后建树（索引是后续读取的前提）。
       let hasAudio = false;
       try {
-        const source = await openWorkSource(
-          rootFolder.path,
-          entry.relativePath,
-        );
-        hasAudio = treeHasAudio(await source.buildTree());
+        if (entry.kind === 'folder') {
+          hasAudio = await folderHasAudio(
+            join(rootFolder.path, entry.relativePath),
+          );
+        } else {
+          const source = await openWorkSource(
+            rootFolder.path,
+            entry.relativePath,
+          );
+          hasAudio = treeHasAudio(await source.buildTree());
+        }
       } catch (err) {
         // 打不开/不支持的包：作为失败任务上报
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -522,33 +664,6 @@ export async function* performScan(
         continue;
       }
 
-      // 已完成元数据抓取的作品：路径未变且未被软删 → 不建任务、不抓取、不推送，
-      // 仅静默补下缺失封面（本地 blob 检查 + 按需下载；sam 等 404 快速失败）。
-      // 手动作品无远端，跳过 DLsite 补图（零网络红线）。
-      const known = knownWorks.get(entry.workCode);
-      if (
-        known &&
-        known.deletedAt === null &&
-        known.dir === entry.relativePath
-      ) {
-        if (!isManual) {
-          for (const type of SCAN_COVER_TYPES) {
-            if (!coverExists(entry.workCode, type)) {
-              await downloadCover(
-                entry.workCode,
-                type,
-                signal,
-                known.sourceId ?? undefined,
-              );
-            }
-          }
-        }
-        skipped++;
-        // 不逐条推送跳过日志（大库时刷屏），仅在汇总处报告总数；
-        // 无音频的跳过（no audio）数量通常极少，保留逐条日志便于排查
-        continue;
-      }
-
       const task: ScanTask = {
         id: tasks.length + 1,
         title: `${entry.workCode} ${entry.name}`,
@@ -571,63 +686,28 @@ export async function* performScan(
     yield* emitLog('info', `Skipped ${skipped} already-scanned works`);
   }
 
-  // Process each task
+  // Process each task（有界并发：maxParallelism 控制窗口，防 DLsite 限流保守默认）
   let added = 0;
   let updated = 0;
   let failed = 0;
 
-  for (const task of tasks) {
-    if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
-
-    try {
-      task.status = 'scanning';
-      yield { type: 'SCAN_TASK', task: stripTask(task) };
-
-      // 元数据 + 音轨时长：事件流逐条转发（日志即时推送），return 值计数。
-      // 手动作品走本地同步分支（零网络），其余走 DLsite 抓取。
-      const gen =
-        workSourceResolver.classify(task.workCode) === 'manual'
-          ? syncManualWorkMetadata(
-              task.workCode,
-              task.rootFolder,
-              task.relativePath,
-              task.dirName,
-              task.absDir ?? '',
-              signal,
-            )
-          : syncWorkMetadataAndTracks(
-              task.workCode,
-              task.rootFolder,
-              task.relativePath,
-              signal,
-            );
-      let r = await gen.next();
-      while (!r.done) {
-        yield r.value;
-        r = await gen.next();
-      }
-      const { title, created } = r.value;
-      if (created) {
+  yield* runTaskPool(
+    tasks,
+    config.maxParallelism,
+    async (task) => {
+      const { events, created } = await runWorkTask(task, signal);
+      if (created === undefined) {
+        failed++;
+        failedTasks.push(task);
+      } else if (created) {
         added++;
-        yield* emitLog('info', `Added: ${task.workCode} - ${title}`);
       } else {
         updated++;
-        yield* emitLog('info', `Updated: ${task.workCode} - ${title}`);
       }
-
-      task.status = 'completed';
-      yield { type: 'SCAN_TASK', task: stripTask(task) };
-    } catch (err) {
-      task.status = 'failed';
-      const errMsg = err instanceof Error ? err.message : String(err);
-      task.error = errMsg;
-      failedTasks.push(task);
-      failed++;
-
-      yield* emitLog('error', `Failed: ${task.title} - ${errMsg}`);
-      yield { type: 'SCAN_TASK', task: stripTask(task) };
-    }
-  }
+      return events;
+    },
+    signal,
+  );
 
   // ---------- Prune：清理源文件已消失的作品（软删 + 超期物理删） ----------
   let removed = 0;
@@ -700,9 +780,9 @@ export async function* performScan(
  * 导出供测试直接驱动（对齐 performScan）。
  */
 export async function* performUpdate(
-  // 保留形参：与 performScan 共用 manager 调用点与现有测试调用约定；update 模式
-  // 已不需要任何配置（根目录路径统一由 syncWorkMetadataAndTracks 查表解析）。
-  _config: Config,
+  // 与 performScan 共用 manager 调用点与现有测试调用约定；
+  // update 模式自身只用 maxParallelism（任务池并发度）。
+  config: Config,
   signal: AbortSignal,
   /** 可选作品 ID 子集：只刷新这些作品；缺省/undefined 全量 */
   workIds?: string[],
@@ -721,6 +801,7 @@ export async function* performUpdate(
   let failed = 0;
   let taskId = 0;
 
+  const tasks: ScanTask[] = [];
   for (const ref of refs) {
     if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
 
@@ -734,47 +815,33 @@ export async function* performUpdate(
     }
 
     taskId++;
-    const task: ScanTask = {
+    tasks.push({
       id: taskId,
       title: `${ref.id} ${ref.dir}`,
       relativePath: ref.dir,
       rootFolder: ref.rootFolder,
       workCode: ref.id,
       dirName: ref.dir,
-      status: 'scanning',
-    };
-    yield { type: 'SCAN_TASK', task: stripTask(task) };
+      status: 'pending',
+    });
+  }
 
-    try {
-      const gen = syncWorkMetadataAndTracks(
-        ref.id,
-        ref.rootFolder,
-        ref.dir,
-        signal,
-      );
-      let r = await gen.next();
-      while (!r.done) {
-        yield r.value;
-        r = await gen.next();
-      }
-      if (r.value.created) {
+  yield* runTaskPool(
+    tasks,
+    config.maxParallelism,
+    async (task) => {
+      const { events, created } = await runWorkTask(task, signal);
+      if (created === undefined) {
+        failed++;
+      } else if (created) {
         added++;
-        yield* emitLog('info', `Added: ${ref.id} - ${r.value.title}`);
       } else {
         updated++;
-        yield* emitLog('info', `Updated: ${ref.id} - ${r.value.title}`);
       }
-
-      task.status = 'completed';
-      yield { type: 'SCAN_TASK', task: stripTask(task) };
-    } catch (err) {
-      task.status = 'failed';
-      task.error = err instanceof Error ? err.message : String(err);
-      failed++;
-      yield* emitLog('error', `Failed: ${task.title} - ${task.error}`);
-      yield { type: 'SCAN_TASK', task: stripTask(task) };
-    }
-  }
+      return events;
+    },
+    signal,
+  );
 
   yield {
     type: 'SCAN_RESULTS',

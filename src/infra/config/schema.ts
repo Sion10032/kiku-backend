@@ -9,7 +9,8 @@ export const configSchema = z.object({
   dbBusyTimeout: z.number().default(1000),
   checkUpdate: z.boolean().default(true),
   checkBetaUpdate: z.boolean().default(false),
-  maxParallelism: z.number().min(1).max(64).default(16),
+  /** 扫描任务池并发度（DLsite 抓取/封面/音轨同步）：过大易触发 DLsite 限流，保守默认 */
+  maxParallelism: z.number().min(1).max(64).default(2),
   databaseFolderDir: z.string().default('./data/sqlite'),
   md5secret: z.string(),
   jwtsecret: z.string(),
