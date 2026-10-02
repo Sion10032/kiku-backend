@@ -48,6 +48,9 @@ export interface WorkProgressSummary {
   duration: number | null;
   /** 已听完的轨数（position/duration ≥ 0.95 视为听完） */
   listenedCount: number;
+  /** 整体收听进度百分比（0-100）：已听完轨时长（最新行除外）+ 最新行 position，
+   * ÷ SUM(tracks.duration_sec)；作品无已知时长音轨时为 null。 */
+  progressPercent: number | null;
   updatedAt: string;
 }
 
@@ -170,6 +173,12 @@ export async function getWorkProgress(userName: string, workId: string) {
  * - "上次听到"取 updatedAt 最新的行
  * - listenedCount：duration > 0 且 position/duration ≥ 0.95 的行数
  *   （自然结束时上报 position=duration 自动满足）
+ * - progressPercent：整体收听进度（0-100）。分母 = SUM(tracks.duration_sec)
+ *   （与 works.duration 同口径，忽略 NULL；实现额外排除非正值防御）；
+ *   分子 = 除最新行外的听完轨按整轨时长计 +
+ *   最新行按实际 position 计（顺听时 ≈ 整轨，回听时不高估）。音轨时长取
+ *   tracks.duration_sec（权威值，userProgress.duration 可能为 null/过期）；
+ *   时长未知的轨分子分母均不计（口径一致）。无已知时长 → null
  */
 export async function getProgressByWorks(
   userName: string,
@@ -193,6 +202,30 @@ export async function getProgressByWorks(
     else byWork.set(row.workId, [row]);
   }
 
+  // progressPercent 用音轨时长：一次批量取（避免逐作品查询），
+  // 同时累加各作品总时长（分母；与 works.duration 同为 SUM 忽略 NULL，
+  // 此处额外排除非正值防御）
+  const trackRows = await db
+    .select({
+      workId: tracks.workId,
+      mediaIndex: tracks.mediaIndex,
+      durationSec: tracks.durationSec,
+    })
+    .from(tracks)
+    .where(inArray(tracks.workId, [...byWork.keys()]));
+  const durationByWork = new Map<string, Map<string, number>>();
+  const totalByWork = new Map<string, number>();
+  for (const t of trackRows) {
+    if (t.durationSec == null || t.durationSec <= 0) continue;
+    let byIndex = durationByWork.get(t.workId);
+    if (!byIndex) {
+      byIndex = new Map();
+      durationByWork.set(t.workId, byIndex);
+    }
+    byIndex.set(t.mediaIndex, t.durationSec);
+    totalByWork.set(t.workId, (totalByWork.get(t.workId) ?? 0) + t.durationSec);
+  }
+
   for (const [workId, list] of byWork) {
     // updatedAt 最新的行 = 上次播放位置
     const latest = list.reduce((a, b) => (a.updatedAt >= b.updatedAt ? a : b));
@@ -204,12 +237,36 @@ export async function getProgressByWorks(
         r.position / r.duration >= LISTENED_RATIO,
     ).length;
 
+    // 整体收听进度分子：听完轨按整轨计（最新行除外），最新行按实际 position 计；
+    // 时长未知的轨跳过（分母同样不含，口径一致）
+    const durations = durationByWork.get(workId);
+    const totalSec = totalByWork.get(workId) ?? 0;
+    let listenedSec = 0;
+    for (const r of list) {
+      const trackSec = durations?.get(r.mediaIndex);
+      if (trackSec == null) continue;
+      if (r === latest) {
+        listenedSec += Math.min(r.position, trackSec);
+      } else if (
+        r.duration != null &&
+        r.duration > 0 &&
+        r.position / r.duration >= LISTENED_RATIO
+      ) {
+        listenedSec += trackSec;
+      }
+    }
+    const progressPercent =
+      totalSec > 0
+        ? Math.min(100, Math.max(0, Math.round((listenedSec / totalSec) * 100)))
+        : null;
+
     result.set(workId, {
       mediaIndex: latest.mediaIndex,
       trackTitle: latest.trackTitle,
       position: latest.position,
       duration: latest.duration,
       listenedCount,
+      progressPercent,
       updatedAt: latest.updatedAt,
     });
   }

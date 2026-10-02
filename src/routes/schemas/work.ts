@@ -44,6 +44,8 @@ export const userProgressSchema = z.object({
   position: z.number(),
   duration: z.number().nullable(),
   listenedCount: z.number(),
+  /** 整体收听进度百分比（0-100）；作品无已知时长音轨时为 null */
+  progressPercent: z.number().nullable(),
   updatedAt: z.string(),
 });
 
