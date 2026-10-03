@@ -5,6 +5,13 @@
  * 输出缺失作品的分类处理决策，不含任何 IO，便于单元测试。
  */
 
+import {
+  getWorksByRootFolder,
+  hardDeleteWork,
+  softDeleteWork,
+} from '../services/work.service.js';
+import { emitLog, type ScanEvent } from './scanEvents.js';
+
 export interface WorkRowForPrune {
   id: string;
   deletedAt: string | null;
@@ -57,4 +64,68 @@ export function classifyMissingWorks(
   }
 
   return { toSoftDelete, toHardDelete, inGrace };
+}
+
+/** 软删作品超过该天数仍缺失 → 物理清理（级联 + 封面） */
+export const SCAN_PURGE_DAYS = 30;
+
+/**
+ * Prune 执行阶段：逐 root 差集清理源已消失的作品（软删 + 超期物理删）。
+ * 枚举失败的 root（failedRootPaths）整体跳过，绝不据此软删（fail-safe）。
+ * yield 过程日志，return 计数供 SCAN_RESULTS 汇总。
+ */
+export async function* executePrune(options: {
+  roots: Array<{ name: string; path: string | null }>;
+  onDiskWorkCodes: Set<string>;
+  failedRootPaths: Set<string>;
+  signal: AbortSignal;
+}): AsyncGenerator<ScanEvent, { removed: number; purged: number }> {
+  const { roots, onDiskWorkCodes, failedRootPaths, signal } = options;
+  let removed = 0;
+  let purged = 0;
+
+  // DB 作品按 root 名归属（getWorksByRootFolder）。name 是主键，一个名字只对应
+  // 一条路径，枚举失败的根按 path 跳过它自己即可。
+  for (const rootFolder of roots) {
+    if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+
+    if (!rootFolder.path || failedRootPaths.has(rootFolder.path)) continue;
+
+    const inDb = await getWorksByRootFolder(rootFolder.name);
+    if (inDb.length === 0) continue;
+
+    const decision = classifyMissingWorks(
+      inDb,
+      onDiskWorkCodes,
+      new Date(),
+      SCAN_PURGE_DAYS,
+    );
+
+    for (const id of decision.toSoftDelete) {
+      if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+      try {
+        await softDeleteWork(id);
+        removed++;
+        yield* emitLog('info', `Removed (source missing): ${id}`);
+      } catch (err) {
+        yield* emitLog('error', `Failed to soft-delete ${id}: ${String(err)}`);
+      }
+    }
+
+    for (const id of decision.toHardDelete) {
+      if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');
+      try {
+        await hardDeleteWork(id);
+        purged++;
+        yield* emitLog('info', `Purged (source missing beyond grace): ${id}`);
+      } catch (err) {
+        yield* emitLog('error', `Failed to purge ${id}: ${String(err)}`);
+      }
+    }
+  }
+
+  // 无清理也打：日志闭环（0/0 说明 prune 跑过且无事发生）
+  yield* emitLog('info', `Pruned: ${removed} removed, ${purged} purged`);
+
+  return { removed, purged };
 }

@@ -36,6 +36,8 @@ mock.module('../infra/scraper/dlsite.js', () => ({
 // 封面：下载绝不触网（手动分支只允许本地导入）；
 // importLocalCover 按真实实现同构写入 blob 库（断言「UW00000001_main 存在」依赖）。
 mock.module('../services/cover.service.js', () => ({
+  listCoverKeys: () => new Set(),
+  coverBlobKey: (id: string, type: string) => `${id}_${type}`,
   coverExists: (id: string, type: string = 'main') =>
     blobExists('cover', `${id}_${type}`),
   downloadCover: async () => true,

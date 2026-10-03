@@ -4,6 +4,7 @@ import {
   blobExists,
   deleteBlob,
   getBlob,
+  listBlobKeys,
   putBlob,
 } from '../infra/db/blob/index.js';
 import { HttpError, retryFetch } from '../infra/scraper/client.js';
@@ -229,6 +230,20 @@ export async function downloadAllCovers(
  */
 export function coverExists(id: string, type: CoverType = 'main'): boolean {
   return blobExists(COVER_NAMESPACE, getCoverKey(id, type));
+}
+
+/**
+ * 一次性拉取 cover namespace 的全部 blob key。
+ * 供扫描分流做内存比对（缺哪些封面类型由 Set 查询得出），
+ * 避免逐作品逐类型的 blobExists 查询风暴。
+ */
+export function listCoverKeys(): Set<string> {
+  return listBlobKeys(COVER_NAMESPACE);
+}
+
+/** 封面 blob key 构造（与存储键一致），配合 listCoverKeys 做内存比对 */
+export function coverBlobKey(id: string, type: CoverType): string {
+  return getCoverKey(id, type);
 }
 
 /**

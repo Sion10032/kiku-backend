@@ -30,6 +30,8 @@ mock.module('../infra/scraper/dlsite.js', () => ({
   }),
 }));
 mock.module('../services/cover.service.js', () => ({
+  listCoverKeys: () => new Set(),
+  coverBlobKey: (id: string, type: string) => `${id}_${type}`,
   coverExists: () => true,
   downloadCover: async () => true,
   deleteAllCovers: () => 0,

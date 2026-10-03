@@ -31,7 +31,12 @@ mock.module('../infra/scraper/dlsite.js', () => ({
     rank: [],
   }),
 }));
+// 封面：coverExists 可切换实现（容错测试用），downloadCover 无副作用
+// listCoverKeys 可切换实现（容错/缺失入队测试用）
+let listCoverKeysImpl: () => Set<string> = () => new Set();
 mock.module('../services/cover.service.js', () => ({
+  listCoverKeys: () => listCoverKeysImpl(),
+  coverBlobKey: (id: string, type: string) => `${id}_${type}`,
   coverExists: () => true,
   downloadCover: async () => true,
   importLocalCover: async () => true,
@@ -158,6 +163,51 @@ describe('performScan 发现阶段（已知作品跳过）', () => {
     expect(resultsOf(events)?.skipped).toBe(1);
     expect(resultsOf(events)?.total).toBe(0);
     expect(taskEvents(events)).toHaveLength(0);
+  });
+
+  it('封面补齐容错：blob key 拉取失败不崩溃扫描（记 warning 跳过补齐）', async () => {
+    listCoverKeysImpl = () => {
+      throw new Error('blob boom');
+    };
+    try {
+      const events = await runScan();
+      expect(resultsOf(events)?.skipped).toBe(1);
+      expect(resultsOf(events)?.total).toBe(0);
+      expect(
+        logMessages(events).some((m) =>
+          /Cover backfill skipped \(failed to list cover blobs\)/.test(m),
+        ),
+      ).toBe(true);
+
+      const row = (
+        await db.select().from(works).where(eq(works.id, zipId)).limit(1)
+      )[0];
+      expect(row?.deletedAt).toBeNull();
+    } finally {
+      listCoverKeysImpl = () => new Set();
+    }
+  });
+
+  it('封面缺失 → 入队补齐并逐作品推日志', async () => {
+    // 空 key 集合 = 全部作品都缺封面 → 入队；downloadCover mock 成功
+    listCoverKeysImpl = () => new Set();
+    try {
+      const events = await runScan();
+      expect(resultsOf(events)?.skipped).toBe(1);
+      expect(resultsOf(events)?.total).toBe(0);
+      expect(
+        logMessages(events).some((m) =>
+          /Backfilling missing covers for 1 known works/.test(m),
+        ),
+      ).toBe(true);
+      expect(
+        logMessages(events).some((m) =>
+          new RegExp(`Downloaded cover .* for ${zipId}`).test(m),
+        ),
+      ).toBe(true);
+    } finally {
+      listCoverKeysImpl = () => new Set();
+    }
   });
 });
 

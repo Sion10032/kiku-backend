@@ -34,6 +34,8 @@ mock.module('../infra/scraper/dlsite.js', () => ({
   },
 }));
 mock.module('../services/cover.service.js', () => ({
+  listCoverKeys: () => new Set(),
+  coverBlobKey: (id: string, type: string) => `${id}_${type}`,
   coverExists: () => true,
   downloadCover: async () => true,
   importLocalCover: async () => true,
@@ -108,27 +110,23 @@ describe('performScan 任务池并发', () => {
     expect(peak).toBe(1);
   });
 
-  it('任务事件按提交顺序整组产出（每任务 pending → scanning → completed 连续）', async () => {
+  it('每个任务的事件链完整：pending → scanning → completed', async () => {
     await db.delete(works);
     const events = await runScan(3);
-    const statuses = events
-      .filter(
-        (e): e is { type: 'SCAN_TASK'; task: { id: number; status: string } } =>
-          (e as { type: string }).type === 'SCAN_TASK',
-      )
-      .map((e) => `${e.task.id}:${e.task.status}`);
-    // 滑窗按提交顺序产出：pending 为发现阶段全量发出，
-    // 处理阶段每任务 scanning → completed 连续且任务序递增（不跨任务交错）
-    expect(statuses).toEqual([
-      '1:pending',
-      '2:pending',
-      '3:pending',
-      '1:scanning',
-      '1:completed',
-      '2:scanning',
-      '2:completed',
-      '3:scanning',
-      '3:completed',
-    ]);
+    const byId = new Map<number, string[]>();
+    for (const e of events.filter(
+      (ev): ev is { type: 'SCAN_TASK'; task: { id: number; status: string } } =>
+        (ev as { type: string }).type === 'SCAN_TASK',
+    )) {
+      const list = byId.get(e.task.id) ?? [];
+      list.push(e.task.status);
+      byId.set(e.task.id, list);
+    }
+    // 流水线下提交序 = 校验完成序，不保证全局枚举序；
+    // 但每个任务自身的事件链必须完整且顺序不变
+    expect([...byId.keys()].sort((a, b) => a - b)).toEqual([1, 2, 3]);
+    for (const seq of byId.values()) {
+      expect(seq).toEqual(['pending', 'scanning', 'completed']);
+    }
   });
 });

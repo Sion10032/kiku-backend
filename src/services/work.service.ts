@@ -306,6 +306,24 @@ export async function getWorksByRootFolder(rootFolder: string) {
   });
 }
 
+/**
+ * 仅更新作品路径（root folder + 相对路径）。
+ * moved 场景专用（如文件夹打包成 zip）：DB 已有未软删记录、元数据不重抓。
+ * @returns 记录是否存在
+ */
+export async function updateWorkDir(
+  id: string,
+  rootFolder: string,
+  dir: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(works)
+    .set({ rootFolder, dir })
+    .where(eq(works.id, id))
+    .returning({ id: works.id });
+  return rows.length > 0;
+}
+
 /** 软删除：置 deletedAt 标记（ISO 时间串）。源缺失时的第一动作，宽限期内可恢复。 */
 export async function softDeleteWork(id: string): Promise<void> {
   await db

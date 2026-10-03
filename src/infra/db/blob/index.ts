@@ -135,6 +135,20 @@ export function blobExists(namespace: string, key: string): boolean {
 }
 
 /**
+ * 拉取某 namespace 下的全部 blob key。
+ * 供调用方做批量内存比对（缺哪些 key 由 Set 查询得出），
+ * 替代逐 key 的 blobExists 查询风暴。
+ */
+export function listBlobKeys(namespace: string): Set<string> {
+  const rows = blobDb
+    .select({ key: blobs.key })
+    .from(blobs)
+    .where(eq(blobs.namespace, namespace))
+    .all();
+  return new Set(rows.map((r) => r.key));
+}
+
+/**
  * 删除一条记录
  * @returns 是否真的删除了一行
  */
