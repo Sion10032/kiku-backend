@@ -753,9 +753,8 @@ export async function* performScan(
     }
   }
 
-  if (removed > 0 || purged > 0) {
-    yield* emitLog('info', `Pruned: ${removed} removed, ${purged} purged`);
-  }
+  // 无清理也打：日志闭环（0/0 说明 prune 跑过且无事发生）
+  yield* emitLog('info', `Pruned: ${removed} removed, ${purged} purged`);
 
   // Send final results
   yield {
