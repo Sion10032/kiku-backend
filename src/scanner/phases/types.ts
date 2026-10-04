@@ -3,7 +3,7 @@
 export type PhaseResult = {
   created?: boolean;
   title?: string;
-  detail?: { analyzed?: number; failed?: number };
+  detail?: { analyzed?: number; failed?: number; skipped?: number };
 };
 
 /** scan 分流的物理位置（路径信息随 submit 传入，不入队列身份）。 */

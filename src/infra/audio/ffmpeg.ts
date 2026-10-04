@@ -3,6 +3,7 @@ import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { getConfig } from '../config/index.js';
 import type { WorkSource } from '../fs/source/types.js';
@@ -80,25 +81,25 @@ export function parseLoudnessCurve(stdout: string): Array<number | null> {
   return curve;
 }
 
+// ebur128/ametadata 为单遍顺序消费，不可 seek 输入即可完整分析；
+// demuxer 层 mp4 家族（尾部 moov）不可靠，流式适用面由调用方（analyze 阶段）按扩展名判定。
+const MEASURE_ARGS = [
+  '-map',
+  '0:a:0',
+  '-af',
+  'ebur128=peak=true:metadata=1,ametadata=print:key=lavfi.r128.S:file=-',
+  '-f',
+  'null',
+  '-',
+];
+
 /** 单遍测量：Integrated loudness + True Peak（stderr 汇总）+ short-term 曲线（stdout）。 */
 export async function measureLoudness(
   inputPath: string,
   signal?: AbortSignal,
 ): Promise<{ lufs: number; truePeakDb: number; curve: Array<number | null> }> {
   const { stdout, stderr } = await runFfmpeg(
-    [
-      '-hide_banner',
-      '-nostats',
-      '-i',
-      inputPath,
-      '-map',
-      '0:a:0',
-      '-af',
-      'ebur128=peak=true:metadata=1,ametadata=print:key=lavfi.r128.S:file=-',
-      '-f',
-      'null',
-      '-',
-    ],
+    ['-hide_banner', '-nostats', '-i', inputPath, ...MEASURE_ARGS],
     signal,
   );
   return {
@@ -107,7 +108,7 @@ export async function measureLoudness(
   };
 }
 
-/** 归档源条目 → 临时文件（响度分析需要 seekable 输入，且 mp4 家族 pipe 读不了尾部 moov）。 */
+/** 归档源条目 → 临时文件（不可流式格式的回退路径；当前 analyze 阶段已改流式，仅供旧外壳过渡）。 */
 export async function extractToTemp(
   source: WorkSource,
   hash: string,
@@ -125,4 +126,46 @@ export async function extractToTemp(
     throw err;
   }
   return { path, cleanup: () => rm(dir, { recursive: true, force: true }) };
+}
+
+/**
+ * 流式单遍测量：input pipe 进 ffmpeg stdin（-i pipe:0），不经临时文件。
+ * 归档源直接 readRange 全量流即可，省去解压写盘/读盘/删除三段 IO。
+ * abort 时 spawn signal 联动 kill；ffmpeg 提前退出导致 stdin EPIPE 属正常路径（以 close code 为准）。
+ */
+export async function measureLoudnessStream(
+  input: Readable,
+  signal?: AbortSignal,
+): Promise<{ lufs: number; truePeakDb: number; curve: Array<number | null> }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      getConfig().ffmpegPath,
+      ['-hide_banner', '-nostats', '-i', 'pipe:0', ...MEASURE_ARGS],
+      { signal },
+    );
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (c: Buffer) => {
+      stdout += c.toString();
+    });
+    proc.stderr.on('data', (c: Buffer) => {
+      stderr += c.toString();
+    });
+    proc.stdin.on('error', () => {}); // EPIPE：ffmpeg 早退，错误以 close code 为准
+    pipeline(input, proc.stdin).catch(() => {
+      // 输入流中途出错（如归档损坏）：kill 让 close 非 0 走 reject，不产出不可信结果
+      if (!proc.stdin.destroyed) proc.kill();
+    });
+    proc.on('error', reject); // ENOENT
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({
+          ...parseIntegratedLoudness(stderr),
+          curve: parseLoudnessCurve(stdout),
+        });
+      } else {
+        reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-500)}`));
+      }
+    });
+  });
 }

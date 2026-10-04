@@ -97,3 +97,19 @@ test.skipIf(!hasFfmpeg)('measureLoudness 实测 fixture', async () => {
   // 0.8s 轨至少落在第 0 秒桶（首 3s 窗未满 → null），只断言形状
   expect(r.curve.length).toBeGreaterThanOrEqual(1);
 });
+
+// 流式输入：同一 fixture 经 readRange 全量流喂 stdin（归档源直接读，不经临时文件）
+test.skipIf(!hasFfmpeg)(
+  'measureLoudnessStream 实测 fixture（stdin 流式）',
+  async () => {
+    const { measureLoudnessStream } = await import('./ffmpeg.js');
+    const data = readFileSync(SINE);
+    const source = memorySource({ 'a/sine.wav': data });
+    const input = await source.readRange('a/sine.wav', 0, data.length - 1);
+    const r = await measureLoudnessStream(input);
+    expect(r.lufs).toBeGreaterThan(-25);
+    expect(r.lufs).toBeLessThan(-15);
+    expect(r.truePeakDb).toBeLessThanOrEqual(0);
+    expect(r.curve.length).toBeGreaterThanOrEqual(1);
+  },
+);
