@@ -3,10 +3,11 @@
 // 先后由编排器 barrier 时序保证（track warn-continue 失败不得阻断接力，见行为对齐表）。
 // 快照为权威状态：状态变化立即写入（SnapshotHub），TASK_DELTA/BATCH_LOG 经节流合并发出。
 
-import type {
-  BatchOutcome,
-  CoreEvent,
-  CoreStatus,
+import { getConfig } from '../infra/config/index.js';
+import {
+  type BatchOutcome,
+  type CoreEvent,
+  type CoreStatus,
   TaskQueue,
 } from '../infra/taskQueue/index.js';
 import {
@@ -195,6 +196,11 @@ export class TaskSystem {
     for (const phase of PHASE_ORDER) this.queue.cancel(taskKey(phase, workId));
   }
 
+  /** 编排器叙述性日志（BATCH_LOG 通道，立即入快照 + 节流发出）。 */
+  log(level: string, message: string, batchId?: string, workId?: string): void {
+    this.addLog(level, message, batchId, workId);
+  }
+
   /** 权威快照（含节流窗口内未发出的状态）。 */
   snapshot() {
     return this.hub.snapshot();
@@ -320,4 +326,21 @@ function toPhaseStatus(status: CoreStatus): PhaseStatus {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+// ---------- 生产单例（惰性：首次使用时读 config 建池，测试注入自己的实例） ----------
+
+let singleton: TaskSystem | null = null;
+
+export function getTaskSystem(): TaskSystem {
+  if (!singleton) {
+    const config = getConfig();
+    singleton = new TaskSystem(
+      new TaskQueue({
+        net: config.maxParallelism,
+        cpu: config.analysisParallelism,
+      }),
+    );
+  }
+  return singleton;
 }
