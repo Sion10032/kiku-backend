@@ -32,10 +32,22 @@ export type PhaseResult = {
   detail?: { analyzed?: number; failed?: number };
 };
 
+/** scan 分流的物理位置（路径信息随 submit 传入，不入队列身份）。 */
+export interface WorkLocation {
+  rootFolder: string;
+  relativePath: string;
+  /** manual 分支标题推导用目录名。 */
+  dirName?: string;
+  /** manual 分支本地封面导入用绝对路径。 */
+  absDir?: string;
+}
+
 export interface PhaseContext {
   workId: string;
   /** 仅 metadata 阶段有值：scan 分流的 moved 变体。 */
   variant: 'dlsite' | 'manual' | 'moved' | undefined;
+  /** scan 分流的物理位置（metadata 阶段必需）。 */
+  location: WorkLocation | undefined;
   signal: AbortSignal;
   log: (level: string, message: string) => void;
   force: boolean;
@@ -80,6 +92,8 @@ export interface SubmitOptions {
   mode?: 'if-needed' | 'force';
   /** workId → metadata 变体（scan 分流的 moved）。 */
   variants?: Record<string, 'moved'>;
+  /** workId → 物理位置（metadata 阶段必需）。 */
+  locations?: Record<string, WorkLocation>;
 }
 
 export interface SubmitReport {
@@ -105,6 +119,7 @@ export class TaskSystem {
   private readonly pendingLogs: BatchLog[] = [];
   private readonly keyBatches = new Map<string, string>();
   private readonly keyVariants = new Map<string, 'moved'>();
+  private readonly keyLocations = new Map<string, WorkLocation>();
   private readonly resultsByBatch = new Map<string, Map<string, PhaseResult>>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly flushIntervalMs: number;
@@ -164,6 +179,9 @@ export class TaskSystem {
           continue;
         if (phase === 'metadata' && opts.variants?.[workId]) {
           this.keyVariants.set(key, opts.variants[workId]);
+        }
+        if (phase === 'metadata' && opts.locations?.[workId]) {
+          this.keyLocations.set(key, opts.locations[workId]);
         }
         if (opts.batchId) this.keyBatches.set(key, opts.batchId);
         const outcome = this.queue.submit({
@@ -285,9 +303,13 @@ export class TaskSystem {
     const variant =
       phase === 'metadata' ? this.keyVariants.get(key) : undefined;
     this.keyVariants.delete(key);
+    const location =
+      phase === 'metadata' ? this.keyLocations.get(key) : undefined;
+    this.keyLocations.delete(key);
     const result = await exec({
       workId,
       variant,
+      location,
       signal,
       log: (level, message) => this.addLog(level, message, batchId, workId),
       force,
