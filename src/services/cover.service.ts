@@ -17,6 +17,9 @@ import { getWorkById } from './work.service.js';
  */
 export type CoverType = 'main' | 'sam' | '240x240' | '360x360';
 
+/** 扫描/补图涉及的封面类型（360x360 为展示端衍生尺寸，不主动下载）。 */
+export const SCAN_COVER_TYPES: CoverType[] = ['main', 'sam', '240x240'];
+
 /**
  * 封面在 blob 库中的命名空间
  */

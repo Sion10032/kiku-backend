@@ -4,7 +4,6 @@ import { buildApp } from '../src/app';
 import { setConfigForTesting } from '../src/infra/config/index';
 import { db } from '../src/infra/db/main/index';
 import { works } from '../src/infra/db/main/schema';
-import { scanner } from '../src/scanner/scanner';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
@@ -18,16 +17,6 @@ setupTestEnvironment();
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitScanIdle(timeoutMs = 5000): Promise<void> {
-  const start = Date.now();
-  while (scanner.isScanning) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error('scan did not finish in time');
-    }
-    await sleep(20);
-  }
-}
 
 describe('Scanner Routes', () => {
   let app: FastifyInstance;
@@ -78,7 +67,6 @@ describe('Scanner Routes', () => {
       headers: { authorization: `Bearer ${adminToken}` },
     });
     expect(res.statusCode).toBe(200);
-    await waitScanIdle();
   });
 
   it('POST /api/scanner/scan {mode:scan, workIds} 被 schema 拒绝 400', async () => {

@@ -10,6 +10,9 @@ import {
   type CoreStatus,
   TaskQueue,
 } from '../infra/taskQueue/index.js';
+import { analyzeExecutor } from './phases/analyze.js';
+import { coverExecutor } from './phases/cover.js';
+import { metadataExecutor } from './phases/metadata.js';
 import {
   PHASE_CONFIG,
   PHASE_ORDER,
@@ -17,10 +20,7 @@ import {
   parseTaskKey,
   taskKey,
 } from './phases/phaseConfig.js';
-import { metadataExecutor } from './phases/metadata.js';
-import { coverExecutor } from './phases/cover.js';
 import { trackExecutor } from './phases/track.js';
-import { analyzeExecutor } from './phases/analyze.js';
 import type {
   PhaseExecutor,
   PhaseResult,

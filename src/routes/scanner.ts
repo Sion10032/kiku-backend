@@ -14,31 +14,9 @@ import {
   SCAN_ALL_IDENTITY,
 } from '../scanner/orchestrators/scan.js';
 import { runUpdateOrchestration } from '../scanner/orchestrators/update.js';
-import { type ScanEvent, scanner } from '../scanner/scanner.js';
 import { getTaskSystem } from '../scanner/taskSystem.js';
 
 export const scannerRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // SSE event stream（旧协议，迁移期保留；任务中心走 /api/tasks/events，旧端点由后续清理删除）
-  fastify.get('/events', { sse: 'only' }, async (_request, reply) => {
-    reply.sse.keepAlive();
-
-    await reply.sse.send({
-      event: 'SCAN_INIT_STATE',
-      data: { isScanning: scanner.isScanning, snapshot: scanner.getSnapshot() },
-    });
-
-    const handler = (event: ScanEvent): void => {
-      reply.sse.send({ event: event.type, data: event }).catch(() => {});
-    };
-    scanner.on('scan', handler);
-
-    const cleanup = (): void => {
-      scanner.off('scan', handler);
-    };
-    reply.sse.onClose(cleanup);
-    reply.raw.on('close', cleanup);
-  });
-
   // Start a scan（入队编排，立即返回 batchId；进度走 /api/tasks/events）。
   // body 缺省（{} 或无 body）时 mode 默认 scan，旧调用方行为不变。
   // workIds：update 模式的作品子集（音声管理页按选中项刷新）；

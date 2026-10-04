@@ -4,8 +4,8 @@ import { setupTestEnvironment } from '@test/helpers/setup';
 import { inArray } from 'drizzle-orm';
 import { db } from '../infra/db/main/index.js';
 import { series, works } from '../infra/db/main/schema.js';
-import { updateWorkMetadata } from '../scanner/updater.js';
 import { getSeries, getWorkById, upsertWork } from './work.service.js';
+import { updateWorkMetadata } from './workMetadataEdit.js';
 
 setupTestEnvironment();
 

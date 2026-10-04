@@ -10,7 +10,7 @@ import {
   hardDeleteWork,
   softDeleteWork,
 } from '../services/work.service.js';
-import { emitLog, type ScanEvent } from './scanEvents.js';
+import type { DiscoveryLog } from './scanPipeline.js';
 
 export interface WorkRowForPrune {
   id: string;
@@ -79,7 +79,7 @@ export async function* executePrune(options: {
   onDiskWorkCodes: Set<string>;
   failedRootPaths: Set<string>;
   signal: AbortSignal;
-}): AsyncGenerator<ScanEvent, { removed: number; purged: number }> {
+}): AsyncGenerator<DiscoveryLog, { removed: number; purged: number }> {
   const { roots, onDiskWorkCodes, failedRootPaths, signal } = options;
   let removed = 0;
   let purged = 0;
@@ -106,9 +106,12 @@ export async function* executePrune(options: {
       try {
         await softDeleteWork(id);
         removed++;
-        yield* emitLog('info', `Removed (source missing): ${id}`);
+        yield { level: 'info', message: `Removed (source missing): ${id}` };
       } catch (err) {
-        yield* emitLog('error', `Failed to soft-delete ${id}: ${String(err)}`);
+        yield {
+          level: 'error',
+          message: `Failed to soft-delete ${id}: ${String(err)}`,
+        };
       }
     }
 
@@ -117,15 +120,24 @@ export async function* executePrune(options: {
       try {
         await hardDeleteWork(id);
         purged++;
-        yield* emitLog('info', `Purged (source missing beyond grace): ${id}`);
+        yield {
+          level: 'info',
+          message: `Purged (source missing beyond grace): ${id}`,
+        };
       } catch (err) {
-        yield* emitLog('error', `Failed to purge ${id}: ${String(err)}`);
+        yield {
+          level: 'error',
+          message: `Failed to purge ${id}: ${String(err)}`,
+        };
       }
     }
   }
 
   // 无清理也打：日志闭环（0/0 说明 prune 跑过且无事发生）
-  yield* emitLog('info', `Pruned: ${removed} removed, ${purged} purged`);
+  yield {
+    level: 'info',
+    message: `Pruned: ${removed} removed, ${purged} purged`,
+  };
 
   return { removed, purged };
 }

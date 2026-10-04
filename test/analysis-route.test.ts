@@ -4,8 +4,6 @@ import { buildApp } from '../src/app';
 import { getConfig, setConfigForTesting } from '../src/infra/config/index';
 import { db } from '../src/infra/db/main/index';
 import { tracks, works } from '../src/infra/db/main/schema';
-import { analysisManager } from '../src/scanner/analysis';
-import { scanner } from '../src/scanner/scanner';
 import { getTaskSystem } from '../src/scanner/taskSystem';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
@@ -21,18 +19,7 @@ setupTestEnvironment();
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 轮询等待扫描结束（旧 ScannerManager 路径） */
-async function waitScanIdle(timeoutMs = 5000): Promise<void> {
-  const start = Date.now();
-  while (scanner.isScanning) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error('scan did not finish in time');
-    }
-    await sleep(20);
-  }
-}
-
-/** 轮询等待指定 analysis 批次终态（新编排器路径） */
+/** 轮询等待指定 analysis 批次终态 */
 async function waitBatchDone(batchId: string, timeoutMs = 5000): Promise<void> {
   const start = Date.now();
   for (;;) {
@@ -63,24 +50,10 @@ describe('Analysis Routes', () => {
   });
 
   afterAll(async () => {
-    analysisManager.killAnalysis();
     await deleteTestUser('admin_analysis_route');
     await app.close();
     // 清空 config 缓存，避免污染同进程后续测试文件
     setConfigForTesting();
-  });
-
-  it('GET /api/analysis/status 未分析过返回初始形状（新编排器不发旧事件，快照恒 null）', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/analysis/status',
-      headers: { authorization: `Bearer ${adminToken}` },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json<{ isAnalyzing: boolean; snapshot: unknown }>()).toEqual({
-      isAnalyzing: false,
-      snapshot: null,
-    });
   });
 
   it('POST /api/analysis/start 未认证 401', async () => {
@@ -192,36 +165,31 @@ describe('Analysis Routes', () => {
     await waitBatchDone(body.batchId);
   });
 
-  describe('scan → analysis 自动接力（旧 ScannerManager 路径）', () => {
-    it('自动分析关闭时不接力（snapshot 保持 null）', async () => {
-      setConfigForTesting({
-        ...getConfig(),
-        autoLoudnessAnalysis: false,
-      });
-      scanner.startScan(getConfig(), 'scan');
-      await waitScanIdle();
-      expect(scanner.isScanning).toBe(false);
-      expect(analysisManager.getSnapshot()).toBeNull();
-      expect(analysisManager.isAnalyzing).toBe(false);
-    });
-
-    it('配置开启且 scan 正常结束后启动分析（snapshot 已置）', async () => {
+  describe('scan → analysis 自动接力（autoLoudnessAnalysis）', () => {
+    it('配置开启且 scan 正常收尾后自动触发 analysis 批次', async () => {
       setConfigForTesting({
         ...getConfig(),
         autoLoudnessAnalysis: true,
       });
-      scanner.startScan(getConfig(), 'scan');
-      await waitScanIdle();
-      // startAnalysis 在 runScan 同步块内置空快照；观察到扫描结束即已接力
-      expect(analysisManager.getSnapshot()).not.toBeNull();
-      const start = Date.now();
-      while (analysisManager.isAnalyzing) {
-        if (Date.now() - start > 5000) {
-          throw new Error('analysis did not finish in time');
+      const scanRes = await app.inject({
+        method: 'POST',
+        url: '/api/scanner/scan',
+        payload: {},
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(scanRes.statusCode).toBe(200);
+      // scan 编排器收尾后 fire-and-forget 接力；轮询任务中心出现 analysis 批次
+      const deadline = Date.now() + 5000;
+      let analysisBatch = false;
+      while (Date.now() < deadline) {
+        const snap = getTaskSystem().snapshot();
+        if (snap.batches.some((b) => b.kind === 'analysis')) {
+          analysisBatch = true;
+          break;
         }
-        await sleep(20);
+        await sleep(50);
       }
-      expect(analysisManager.isAnalyzing).toBe(false);
+      expect(analysisBatch).toBe(true);
     });
   });
 });

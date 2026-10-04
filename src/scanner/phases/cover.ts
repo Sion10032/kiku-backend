@@ -10,8 +10,8 @@ import {
   downloadCover,
   existingCoverTypes,
   importLocalCover,
+  SCAN_COVER_TYPES,
 } from '../../services/cover.service.js';
-import { SCAN_COVER_TYPES } from '../scanEvents.js';
 import type { PhaseContext, PhaseExecutor, PhaseResult } from './types.js';
 
 function errMessage(err: unknown): string {

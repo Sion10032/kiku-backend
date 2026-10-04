@@ -11,12 +11,11 @@ import {
   type CoverType,
   coverBlobKey,
   listCoverKeys,
+  SCAN_COVER_TYPES,
 } from '../../services/cover.service.js';
 import { listRootFolders } from '../../services/rootFolder.service.js';
 import { getWorksByRootFolder } from '../../services/work.service.js';
 import { executePrune } from '../prune.js';
-import type { ScanEvent } from '../scanEvents.js';
-import { SCAN_COVER_TYPES } from '../scanEvents.js';
 import {
   discoverTasks,
   type PendingRoot,
@@ -53,14 +52,16 @@ function abortError(): Error {
 
 /** 消费 executePrune 的事件流并转批次日志，返回剪除统计。 */
 async function drainPrune(
-  gen: AsyncGenerator<ScanEvent, { removed: number; purged: number }>,
+  gen: AsyncGenerator<
+    { level: string; message: string },
+    { removed: number; purged: number }
+  >,
   sys: TaskSystem,
   batchId: string,
 ): Promise<{ removed: number; purged: number }> {
   let r = await gen.next();
   while (!r.done) {
-    const ev = r.value;
-    if (ev.type === 'SCAN_LOG') sys.log(ev.log.level, ev.log.message, batchId);
+    sys.log(r.value.level, r.value.message, batchId);
     r = await gen.next();
   }
   return r.value;
@@ -92,11 +93,7 @@ export async function runScanOrchestration(
     sys.startBatch('scan', batchId);
     sys.log('info', 'Starting scan...', batchId);
 
-    const collector: ScanCollector = {
-      tasks: [],
-      failedTasks: [],
-      nextTaskId: 0,
-    };
+    const collector: ScanCollector = { failedTasks: [] };
     /** 本次扫描在磁盘上发现的全部作品代码（含 unsupported-archive：源还在就不算缺失） */
     const onDiskWorkCodes = new Set<string>();
     /** 本次枚举失败的 root 路径（path 才是 readdir 失败的身份标识） */
@@ -234,46 +231,44 @@ export async function runScanOrchestration(
 
     // ---------- 校验 + 注入（重叠消费：校验通过即入队排队，不整批等待） ----------
     let rejectedRunning = 0;
+    let submitted = 0;
     for await (const out of discoverTasks(pendingRoots, collector, signal)) {
       if (out.kind === 'task') {
-        const t = out.task;
         const report = sys.submit(
-          [t.workCode],
+          [out.workCode],
           ['metadata', 'cover', 'track'],
           {
             priority: 'low',
             batchId,
             mode: 'if-needed',
-            ...(t.moved
-              ? { variants: { [t.workCode]: 'moved' as const } }
+            ...(out.moved
+              ? { variants: { [out.workCode]: 'moved' as const } }
               : {}),
             locations: {
-              [t.workCode]: {
-                rootFolder: t.rootFolder,
-                relativePath: t.relativePath,
-                dirName: t.dirName,
-                absDir: t.absDir,
+              [out.workCode]: {
+                rootFolder: out.rootFolder,
+                relativePath: out.relativePath,
+                dirName: out.dirName,
+                absDir: out.absDir,
               },
             },
           },
         );
+        submitted++;
         if (report.rejected.length > 0) {
           rejectedRunning += report.rejected.length;
           sys.log(
             'warning',
-            `Skipped (already running): ${t.workCode}`,
+            `Skipped (already running): ${out.workCode}`,
             batchId,
-            t.workCode,
+            out.workCode,
           );
         }
       } else {
-        for (const ev of out.events) {
-          if (ev.type === 'SCAN_LOG') {
-            sys.log(ev.log.level, ev.log.message, batchId);
-          } else if (ev.type === 'SCAN_TASK' && ev.task.status === 'failed') {
-            checkFailed++;
-          }
+        for (const log of out.logs) {
+          sys.log(log.level, log.message, batchId);
         }
+        checkFailed += out.failures.length;
       }
     }
 
@@ -317,7 +312,7 @@ export async function runScanOrchestration(
       else updated++;
     }
     const summary: ScanSummaryResults = {
-      total: collector.tasks.length,
+      total: submitted,
       added,
       updated,
       failed: checkFailed + outcome.failed + rejectedRunning,
