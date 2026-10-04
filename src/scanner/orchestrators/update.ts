@@ -17,6 +17,8 @@ function abortError(): Error {
 export interface UpdateOrchestrationOptions {
   /** 测试注入；缺省用生产单例。 */
   sys?: TaskSystem;
+  /** 路由层生成（立即可返回给前端）；缺省内部生成。 */
+  batchId?: string;
 }
 
 /**
@@ -31,7 +33,7 @@ export async function runUpdateOrchestration(
 ): Promise<ScanSummaryResults | null> {
   const sys = options.sys ?? getTaskSystem();
   if (!acquireIdentity(SCAN_ALL_IDENTITY)) return null;
-  const batchId = `update-${randomUUID()}`;
+  const batchId = options.batchId ?? `update-${randomUUID()}`;
 
   try {
     sys.startBatch('update', batchId);

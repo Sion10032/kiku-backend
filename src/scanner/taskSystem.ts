@@ -17,6 +17,10 @@ import {
   parseTaskKey,
   taskKey,
 } from './phases/phaseConfig.js';
+import { metadataExecutor } from './phases/metadata.js';
+import { coverExecutor } from './phases/cover.js';
+import { trackExecutor } from './phases/track.js';
+import { analyzeExecutor } from './phases/analyze.js';
 import type {
   PhaseExecutor,
   PhaseResult,
@@ -341,6 +345,11 @@ export function getTaskSystem(): TaskSystem {
         cpu: config.analysisParallelism,
       }),
     );
+    // 生产单例绑真实阶段执行体（测试注入自己的 TaskSystem 实例并注册 mock）
+    singleton.registerExecutor('metadata', metadataExecutor);
+    singleton.registerExecutor('cover', coverExecutor);
+    singleton.registerExecutor('track', trackExecutor);
+    singleton.registerExecutor('analyze', analyzeExecutor);
   }
   return singleton;
 }

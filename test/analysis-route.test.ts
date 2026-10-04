@@ -6,45 +6,42 @@ import { db } from '../src/infra/db/main/index';
 import { tracks, works } from '../src/infra/db/main/schema';
 import { analysisManager } from '../src/scanner/analysis';
 import { scanner } from '../src/scanner/scanner';
+import { getTaskSystem } from '../src/scanner/taskSystem';
 import { setupTestEnvironment } from './helpers/setup';
 import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 
 setupTestEnvironment();
 
 /**
- * Analysis 路由 + scan 后自动接力（app.inject 模式）。
+ * Analysis 路由（新契约：start 返回 batchId，进度走 /api/tasks/events）
+ * + scan → analysis 自动接力（旧 ScannerManager 路径，Task 11 随旧外壳一并清理）。
  * 依赖空库（无待分析数据）：全量 start 立即结束，不真跑 ffmpeg 长分析。
  */
 
-/** manager 私有态（测试直接戳，避免真跑分析） */
-interface ManagerInternal {
-  analyzing: boolean;
-  priority: string[];
-  queuedLow: string[];
-}
-
-const internals = () => analysisManager as unknown as ManagerInternal;
-
-/** 轮询等待 manager 空闲（空队列分析应秒级结束） */
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-async function waitIdle(timeoutMs = 5000): Promise<void> {
-  const start = Date.now();
-  while (analysisManager.isAnalyzing) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error('analysis did not finish in time');
-    }
-    await sleep(20);
-  }
-}
-
-/** 轮询等待扫描结束（接力 startAnalysis 与 scanning=false 同步块内完成，无竞态） */
+/** 轮询等待扫描结束（旧 ScannerManager 路径） */
 async function waitScanIdle(timeoutMs = 5000): Promise<void> {
   const start = Date.now();
   while (scanner.isScanning) {
     if (Date.now() - start > timeoutMs) {
       throw new Error('scan did not finish in time');
+    }
+    await sleep(20);
+  }
+}
+
+/** 轮询等待指定 analysis 批次终态（新编排器路径） */
+async function waitBatchDone(batchId: string, timeoutMs = 5000): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    const batch = getTaskSystem()
+      .snapshot()
+      .batches.find((b) => b.batchId === batchId);
+    if (batch && batch.status !== 'running') return;
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('analysis batch did not finish in time');
     }
     await sleep(20);
   }
@@ -73,11 +70,10 @@ describe('Analysis Routes', () => {
     setConfigForTesting();
   });
 
-  it('GET /api/analysis/status 未分析过返回初始形状', async () => {
+  it('GET /api/analysis/status 未分析过返回初始形状（新编排器不发旧事件，快照恒 null）', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/analysis/status',
-      // 私有模式全局守卫要求 JWT；status 端点本身无 admin 限制
       headers: { authorization: `Bearer ${adminToken}` },
     });
     expect(res.statusCode).toBe(200);
@@ -104,100 +100,31 @@ describe('Analysis Routes', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('POST /api/analysis/start {workIds, priority:high} 在跑时插队：从 low 移除后入 high 队列', async () => {
-    const m = internals();
-    m.analyzing = true;
-    m.queuedLow = ['RJ00000001', 'RJ00000009'];
-    try {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/analysis/start',
-        payload: { workIds: ['RJ00000001'], priority: 'high' },
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-        success: true,
-        queued: true,
-      });
-      expect(m.priority).toContain('RJ00000001');
-      // 同作品从 low 队列移除，避免双跑；其余 low 任务不受影响
-      expect(m.queuedLow).toEqual(['RJ00000009']);
-    } finally {
-      m.analyzing = false;
-      m.priority = [];
-      m.queuedLow = [];
-    }
+  it('POST /api/analysis/start {workIds, priority:high} → batchId，批次入任务中心', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: { workIds: ['RJ00000001'], priority: 'high' },
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; batchId: string }>();
+    expect(body.success).toBe(true);
+    expect(body.batchId.startsWith('analysis-')).toBe(true);
+    await waitBatchDone(body.batchId);
   });
 
-  it('POST /api/analysis/start {workIds} 在跑时（缺省 low）排入 low 队尾 queued=true', async () => {
-    const m = internals();
-    m.analyzing = true;
-    try {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/analysis/start',
-        payload: { workIds: ['RJ00000002'] },
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-        success: true,
-        queued: true,
-      });
-      expect(m.queuedLow).toContain('RJ00000002');
-      expect(m.priority).toEqual([]);
-    } finally {
-      m.analyzing = false;
-      m.priority = [];
-      m.queuedLow = [];
-    }
-  });
-
-  it('POST /api/analysis/start 旧 workId 字段已废弃：strip 后按全量请求排队', async () => {
-    const m = internals();
-    m.analyzing = true;
-    try {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/analysis/start',
-        payload: { workId: 'RJ00000001' },
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-        success: true,
-        queued: true,
-      });
-      expect(m.priority).toEqual([]);
-    } finally {
-      m.analyzing = false;
-      m.priority = [];
-      m.queuedLow = [];
-    }
-  });
-
-  it('POST /api/analysis/start 已在跑全量请求（缺省 low）→ 全量 pending 排入 low，queued=true', async () => {
-    const m = internals();
-    m.analyzing = true;
-    try {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/analysis/start',
-        payload: {},
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-        success: true,
-        queued: true,
-      });
-      expect(m.priority).toEqual([]);
-    } finally {
-      m.analyzing = false;
-      m.priority = [];
-      m.queuedLow = [];
-    }
+  it('POST /api/analysis/start 旧 workId 字段已废弃：strip 后按全量请求', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: { workId: 'RJ00000001' },
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; batchId: string }>();
+    expect(body.batchId.startsWith('analysis-')).toBe(true);
+    await waitBatchDone(body.batchId);
   });
 
   it('POST /api/analysis/start {workIds:[]} 空数组拒绝 400（空数组无子集语义）', async () => {
@@ -210,30 +137,6 @@ describe('Analysis Routes', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('POST /api/analysis/start 已在跑 + priority:high 无 workIds → 按全量请求排队 queued=true', async () => {
-    const m = internals();
-    m.analyzing = true;
-    try {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/analysis/start',
-        payload: { priority: 'high' },
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-        success: true,
-        queued: true,
-      });
-      // 全量请求不带目标作品，不进 high 插队队列
-      expect(m.priority).toEqual([]);
-    } finally {
-      m.analyzing = false;
-      m.priority = [];
-      m.queuedLow = [];
-    }
-  });
-
   it('POST /api/analysis/start 非法 priority → 400', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -244,17 +147,52 @@ describe('Analysis Routes', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('POST /api/analysis/stop 管理员调用返回 success（无分析时 no-op）', async () => {
+  it('POST /api/analysis/stop 无活跃 analysis 批次 → 404', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/analysis/stop',
       headers: { authorization: `Bearer ${adminToken}` },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json<{ success: boolean }>()).toEqual({ success: true });
+    expect(res.statusCode).toBe(404);
   });
 
-  describe('scan → analysis 自动接力', () => {
+  it('POST /api/analysis/start 空库全量触发启动并立即结束（SUMMARY 全零）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: {},
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; batchId: string }>();
+    expect(body.success).toBe(true);
+    await waitBatchDone(body.batchId);
+    const batch = getTaskSystem()
+      .snapshot()
+      .batches.find((b) => b.batchId === body.batchId);
+    expect(batch?.status).toBe('completed');
+    expect(batch?.results).toEqual({
+      totalWorks: 0,
+      analyzedTracks: 0,
+      failedTracks: 0,
+      failedWorks: 0,
+    });
+  });
+
+  it('POST /api/analysis/start {workIds} 子集启动（空库立即结束）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analysis/start',
+      payload: { workIds: ['RJ99999999'] },
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; batchId: string }>();
+    expect(body.batchId.startsWith('analysis-')).toBe(true);
+    await waitBatchDone(body.batchId);
+  });
+
+  describe('scan → analysis 自动接力（旧 ScannerManager 路径）', () => {
     it('自动分析关闭时不接力（snapshot 保持 null）', async () => {
       setConfigForTesting({
         ...getConfig(),
@@ -276,65 +214,14 @@ describe('Analysis Routes', () => {
       await waitScanIdle();
       // startAnalysis 在 runScan 同步块内置空快照；观察到扫描结束即已接力
       expect(analysisManager.getSnapshot()).not.toBeNull();
-      await waitIdle();
+      const start = Date.now();
+      while (analysisManager.isAnalyzing) {
+        if (Date.now() - start > 5000) {
+          throw new Error('analysis did not finish in time');
+        }
+        await sleep(20);
+      }
       expect(analysisManager.isAnalyzing).toBe(false);
     });
-  });
-
-  it('POST /api/analysis/start 空库全量触发启动并立即结束', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/analysis/start',
-      payload: {},
-      headers: { authorization: `Bearer ${adminToken}` },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-      success: true,
-      queued: false,
-    });
-    await waitIdle();
-    expect(analysisManager.isAnalyzing).toBe(false);
-  });
-
-  it('GET /api/analysis/status 分析后返回快照形状', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/analysis/status',
-      headers: { authorization: `Bearer ${adminToken}` },
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json<{
-      isAnalyzing: boolean;
-      snapshot: {
-        tasks: unknown[];
-        failedTasks: unknown[];
-        completed: number;
-        logs: unknown[];
-      } | null;
-    }>();
-    expect(body.isAnalyzing).toBe(false);
-    expect(body.snapshot).not.toBeNull();
-    expect(body.snapshot?.tasks).toEqual([]);
-    expect(body.snapshot?.failedTasks).toEqual([]);
-    expect(body.snapshot?.completed).toBe(0);
-    expect(Array.isArray(body.snapshot?.logs)).toBe(true);
-  });
-
-  // 放在末尾：真启动会留下快照，不能污染前面对 snapshot 形状/null 的断言
-  it('POST /api/analysis/start {workIds} 子集启动（空库立即结束）', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/analysis/start',
-      payload: { workIds: ['RJ99999999'] },
-      headers: { authorization: `Bearer ${adminToken}` },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json<{ success: boolean; queued: boolean }>()).toEqual({
-      success: true,
-      queued: false,
-    });
-    await waitIdle();
-    expect(analysisManager.isAnalyzing).toBe(false);
   });
 });

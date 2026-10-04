@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getConfig } from '../infra/config/index.js';
@@ -6,35 +7,28 @@ import {
   type AnalysisSnapshot,
   analysisManager,
 } from '../scanner/analysis.js';
+import { runAnalysisOrchestration } from '../scanner/orchestrators/analysis.js';
+import {
+  abortBatchController,
+  registerController,
+  unregisterController,
+} from '../scanner/orchestrators/controllers.js';
+import { getTaskSystem } from '../scanner/taskSystem.js';
 
-const scanLogSchema = z.object({
-  level: z.string(),
-  message: z.string(),
-  timestamp: z.string(),
-});
-
-const analysisTaskSchema = z.object({
-  workId: z.string(),
-  title: z.string(),
-  status: z.enum(['pending', 'scanning', 'completed', 'failed']),
-  analyzed: z.number(),
-  total: z.number(),
-  error: z.string().optional(),
-});
-
-const analysisSnapshotSchema: z.ZodType<AnalysisSnapshot> = z.object({
-  tasks: z.array(analysisTaskSchema),
-  failedTasks: z.array(analysisTaskSchema),
+const analysisSnapshotSchema = z.object({
+  tasks: z.array(z.object({ workId: z.string() })),
+  failedTasks: z.array(z.object({ workId: z.string() })),
   completed: z.number(),
-  logs: z.array(scanLogSchema),
+  logs: z.array(
+    z.object({ level: z.string(), message: z.string(), timestamp: z.string() }),
+  ),
 });
 
 export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // SSE event stream — pushes analysis progress to the frontend.
+  // SSE event stream（旧协议，迁移期保留；任务中心走 /api/tasks/events，旧端点由后续清理删除）
   fastify.get('/events', { sse: 'only' }, async (_request, reply) => {
     reply.sse.keepAlive();
 
-    // Send initial analysis state on connect / reconnect.
     await reply.sse.send({
       event: 'ANALYSIS_INIT_STATE',
       data: {
@@ -43,16 +37,11 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     });
 
-    // Forward analysis events to this client.
     const handler = (event: AnalysisEvent): void => {
       reply.sse.send({ event: event.type, data: event }).catch(() => {});
     };
     analysisManager.on('analysis', handler);
 
-    // Cleanup on disconnect.
-    // 同时监听 raw close：若初始 send 期间客户端已断开，
-    // @fastify/sse 的 cleanup 先于 onClose 注册执行，
-    // 之后注册的回调永不触发，会造成 EventEmitter listener 泄漏。
     const cleanup = (): void => {
       analysisManager.off('analysis', handler);
     };
@@ -60,8 +49,9 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply.raw.on('close', cleanup);
   });
 
-  // Start a loudness analysis (full queue, a work-ID subset, or a priority
-  // bump from the work page while a run is already in progress).
+  // Start loudness analysis（入队编排，立即返回 batchId；进度走 /api/tasks/events）。
+  // workIds：目标作品子集（缺省 = 全量 pending）；
+  // priority：high（作品页，cpu 池内插队）| low（管理页，缺省，scan 接力同档）
   fastify.post(
     '/start',
     {
@@ -69,32 +59,33 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         body: z
           .object({
-            // workIds：目标作品子集（缺省 = 全量 pending）；
-            // priority：high（作品页，已跑时插队）| low（管理页，缺省，已跑时不干扰）
             workIds: z.array(z.string()).min(1).optional(),
             priority: z.enum(['high', 'low']).default('low'),
           })
-          // 无 body 时走默认值（zod v4 的 .default() 实参需匹配输出类型）
           .default({ priority: 'low' }),
         response: {
-          200: z.object({ success: z.boolean(), queued: z.boolean() }),
+          200: z.object({ success: z.boolean(), batchId: z.string() }),
         },
       },
     },
     async (request) => {
-      const config = getConfig();
+      const cfg = getConfig();
       const { workIds, priority } = request.body;
-      // 启动 / 插队 / 不干扰的编排都在 manager 内：queued = 已在跑且插队成功
-      const { queued } = analysisManager.startAnalysis(
-        config,
-        workIds,
-        priority,
-      );
-      return { success: true, queued };
+      const batchId = `analysis-${randomUUID()}`;
+      const controller = new AbortController();
+      registerController(batchId, controller);
+      void runAnalysisOrchestration(cfg, controller.signal, workIds, priority, {
+        batchId,
+      })
+        .catch((err) => {
+          console.error('[analysis] orchestration failed:', err);
+        })
+        .finally(() => unregisterController(batchId));
+      return { success: true, batchId };
     },
   );
 
-  // Terminate the running analysis.
+  // Terminate the running analysis：按活跃 analysis 批次取消（任务 + 编排信号两侧）
   fastify.post(
     '/stop',
     {
@@ -102,16 +93,25 @@ export const analysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         response: {
           200: z.object({ success: z.boolean() }),
+          404: z.object({ error: z.string() }),
         },
       },
     },
-    async () => {
-      analysisManager.killAnalysis();
+    async (_request, reply) => {
+      const snap = getTaskSystem().snapshot();
+      const active = snap.batches.find(
+        (b) => b.status === 'running' && b.kind === 'analysis',
+      );
+      if (!active) {
+        return reply.fail(404, 'errors.task.analysis-not-running');
+      }
+      abortBatchController(active.batchId);
+      getTaskSystem().cancelBatch(active.batchId);
       return { success: true };
     },
   );
 
-  // Current analysis state.
+  // Current analysis state（旧协议，迁移期保留）
   fastify.get(
     '/status',
     {

@@ -143,24 +143,29 @@ describe('管理员单作品端点', () => {
     expect(anon.statusCode).toBe(401);
   });
 
-  it('POST /refresh：200，标题更新 + 音轨时长回填', async () => {
+  it('POST /refresh：202 异步入队，完成后 circle_id 链路端到端生效', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/api/work/${ID}/refresh`,
       headers: { authorization: `Bearer ${adminToken}` },
     });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.title).toBe(`路由测试作品 ${ID}`);
-    expect(body.tracks.added).toBe(1);
+    expect(res.statusCode).toBe(202);
+    expect((res.json() as { workId: string }).workId).toBe(ID);
 
-    // 端到端钉住 circle_id 链路：seed 只给了 circleName（占位 id = 社团名），
-    // 而 fixture 的 maker_name 链接是 maker_id/RG00000001。只有
-    // scraper 提取 maker_id → syncWorkMetadata 透传 → upsertWork 透传给
-    // resolveCircle → 占位行原地升级 这条链完整存在，circleId 才会变成
-    // RG00000001；任一环退回 undefined 都会落回占位 id 而在此失败。
-    const [refreshed] = await db.select().from(works).where(eq(works.id, ID));
-    expect(refreshed?.circleId).toBe('RG00000001');
+    // 后台阶段链完成（fetch 拦截供元数据/封面）：轮询 circle_id 占位行原地升级
+    const deadline = Date.now() + 5000;
+    let circleId: string | null = null;
+    while (Date.now() < deadline) {
+      const [row] = await db.select().from(works).where(eq(works.id, ID));
+      if (row?.circleId === 'RG00000001') {
+        circleId = row.circleId;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    // 端到端钉住 circle_id 链路：scraper 提取 maker_id → metadata 阶段透传 →
+    // resolveCircle 占位行原地升级；任一环退回 undefined 都会落回占位 id 而在此失败。
+    expect(circleId).toBe('RG00000001');
   });
 
   it('POST /refresh：作品不存在 → 404', async () => {
@@ -172,14 +177,14 @@ describe('管理员单作品端点', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('POST /sync-tracks：200 返回同步统计（size 未变 → 全 0）', async () => {
+  it('POST /sync-tracks：202 异步入队（diff 语义由 trackSync 单元测试钉住）', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/api/work/${ID}/sync-tracks`,
       headers: { authorization: `Bearer ${adminToken}` },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().tracks).toEqual({ added: 0, updated: 0, removed: 0 });
+    expect(res.statusCode).toBe(202);
+    expect((res.json() as { workId: string }).workId).toBe(ID);
   });
 
   it('DELETE：软删后详情立即 404；重复删除幂等 success', async () => {

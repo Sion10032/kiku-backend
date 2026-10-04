@@ -27,6 +27,7 @@ import { rootFolderRoutes } from './routes/rootFolders.js';
 import { scannerRoutes } from './routes/scanner.js';
 import { settingsBackupRoutes } from './routes/settingsBackup.js';
 import { setupRoutes } from './routes/setup.js';
+import { taskRoutes } from './routes/tasks.js';
 import { versionRoutes } from './routes/version.js';
 import { workAdminRoutes } from './routes/workAdmin.js';
 import { worksRoutes } from './routes/works.js';
@@ -57,6 +58,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   // Register routes
   await app.register(healthRoutes, { prefix: '/api' });
+  await app.register(taskRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(worksRoutes, { prefix: '/api' });
   await app.register(workAdminRoutes, { prefix: '/api' });

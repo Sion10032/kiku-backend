@@ -13,6 +13,8 @@ import { getTaskSystem, type TaskSystem } from '../taskSystem.js';
 export interface AnalysisOrchestrationOptions {
   /** 测试注入；缺省用生产单例。 */
   sys?: TaskSystem;
+  /** 路由层生成（立即可返回给前端）；缺省内部生成。 */
+  batchId?: string;
 }
 
 /**
@@ -28,7 +30,7 @@ export async function runAnalysisOrchestration(
 ): Promise<AnalysisSummaryResults | null> {
   void config; // 并发宽度由队列 cpu 池持有（analysisParallelism）；config 留作签名对齐
   const sys = options.sys ?? getTaskSystem();
-  const batchId = `analysis-${randomUUID()}`;
+  const batchId = options.batchId ?? `analysis-${randomUUID()}`;
 
   try {
     // ffmpeg 缺失：立即失败收尾（对齐现状 ANALYSIS_ERROR），不注入任何任务

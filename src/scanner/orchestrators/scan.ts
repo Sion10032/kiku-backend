@@ -42,6 +42,11 @@ export function releaseIdentity(id: string): void {
   held.delete(id);
 }
 
+/** 路由层预查（409 即时反馈）；真正的占用判定仍在编排器 acquireIdentity（防竞态双跑）。 */
+export function isIdentityHeld(id: string): boolean {
+  return held.has(id);
+}
+
 function abortError(): Error {
   return new DOMException('Scan aborted', 'AbortError');
 }
@@ -66,6 +71,8 @@ export interface ScanOrchestrationOptions {
   sys?: TaskSystem;
   /** scan 正常收尾后的自动接力（autoLoudnessAnalysis → analysis 编排器），fire-and-forget。 */
   chain?: (config: Config, signal: AbortSignal) => Promise<unknown>;
+  /** 路由层生成（立即可返回给前端）；缺省内部生成。 */
+  batchId?: string;
 }
 
 /**
@@ -79,7 +86,7 @@ export async function runScanOrchestration(
 ): Promise<ScanSummaryResults | null> {
   const sys = options.sys ?? getTaskSystem();
   if (!acquireIdentity(SCAN_ALL_IDENTITY)) return null;
-  const batchId = `scan-${randomUUID()}`;
+  const batchId = options.batchId ?? `scan-${randomUUID()}`;
 
   try {
     sys.startBatch('scan', batchId);

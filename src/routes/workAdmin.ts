@@ -1,7 +1,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { refreshWorkMetadata, syncWorkDurations } from '../scanner/workOps.js';
+import { workSourceResolver } from '../infra/sources/index.js';
+import { getTaskSystem } from '../scanner/taskSystem.js';
 import {
+  getWorkRow,
+  liveWorkExists,
   softDeleteWork,
   softDeleteWorks,
   workExists,
@@ -11,18 +14,56 @@ const idParamsSchema = z.object({
   id: z.string(),
 });
 
-const trackSyncStatsSchema = z.object({
-  added: z.number(),
-  updated: z.number(),
-  removed: z.number(),
-});
+type WorkOpErrorKey =
+  | 'errors.media.work-not-found'
+  | 'errors.media.manual-work-no-remote'
+  | 'errors.task.work-in-progress';
+
+/** 异步手动操作公共段：作品校验（含 manual 拒绝）→ 高优注入 → 202/409。 */
+async function submitWorkOp(
+  id: string,
+  phases: Array<'metadata' | 'cover' | 'track' | 'analyze'>,
+  opts: { rejectManual: boolean },
+): Promise<
+  | { ok: true; workId: string }
+  | { ok: false; code: 404 | 409; errorKey: WorkOpErrorKey }
+> {
+  const work = await getWorkRow(id);
+  if (!work || !(await liveWorkExists(id))) {
+    return { ok: false, code: 404, errorKey: 'errors.media.work-not-found' };
+  }
+  if (opts.rejectManual && workSourceResolver.classify(id) === 'manual') {
+    // 手动作品无 DLsite 来源：语义冲突（非服务器错误），409（对齐现状）
+    return {
+      ok: false,
+      code: 409,
+      errorKey: 'errors.media.manual-work-no-remote',
+    };
+  }
+  const report = getTaskSystem().submit([id], phases, {
+    priority: 'high',
+    mode: 'force',
+    locations: {
+      [id]: {
+        rootFolder: work.rootFolder,
+        relativePath: work.dir,
+        dirName: work.dir,
+      },
+    },
+  });
+  if (report.rejected.length > 0) {
+    return { ok: false, code: 409, errorKey: 'errors.task.work-in-progress' };
+  }
+  return { ok: true, workId: id };
+}
 
 /**
- * 作品管理端点（管理员专用）：单作品（更新元数据 / 更新音轨时长 / 删除）
- * 与批量软删除。与 metadata.ts 的公开浏览读端点相对；全部挂 authenticateAdmin。
+ * 作品管理端点（管理员专用）：单作品异步运维（刷新元数据 / 同步音轨 / 立即分析）
+ * 与删除/批量软删除。手动操作以高优先级入队（202 + workId，进度走 /api/tasks），
+ * 不再阻塞 HTTP 等待 DLsite；同作品在飞时 409。
  */
 export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // POST /api/work/:id/refresh — 重抓 DLsite 元数据 + 音轨时长同步
+  // POST /api/work/:id/refresh — 重抓 DLsite 元数据 + 封面 + 音轨时长同步（高优入队）
   fastify.post(
     '/work/:id/refresh',
     {
@@ -30,40 +71,25 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         params: idParamsSchema,
         response: {
-          200: z.object({ title: z.string(), tracks: trackSyncStatsSchema }),
+          202: z.object({ workId: z.string() }),
           404: z.object({ error: z.string() }),
           409: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
         },
       },
     },
     async (request, reply) => {
       const { id } = request.params;
-      try {
-        const result = await refreshWorkMetadata(id);
-        if (!result.ok) {
-          if (result.reason === 'work-not-found') {
-            return reply.fail(404, 'errors.media.work-not-found');
-          }
-          if (result.reason === 'manual-work-no-remote') {
-            // 手动作品无 DLsite 来源：语义冲突（非服务器错误），409
-            return reply.fail(409, 'errors.media.manual-work-no-remote');
-          }
-          return reply.fail(500, 'errors.work-admin.failed', {
-            reason: result.reason,
-          });
-        }
-        return { title: result.title, tracks: result.tracks };
-      } catch (err) {
-        // DLsite 抓取 / 入库失败：消息透传给管理员界面
-        return reply.status(500).send({
-          error: err instanceof Error ? err.message : 'Refresh failed',
-        });
+      const result = await submitWorkOp(id, ['metadata', 'cover', 'track'], {
+        rejectManual: true,
+      });
+      if (!result.ok) {
+        return reply.fail(result.code, result.errorKey);
       }
+      return reply.status(202).send({ workId: result.workId });
     },
   );
 
-  // POST /api/work/:id/sync-tracks — 按磁盘内容 diff 同步音轨时长
+  // POST /api/work/:id/sync-tracks — 按磁盘内容 diff 同步音轨时长（高优入队）
   fastify.post(
     '/work/:id/sync-tracks',
     {
@@ -71,30 +97,45 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         params: idParamsSchema,
         response: {
-          200: z.object({ tracks: trackSyncStatsSchema }),
+          202: z.object({ workId: z.string() }),
           404: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
         },
       },
     },
     async (request, reply) => {
       const { id } = request.params;
-      try {
-        const result = await syncWorkDurations(id);
-        if (!result.ok) {
-          if (result.reason === 'work-not-found') {
-            return reply.fail(404, 'errors.media.work-not-found');
-          }
-          return reply.fail(500, 'errors.work-admin.failed', {
-            reason: result.reason,
-          });
-        }
-        return { tracks: result.tracks };
-      } catch (err) {
-        return reply.status(500).send({
-          error: err instanceof Error ? err.message : 'Track sync failed',
-        });
+      const result = await submitWorkOp(id, ['track'], { rejectManual: false });
+      if (!result.ok) {
+        return reply.fail(result.code, result.errorKey);
       }
+      return reply.status(202).send({ workId: result.workId });
+    },
+  );
+
+  // POST /api/work/:id/analyze — 立即响度分析（高优入队，cpu 池内插队）
+  fastify.post(
+    '/work/:id/analyze',
+    {
+      preHandler: [fastify.authenticateAdmin],
+      schema: {
+        params: idParamsSchema,
+        response: {
+          202: z.object({ workId: z.string() }),
+          404: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const result = await submitWorkOp(id, ['analyze'], {
+        rejectManual: false,
+      });
+      if (!result.ok) {
+        return reply.fail(result.code, result.errorKey);
+      }
+      return reply.status(202).send({ workId: result.workId });
     },
   );
 
@@ -114,6 +155,7 @@ export const workAdminRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
+      // 幂等：对已软删 id 再次删除仍返回 success（workExists 含软删）
       if (!(await workExists(id))) {
         return reply.fail(404, 'errors.work.not-found', { id });
       }

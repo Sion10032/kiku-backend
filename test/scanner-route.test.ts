@@ -65,9 +65,9 @@ describe('Scanner Routes', () => {
       headers: { authorization: `Bearer ${adminToken}` },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json<{ success: boolean }>()).toEqual({ success: true });
-    await waitScanIdle();
-    expect(scanner.isScanning).toBe(false);
+    const body = res.json<{ success: boolean; batchId: string }>();
+    expect(body.success).toBe(true);
+    expect(body.batchId.startsWith('update-')).toBe(true);
   });
 
   it('POST /api/scanner/scan {mode:update} 不带 workIds 保持旧形态', async () => {
