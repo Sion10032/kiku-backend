@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { getConfig } from '../../config/index.js';
@@ -144,6 +144,24 @@ export function listBlobKeys(namespace: string): Set<string> {
     .select({ key: blobs.key })
     .from(blobs)
     .where(eq(blobs.namespace, namespace))
+    .all();
+  return new Set(rows.map((r) => r.key));
+}
+
+/**
+ * 按 given keys 一次查询实际存在的 key（单条 IN 查询）。
+ * 供「单实体多 key」场景（如单作品多封面类型）一次判定：
+ * 比逐 key blobExists 少查询往返，比 listBlobKeys 全量拉取窄。
+ */
+export function existingBlobKeys(
+  namespace: string,
+  keys: string[],
+): Set<string> {
+  if (keys.length === 0) return new Set();
+  const rows = blobDb
+    .select({ key: blobs.key })
+    .from(blobs)
+    .where(and(eq(blobs.namespace, namespace), inArray(blobs.key, keys)))
     .all();
   return new Set(rows.map((r) => r.key));
 }

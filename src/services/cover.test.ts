@@ -26,6 +26,7 @@ const {
   getCoverData,
   deleteAllCovers,
   importLocalCover,
+  existingCoverTypes,
 } = await import('./cover.service');
 const { deleteBlob, putBlob } = await import('../infra/db/blob/index');
 
@@ -174,5 +175,25 @@ describe('importLocalCover（手动作品本地封面导入）', () => {
     expect(got.data.equals(existing)).toBe(true);
     expect(got.mimeType).toBe('image/webp');
     deleteBlob('cover', 'UW00000004_main');
+  });
+});
+
+describe('existingCoverTypes（单作品多类型一次查询）', () => {
+  it('返回实际存在的类型集合；未命中类型不在集内', () => {
+    putBlob('cover', 'RJ000012_main', Buffer.from('a'), 'image/jpeg');
+    try {
+      const existing = existingCoverTypes('RJ000012', [
+        'main',
+        'sam',
+        '240x240',
+      ]);
+      expect(existing).toEqual(new Set(['main']));
+    } finally {
+      deleteBlob('cover', 'RJ000012_main');
+    }
+  });
+
+  it('全部未命中 → 空 Set', () => {
+    expect(existingCoverTypes('RJ000013', ['main', 'sam'])).toEqual(new Set());
   });
 });

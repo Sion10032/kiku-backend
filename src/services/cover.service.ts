@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   blobExists,
   deleteBlob,
+  existingBlobKeys,
   getBlob,
   listBlobKeys,
   putBlob,
@@ -60,6 +61,28 @@ function getCoverUrl(rjcode: string, type: CoverType): string {
  */
 function getCoverKey(id: string, type: CoverType): string {
   return `${id}_${type}`;
+}
+
+/**
+ * 单作品多封面类型一次查询：返回实际存在的类型集合。
+ * 供封面补齐阶段一次判定缺失（每作品一条 IN 查询）——
+ * 比逐类型 coverExists 少查询往返，比 listCoverKeys 全量拉取窄。
+ * @param id 作品ID
+ * @param types 待判定的封面类型
+ */
+export function existingCoverTypes(
+  id: string,
+  types: CoverType[],
+): Set<CoverType> {
+  const found = existingBlobKeys(
+    COVER_NAMESPACE,
+    types.map((type) => getCoverKey(id, type)),
+  );
+  const result = new Set<CoverType>();
+  for (const type of types) {
+    if (found.has(getCoverKey(id, type))) result.add(type);
+  }
+  return result;
 }
 
 /**
