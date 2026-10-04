@@ -9,11 +9,7 @@ import { fetchDLsiteWorkInfo } from '../../infra/scraper/dlsite.js';
 import { workSourceResolver } from '../../infra/sources/index.js';
 import { deriveManualTitle } from '../../infra/sources/manual.js';
 import { updateWorkDir, upsertWork } from '../../services/work.service.js';
-import type {
-  PhaseContext,
-  PhaseExecutor,
-  PhaseResult,
-} from '../taskSystem.js';
+import type { PhaseContext, PhaseExecutor, PhaseResult } from './types.js';
 
 function assertAlive(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException('Scan aborted', 'AbortError');

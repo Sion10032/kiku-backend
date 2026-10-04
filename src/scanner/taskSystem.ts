@@ -1,90 +1,38 @@
-// 任务系统装配层：把业务语义（workId/阶段 DAG/两池/合并策略/快照协议）装配到通用调度内核上。
-// 阶段以 `${phase}:${workId}` 为 key；依赖：cover/track → metadata（队列级），analyze → track
-// 由编排器 barrier 时序保证（track warn-continue 失败后 analyze 仍需接力，见行为对齐表）。
-// 服务端快照为权威状态：submit/状态变化立即写入快照，TASK_DELTA/BATCH_LOG 经 250ms 节流合并发出。
+// 任务系统装配层：把业务语义（workId/阶段 DAG/两池/合并策略）装配到通用调度内核上。
+// 阶段以 `${phase}:${workId}` 为 key；cover/track → metadata 为队列级依赖，analyze 的
+// 先后由编排器 barrier 时序保证（track warn-continue 失败不得阻断接力，见行为对齐表）。
+// 快照为权威状态：状态变化立即写入（SnapshotHub），TASK_DELTA/BATCH_LOG 经节流合并发出。
 
-import {
-  type BatchOutcome,
-  type CoreEvent,
-  type CoreStatus,
+import type {
+  BatchOutcome,
+  CoreEvent,
+  CoreStatus,
   TaskQueue,
 } from '../infra/taskQueue/index.js';
 import {
-  type AnalysisSummaryResults,
-  applyTaskEvent,
-  type BatchCounters,
-  type BatchInfo,
-  type BatchKind,
-  type BatchLog,
-  emptyTaskSnapshot,
-  LOG_CAP,
-  type Phase,
-  type PhaseEntry,
-  type PhaseStatus,
-  type ScanSummaryResults,
-  type TaskEvent,
-  type TaskSnapshot,
+  PHASE_CONFIG,
+  PHASE_ORDER,
+  PRIORITY_VALUE,
+  parseTaskKey,
+  taskKey,
+} from './phases/phaseConfig.js';
+import type {
+  PhaseExecutor,
+  PhaseResult,
+  WorkLocation,
+} from './phases/types.js';
+import type {
+  AnalysisSummaryResults,
+  BatchCounters,
+  BatchKind,
+  BatchLog,
+  Phase,
+  PhaseEntry,
+  PhaseStatus,
+  ScanSummaryResults,
+  TaskEvent,
 } from './taskEvents.js';
-
-export type PhaseResult = {
-  created?: boolean;
-  title?: string;
-  detail?: { analyzed?: number; failed?: number };
-};
-
-/** scan 分流的物理位置（路径信息随 submit 传入，不入队列身份）。 */
-export interface WorkLocation {
-  rootFolder: string;
-  relativePath: string;
-  /** manual 分支标题推导用目录名。 */
-  dirName?: string;
-  /** manual 分支本地封面导入用绝对路径。 */
-  absDir?: string;
-}
-
-export interface PhaseContext {
-  workId: string;
-  /** 仅 metadata 阶段有值：scan 分流的 moved 变体。 */
-  variant: 'dlsite' | 'manual' | 'moved' | undefined;
-  /** scan 分流的物理位置（metadata 阶段必需）。 */
-  location: WorkLocation | undefined;
-  signal: AbortSignal;
-  log: (level: string, message: string) => void;
-  force: boolean;
-}
-
-export type PhaseExecutor = (ctx: PhaseContext) => Promise<PhaseResult>;
-
-interface PhaseConfig {
-  resource: 'net' | 'cpu';
-  failurePolicy: 'fail-pipeline' | 'warn-continue';
-  deps: Phase[];
-}
-
-const PHASE_ORDER: readonly Phase[] = [
-  'metadata',
-  'cover',
-  'track',
-  'analyze',
-] as const;
-
-const PHASE_CONFIG: Record<Phase, PhaseConfig> = {
-  metadata: { resource: 'net', failurePolicy: 'fail-pipeline', deps: [] },
-  cover: {
-    resource: 'net',
-    failurePolicy: 'warn-continue',
-    deps: ['metadata'],
-  },
-  track: {
-    resource: 'net',
-    failurePolicy: 'warn-continue',
-    deps: ['metadata'],
-  },
-  // analyze 不设队列级 dep：track 属 warn-continue，失败不得阻断分析接力
-  analyze: { resource: 'cpu', failurePolicy: 'fail-pipeline', deps: [] },
-};
-
-const PRIORITY_VALUE = { low: 0, high: 10 } as const;
+import { SnapshotHub } from './taskSnapshotHub.js';
 
 export interface SubmitOptions {
   priority: 'low' | 'high';
@@ -111,22 +59,16 @@ export interface TaskSystemOptions {
 
 export class TaskSystem {
   private readonly queue: TaskQueue;
+  private readonly hub: SnapshotHub;
   private readonly executors = new Map<Phase, PhaseExecutor>();
-  private readonly listeners = new Set<(e: TaskEvent) => void>();
-  private state: TaskSnapshot = emptyTaskSnapshot();
-  private readonly dirtyEntries = new Map<string, PhaseEntry>();
-  private readonly dirtyCounters = new Map<string, BatchCounters>();
-  private readonly pendingLogs: BatchLog[] = [];
   private readonly keyBatches = new Map<string, string>();
   private readonly keyVariants = new Map<string, 'moved'>();
   private readonly keyLocations = new Map<string, WorkLocation>();
   private readonly resultsByBatch = new Map<string, Map<string, PhaseResult>>();
-  private flushTimer: ReturnType<typeof setTimeout> | undefined;
-  private readonly flushIntervalMs: number;
 
   constructor(queue: TaskQueue, options: TaskSystemOptions = {}) {
     this.queue = queue;
-    this.flushIntervalMs = options.flushIntervalMs ?? 250;
+    this.hub = new SnapshotHub(options);
     queue.onEvent((e) => this.onQueueEvent(e));
   }
 
@@ -144,24 +86,14 @@ export class TaskSystem {
       completed: 0,
       failed: 0,
     };
-    const batch: BatchInfo = {
+    this.hub.upsertBatch({
       batchId,
       kind,
       createdAt: nowIso(),
       counters,
       status: 'running',
-    };
-    this.state = applyTaskEvent(this.state, {
-      type: 'TASK_DELTA',
-      entries: [],
-      counters: [counters],
     });
-    // applyTaskEvent 的防御性创建不含 createdAt/status 语义，这里用完整批次对象覆盖
-    const idx = this.state.batches.findIndex((b) => b.batchId === batchId);
-    const batches = [...this.state.batches];
-    if (idx >= 0) batches[idx] = batch;
-    this.state = { ...this.state, batches };
-    this.markDirty();
+    this.hub.markCounters(counters);
   }
 
   submit(
@@ -226,22 +158,17 @@ export class TaskSystem {
     status: FinishStatus,
     results?: ScanSummaryResults | AnalysisSummaryResults,
   ): void {
-    const idx = this.state.batches.findIndex((b) => b.batchId === batchId);
-    if (idx < 0) return;
-    const prev = this.state.batches[idx];
+    const prev = this.hub.findBatch(batchId);
     if (!prev) return;
     const completedAt = nowIso();
-    const updated: BatchInfo = {
+    this.hub.upsertBatch({
       ...prev,
       status,
       completedAt,
       ...(results ? { results } : {}),
-    };
-    const batches = [...this.state.batches];
-    batches[idx] = updated;
-    this.state = { ...this.state, batches };
+    });
     if (status === 'completed' && results) {
-      this.emitEvent({
+      this.hub.emitNow({
         type: 'BATCH_SUMMARY',
         batchId,
         kind: prev.kind,
@@ -269,23 +196,17 @@ export class TaskSystem {
   }
 
   /** 权威快照（含节流窗口内未发出的状态）。 */
-  snapshot(): TaskSnapshot {
-    return {
-      batches: [...this.state.batches],
-      pipelines: [...this.state.pipelines],
-      logs: [...this.state.logs],
-    };
+  snapshot() {
+    return this.hub.snapshot();
   }
 
   subscribe(cb: (e: TaskEvent) => void): () => void {
-    this.listeners.add(cb);
-    return () => this.listeners.delete(cb);
+    return this.hub.subscribe(cb);
   }
 
   dispose(): void {
-    if (this.flushTimer) clearTimeout(this.flushTimer);
-    this.flushTimer = undefined;
-    this.listeners.clear();
+    this.hub.dispose();
+    this.executors.clear();
   }
 
   // ---------- 内部 ----------
@@ -327,7 +248,7 @@ export class TaskSystem {
 
   private onQueueEvent(e: CoreEvent): void {
     if (e.type === 'batch-count') {
-      const batch = this.state.batches.find((b) => b.batchId === e.batchId);
+      const batch = this.hub.findBatch(e.batchId);
       if (!batch) return;
       const counters: BatchCounters = {
         batchId: e.batchId,
@@ -337,13 +258,8 @@ export class TaskSystem {
         completed: e.completed,
         failed: e.failed,
       };
-      this.state = applyTaskEvent(this.state, {
-        type: 'TASK_DELTA',
-        entries: [],
-        counters: [counters],
-      });
-      this.dirtyCounters.set(e.batchId, counters);
-      this.markDirty();
+      this.hub.apply({ type: 'TASK_DELTA', entries: [], counters: [counters] });
+      this.hub.markCounters(counters);
       return;
     }
 
@@ -357,19 +273,14 @@ export class TaskSystem {
       batchId: this.keyBatches.get(e.key),
       ...(e.error ? { error: e.error } : {}),
     };
-    this.state = applyTaskEvent(this.state, {
-      type: 'TASK_DELTA',
-      entries: [entry],
-      counters: [],
-    });
-    this.dirtyEntries.set(e.key, entry);
+    this.hub.apply({ type: 'TASK_DELTA', entries: [entry], counters: [] });
+    this.hub.markEntry(e.key, entry);
     if (
       e.status === 'failed' &&
       PHASE_CONFIG[phase].failurePolicy === 'fail-pipeline'
     ) {
       this.cancelPendingDependents(phase, workId);
     }
-    this.markDirty();
   }
 
   /** fail-pipeline 阶段失败后，取消同批次中仍 pending 的后续阶段（不动 running，不跨批次）。 */
@@ -399,57 +310,8 @@ export class TaskSystem {
       ...(batchId ? { batchId } : {}),
       ...(workId ? { workId } : {}),
     };
-    this.state = {
-      ...this.state,
-      logs: capLogs([...this.state.logs, log]),
-    };
-    this.pendingLogs.push(log);
-    this.markDirty();
+    this.hub.pushLog(log);
   }
-
-  private markDirty(): void {
-    if (this.flushTimer) return;
-    this.flushTimer = setTimeout(() => this.flush(), this.flushIntervalMs);
-    this.flushTimer.unref?.();
-  }
-
-  private flush(): void {
-    this.flushTimer = undefined;
-    if (
-      this.dirtyEntries.size === 0 &&
-      this.dirtyCounters.size === 0 &&
-      this.pendingLogs.length === 0
-    ) {
-      return;
-    }
-    this.emitEvent({
-      type: 'TASK_DELTA',
-      entries: [...this.dirtyEntries.values()],
-      counters: [...this.dirtyCounters.values()],
-    });
-    for (const log of this.pendingLogs)
-      this.emitEvent({ type: 'BATCH_LOG', log });
-    this.dirtyEntries.clear();
-    this.dirtyCounters.clear();
-    this.pendingLogs.length = 0;
-  }
-
-  private emitEvent(e: TaskEvent): void {
-    for (const cb of this.listeners) cb(e);
-  }
-}
-
-function taskKey(phase: Phase, workId: string): string {
-  return `${phase}:${workId}`;
-}
-
-function parseTaskKey(key: string): { phase?: Phase; workId: string } {
-  const i = key.indexOf(':');
-  if (i < 0) return { workId: key };
-  const phase = key.slice(0, i);
-  if (!(PHASE_ORDER as readonly string[]).includes(phase))
-    return { workId: key };
-  return { phase: phase as Phase, workId: key.slice(i + 1) };
 }
 
 function toPhaseStatus(status: CoreStatus): PhaseStatus {
@@ -459,26 +321,3 @@ function toPhaseStatus(status: CoreStatus): PhaseStatus {
 function nowIso(): string {
   return new Date().toISOString();
 }
-
-function capLogs(logs: BatchLog[]): BatchLog[] {
-  return logs.length > LOG_CAP ? logs.slice(logs.length - LOG_CAP) : logs;
-}
-
-export type {
-  AnalysisSummaryResults,
-  BatchCounters,
-  BatchInfo,
-  BatchKind,
-  BatchLog,
-  BatchOutcome,
-  CoreEvent,
-  CoreStatus,
-  Phase,
-  PhaseEntry,
-  PhaseStatus,
-  ScanSummaryResults,
-  TaskEvent,
-  TaskSnapshot,
-};
-// re-export 供编排器/路由使用，避免散落 import
-export { TaskQueue };

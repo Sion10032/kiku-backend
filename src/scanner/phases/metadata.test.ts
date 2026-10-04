@@ -8,8 +8,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../infra/db/main/index.js';
 import { circles, works } from '../../infra/db/main/schema.js';
 import { upsertWork } from '../../services/work.service.js';
-import type { PhaseContext, WorkLocation } from '../taskSystem.js';
 import { metadataExecutor } from './metadata.js';
+import type { PhaseContext, WorkLocation } from './types.js';
 
 setupTestEnvironment();
 
