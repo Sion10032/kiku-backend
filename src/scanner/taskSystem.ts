@@ -112,12 +112,19 @@ export class TaskSystem {
     for (const workId of workIds) {
       for (const phase of ordered) {
         const key = taskKey(phase, workId);
-        if (mode === 'if-needed' && this.queue.getState(key) === 'completed')
+        if (mode === 'if-needed' && this.queue.getState(key) === 'completed') {
+          // 跳过也要清理 per-key 附件，否则 keyVariants/keyLocations 随跳过累积泄漏
+          this.keyVariants.delete(key);
+          this.keyLocations.delete(key);
           continue;
+        }
         if (phase === 'metadata' && opts.variants?.[workId]) {
           this.keyVariants.set(key, opts.variants[workId]);
         }
-        if (phase === 'metadata' && opts.locations?.[workId]) {
+        // location 存到每个 phase key：cover（manual 本地封面 absDir）与
+        // track（rootFolder/relativePath）同样需要，此前只存/取 metadata 导致
+        // scan/update 的 track 阶段永远拿到 undefined 而抛 requires location
+        if (opts.locations?.[workId]) {
           this.keyLocations.set(key, opts.locations[workId]);
         }
         if (opts.batchId) this.keyBatches.set(key, opts.batchId);
@@ -139,6 +146,9 @@ export class TaskSystem {
           },
         });
         if (outcome === 'rejected-running') {
+          // 未入队：附件不会被 run 清理，就地删防泄漏
+          this.keyVariants.delete(key);
+          this.keyLocations.delete(key);
           report.rejected.push({ workId, phase, reason: 'running' });
         } else if (outcome === 'merged') {
           report.merged++;
@@ -234,8 +244,8 @@ export class TaskSystem {
     const variant =
       phase === 'metadata' ? this.keyVariants.get(key) : undefined;
     this.keyVariants.delete(key);
-    const location =
-      phase === 'metadata' ? this.keyLocations.get(key) : undefined;
+    // location 对所有阶段可见（cover 的 absDir / track 的 rootFolder+relativePath）
+    const location = this.keyLocations.get(key);
     this.keyLocations.delete(key);
     const result = await exec({
       workId,

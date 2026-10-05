@@ -74,6 +74,40 @@ describe('TaskSystem', () => {
     }
   });
 
+  test('location 传递给所有阶段（回归：此前只给 metadata，track 抛 requires location）', async () => {
+    const h = makeHarness();
+    try {
+      const seen: Array<{ phase: string; location: unknown }> = [];
+      for (const phase of ['metadata', 'cover', 'track'] as const) {
+        h.sys.registerExecutor(phase, (ctx) => {
+          seen.push({ phase, location: ctx.location });
+          return Promise.resolve({});
+        });
+      }
+      h.sys.startBatch('update', 'b-loc');
+      h.sys.submit(['RJ1'], ['metadata', 'cover', 'track'], {
+        priority: 'low',
+        batchId: 'b-loc',
+        mode: 'force',
+        locations: {
+          RJ1: { rootFolder: 'root1', relativePath: 'RJ1', dirName: 'RJ1' },
+        },
+      });
+      await h.sys.barrier('b-loc');
+      // 三个阶段都拿到同一 location
+      for (const phase of ['metadata', 'cover', 'track'] as const) {
+        const entry = seen.find((x) => x.phase === phase);
+        expect(entry?.location).toEqual({
+          rootFolder: 'root1',
+          relativePath: 'RJ1',
+          dirName: 'RJ1',
+        });
+      }
+    } finally {
+      h.queue.dispose();
+    }
+  });
+
   test('手动高优在队列中先于批量低优执行', async () => {
     const h = makeHarness();
     try {

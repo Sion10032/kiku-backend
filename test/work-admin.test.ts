@@ -16,7 +16,11 @@ import { createTestUser, deleteTestUser, signTokenFor } from './helpers/token';
 setupTestEnvironment();
 
 const RUN = Date.now().toString(36);
-const ID = `RJ${String(43600000 + Math.floor(Math.random() * 49999)).padStart(8, '0')}_${RUN}`;
+const ID_NUM = 43600000 + Math.floor(Math.random() * 49999);
+const ID = `RJ${String(ID_NUM).padStart(8, '0')}_${RUN}`;
+// sync-tracks 用例专用：与 refresh 链共用同一 id 时，track key 的 running 竞态会误报 409
+//（修复 location 传递后 track 真正执行，不再是秒抛）
+const ID2 = `RJ${String(ID_NUM + 1).padStart(8, '0')}_${RUN}`;
 const CIRCLE = '路由测试社团';
 
 // 网络隔离：不用 mock.module（test/ 目录下 mock.module 会污染同进程其他测试
@@ -88,6 +92,8 @@ beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'kiku-workadmin-'));
   mkdirSync(join(root, ID), { recursive: true });
   writeFileSync(join(root, ID, 'sine.wav'), sine);
+  mkdirSync(join(root, ID2), { recursive: true });
+  writeFileSync(join(root, ID2, 'sine.wav'), sine);
   await ensureRootFolder(ROOT_FOLDER, root);
   const seeded = await upsertWork({
     id: ID,
@@ -97,6 +103,14 @@ beforeAll(async () => {
     circleName: CIRCLE,
   });
   expect(seeded.success).toBe(true);
+  const seeded2 = await upsertWork({
+    id: ID2,
+    rootFolder: ROOT_FOLDER,
+    dir: ID2,
+    title: '路由测试初始标题二',
+    circleName: CIRCLE,
+  });
+  expect(seeded2.success).toBe(true);
 
   app = await buildApp();
   await app.ready();
@@ -114,6 +128,7 @@ afterAll(async () => {
   await deleteTestUser(`admin_${RUN}`);
   await deleteTestUser(`user_${RUN}`);
   await db.delete(works).where(eq(works.id, ID));
+  await db.delete(works).where(eq(works.id, ID2));
   const circle = await db.query.circles.findFirst({
     where: { RAW: (t, op) => op.eq(t.name, CIRCLE) },
   });
@@ -180,11 +195,11 @@ describe('管理员单作品端点', () => {
   it('POST /sync-tracks：202 异步入队（diff 语义由 trackSync 单元测试钉住）', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/work/${ID}/sync-tracks`,
+      url: `/api/work/${ID2}/sync-tracks`,
       headers: { authorization: `Bearer ${adminToken}` },
     });
     expect(res.statusCode).toBe(202);
-    expect((res.json() as { workId: string }).workId).toBe(ID);
+    expect((res.json() as { workId: string }).workId).toBe(ID2);
   });
 
   it('DELETE：软删后详情立即 404；重复删除幂等 success', async () => {
