@@ -176,11 +176,21 @@ export class TaskSystem {
     const prev = this.hub.findBatch(batchId);
     if (!prev) return;
     const completedAt = nowIso();
+    // 终态固化：该批次实际处理过的作品名单（去重），历史批次卡渲染不受
+    // 后续批次重跑同作品时活流水线 batchId 漂移的影响
+    const workIds = [
+      ...new Set(
+        [...this.batchResults(batchId).keys()].map(
+          (key) => key.split(':')[1] ?? '',
+        ),
+      ),
+    ].filter(Boolean);
     this.hub.upsertBatch({
       ...prev,
       status,
       completedAt,
       ...(results ? { results } : {}),
+      workIds,
     });
     if (status === 'completed' && results) {
       this.hub.emitNow({

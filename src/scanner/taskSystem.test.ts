@@ -342,6 +342,59 @@ describe('TaskSystem', () => {
     }
   });
 
+  test('批次历史保留：新批次开启后旧批次仍在快照（回归：批次卡片历史）', async () => {
+    const h = makeHarness();
+    try {
+      h.sys.startBatch('scan', 'scan-b1');
+      h.sys.submit(['RJ1'], ['track'], {
+        priority: 'low',
+        batchId: 'scan-b1',
+        mode: 'force',
+        locations: { RJ1: { rootFolder: 'r', relativePath: 'x' } },
+      });
+      await h.sys.barrier('scan-b1');
+      h.sys.finishBatch('scan-b1', 'completed', {
+        total: 1,
+        added: 1,
+        updated: 0,
+        failed: 0,
+        skipped: 0,
+        removed: 0,
+        purged: 0,
+      });
+
+      // 第二个批次（update）
+      h.sys.startBatch('update', 'update-b2');
+      h.sys.submit(['RJ1'], ['metadata'], {
+        priority: 'low',
+        batchId: 'update-b2',
+        mode: 'force',
+        locations: { RJ1: { rootFolder: 'r', relativePath: 'x' } },
+      });
+      await h.sys.barrier('update-b2');
+      h.sys.finishBatch('update-b2', 'completed', {
+        total: 1,
+        added: 0,
+        updated: 1,
+        failed: 0,
+        skipped: 0,
+        removed: 0,
+        purged: 0,
+      });
+
+      const snap = h.sys.snapshot();
+      expect(snap.batches.map((b) => b.batchId)).toEqual([
+        'scan-b1',
+        'update-b2',
+      ]);
+      // scan 批次的流水线条目仍在（track 阶段记录归属 scan-b1）
+      const scanPipeline = snap.pipelines.find((p) => p.workId === 'RJ1');
+      expect(scanPipeline?.phases.track?.batchId).toBe('scan-b1');
+    } finally {
+      h.queue.dispose();
+    }
+  });
+
   test('running 中的阶段被手动重复提交时返回 rejected', async () => {
     const h = makeHarness();
     try {

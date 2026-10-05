@@ -41,6 +41,12 @@ export interface BatchInfo {
   completedAt?: string;
   /** 批次收尾汇总（服务端直出），随 BATCH_SUMMARY 写入，重连补播可还原。 */
   results?: ScanSummaryResults | AnalysisSummaryResults;
+  /**
+   * 终态固化：收尾时该批次实际处理过的作品名单（去重）。
+   * 活流水线按 workId 全局唯一、后续批次重跑会改写 phases[].batchId，
+   * 历史批次卡靠这份名单渲染条目，归属不随新批次漂移。
+   */
+  workIds?: string[];
 }
 
 export interface BatchLog {
