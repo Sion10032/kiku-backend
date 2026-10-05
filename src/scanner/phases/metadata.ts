@@ -39,7 +39,7 @@ async function syncDlsiteMetadata(ctx: PhaseContext): Promise<PhaseResult> {
   if (!location)
     throw new Error(`metadata phase requires location for ${workId}`);
 
-  log('info', `Fetching metadata for ${workId}...`);
+  log('info', `Fetching metadata from DLsite for ${workId}...`);
   const metadata = await fetchDLsiteWorkInfo(workId, signal);
   log('info', `Got metadata: ${metadata.title}`);
 
