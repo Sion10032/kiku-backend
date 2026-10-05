@@ -4,7 +4,6 @@ import { openWorkSource } from '../infra/fs/source/index.js';
 import { treeHasAudio } from '../infra/fs/source/tree.js';
 import { UnsupportedArchiveError } from '../infra/fs/source/types.js';
 import type { WorkEntry } from '../infra/fs/utils.js';
-import { workSourceResolver } from '../infra/sources/index.js';
 
 /** 校验并发宽度：纯本地 I/O（readdir/索引），与 DLsite 限流无关，可大于任务池宽度。 */
 export const DISCOVERY_CHECK_PARALLELISM = 8;

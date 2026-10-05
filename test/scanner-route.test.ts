@@ -15,9 +15,6 @@ setupTestEnvironment();
  * 不真抓 DLsite；mode=scan + workIds 应被 schema 拒绝。
  */
 
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
 describe('Scanner Routes', () => {
   let app: FastifyInstance;
   let adminToken: string;

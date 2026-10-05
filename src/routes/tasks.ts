@@ -29,7 +29,7 @@ export const taskRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const sys = getTaskSystem();
     await reply.sse.send({
       event: 'TASK_SNAPSHOT',
-      data: { snapshot: sys.snapshot() },
+      data: { type: 'TASK_SNAPSHOT', snapshot: sys.snapshot() },
     });
 
     const unsubscribe = sys.subscribe((event: TaskEvent): void => {
