@@ -343,6 +343,11 @@ export class TaskSystem {
     };
     this.hub.pushLog(log);
   }
+
+  /** 配置页热更新池宽转发（maxParallelism / analysisParallelism），无需重启。 */
+  setPoolWidth(resource: string, width: number): void {
+    this.queue.setPoolWidth(resource, width);
+  }
 }
 
 function toPhaseStatus(status: CoreStatus): PhaseStatus {
@@ -373,4 +378,10 @@ export function getTaskSystem(): TaskSystem {
     singleton.registerExecutor('analyze', analyzeExecutor);
   }
   return singleton;
+}
+
+/** 配置页热更新池宽（maxParallelism / analysisParallelism），无需重启后端。 */
+export function applyPoolWidths(net: number, cpu: number): void {
+  getTaskSystem().setPoolWidth('net', net);
+  getTaskSystem().setPoolWidth('cpu', cpu);
 }

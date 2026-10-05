@@ -197,6 +197,13 @@ export class TaskQueue {
     this.ready.set(rec.task.resource, list);
   }
 
+  /** 运行时热更新池宽（配置页改 maxParallelism/analysisParallelism 后无需重启）：
+   *  扩容立即调度 pending，缩容只影响新调度、运行中任务不中断。 */
+  setPoolWidth(resource: string, width: number): void {
+    this.pools[resource] = Math.max(1, width);
+    this.schedule();
+  }
+
   private removeFromReady(rec: TaskRecord): void {
     const list = this.ready.get(rec.task.resource);
     if (!list) return;

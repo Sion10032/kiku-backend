@@ -276,4 +276,56 @@ describe('TaskQueue', () => {
       q.dispose();
     }
   });
+
+  test('setPoolWidth 热更新：扩容立即调度 pending，缩容不中断 running', async () => {
+    const q = new TaskQueue({ net: 1 }, { ttlMs: 60_000, intervalMs: 30_000 });
+    try {
+      const started: string[] = [];
+      let resolveGate!: () => void;
+      const gate = new Promise<void>((r) => (resolveGate = r));
+      const makeRun = (id: string) => () => {
+        started.push(id);
+        return gate;
+      };
+      // net 池宽 1：第二个任务 pending 等待
+      for (let i = 0; i < 2; i++) {
+        q.submit({
+          key: `metadata:RJ${i}`,
+          resource: 'net',
+          priority: 5,
+          deps: [],
+          run: makeRun(`RJ${i}`),
+        });
+      }
+      await sleep(5);
+      expect(started).toEqual(['RJ0']); // 宽度 1，只有第一个跑
+      // 扩容到 2：pending 的 RJ1 立即被调度
+      q.setPoolWidth('net', 2);
+      await sleep(5);
+      expect(started).toEqual(['RJ0', 'RJ1']);
+      resolveGate();
+      await sleep(5);
+      // 缩容到 1：不中断 running（已无 running，仅影响后续调度）；再入队 2 个只跑 1 个
+      q.setPoolWidth('net', 1);
+      let resolveGate2!: () => void;
+      const gate2 = new Promise<void>((r) => (resolveGate2 = r));
+      for (let i = 2; i < 4; i++) {
+        q.submit({
+          key: `metadata:RJ${i}`,
+          resource: 'net',
+          priority: 5,
+          deps: [],
+          run: () => {
+            started.push(`RJ${i}`);
+            return gate2;
+          },
+        });
+      }
+      await sleep(5);
+      expect(started).toEqual(['RJ0', 'RJ1', 'RJ2']); // 宽度 1：RJ3 仍在等待
+      resolveGate2();
+    } finally {
+      q.dispose();
+    }
+  });
 });

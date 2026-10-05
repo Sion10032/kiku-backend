@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { getConfig, updateConfig } from '../infra/config/index.js';
+import { applyPoolWidths } from '../scanner/taskSystem.js';
 import { type Config, configSchema } from '../infra/config/schema.js';
 
 // 部分更新 body：全字段 optional 且去除 default。
@@ -45,7 +46,15 @@ export const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      return updateConfig(request.body);
+      const next = updateConfig(request.body);
+      // 池宽热更新：配置页改并发后立即生效（此前需重启后端，队列池宽在
+      // 单例创建时固化）
+      if (request.body.maxParallelism !== undefined) {
+        applyPoolWidths(next.maxParallelism, next.analysisParallelism);
+      } else if (request.body.analysisParallelism !== undefined) {
+        applyPoolWidths(next.maxParallelism, next.analysisParallelism);
+      }
+      return next;
     },
   );
 };
