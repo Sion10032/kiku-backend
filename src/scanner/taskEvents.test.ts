@@ -137,10 +137,12 @@ describe('applyTaskEvent', () => {
         purged: 0,
       },
       completedAt: '2026-10-04T01:00:00.000Z',
+      workIds: ['RJ1', 'RJ2'],
     });
     const batch = s.batches.find((b) => b.batchId === 'b1');
     expect(batch?.status).toBe('completed');
     expect(batch?.completedAt).toBe('2026-10-04T01:00:00.000Z');
+    expect(batch?.workIds).toEqual(['RJ1', 'RJ2']);
     expect(batch?.results).toEqual({
       total: 10,
       added: 3,

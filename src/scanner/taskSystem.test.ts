@@ -390,6 +390,16 @@ describe('TaskSystem', () => {
       // scan 批次的流水线条目仍在（track 阶段记录归属 scan-b1）
       const scanPipeline = snap.pipelines.find((p) => p.workId === 'RJ1');
       expect(scanPipeline?.phases.track?.batchId).toBe('scan-b1');
+      // 终态批次固化条目名单（后续批次重跑同作品时历史卡归属不漂移）
+      expect(
+        snap.batches.find((x) => x.batchId === 'scan-b1')?.workIds,
+      ).toEqual(['RJ1']);
+      expect(
+        snap.batches.find((x) => x.batchId === 'update-b2')?.workIds,
+      ).toEqual(['RJ1']);
+      // 事件流的 BATCH_SUMMARY 同步携带 workIds（不刷新页面只吃 delta 的客户端依赖它）
+      const summaries = h.events.filter((e) => e.type === 'BATCH_SUMMARY');
+      expect(summaries.map((e) => e.workIds)).toEqual([['RJ1'], ['RJ1']]);
     } finally {
       h.queue.dispose();
     }

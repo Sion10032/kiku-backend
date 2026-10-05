@@ -199,6 +199,7 @@ export class TaskSystem {
         kind: prev.kind,
         results,
         completedAt,
+        workIds,
       });
     }
     for (const [key, b] of this.keyBatches) {
