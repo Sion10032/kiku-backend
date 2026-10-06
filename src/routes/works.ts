@@ -145,6 +145,11 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 loudnessLufs: z.number().nullable().optional(),
               }),
               z.object({
+                type: z.literal('video'),
+                title: z.string(),
+                hash: z.string(),
+              }),
+              z.object({
                 type: z.enum(['text', 'image', 'other']),
                 title: z.string(),
                 hash: z.string(),
