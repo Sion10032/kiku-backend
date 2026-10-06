@@ -58,7 +58,7 @@ afterAll(async () => {
   await db.delete(works).where(eq(works.id, WORK));
   await db.query.circles
     .findFirst({
-      where: (t, op) => op.eq(t.name, '视频树测试社团'),
+      where: { RAW: (t, op) => op.eq(t.name, '视频树测试社团') },
     })
     .then((c) => {
       if (c) return db.delete(circles).where(eq(circles.id, c.id));

@@ -227,6 +227,86 @@ describe('entriesToTrackTree 歌词引用', () => {
     });
   });
 
+  it('双层后缀歌词配转码后音频（中间层扩展名任意）', () => {
+    // 音频转码后扩展名变了，歌词仍按原始文件名命名：a.wav.vtt 配 a.mp3
+    // （歌词去两层后缀 == 音频去一层后缀即匹配）
+    const t1 = entriesToTrackTree(['a.mp3', 'a.wav.vtt']);
+    expect(t1[0]).toEqual({
+      type: 'audio',
+      title: 'a.mp3',
+      hash: 'a.mp3',
+      lyrics: { hash: 'a.wav.vtt', type: 'vtt' },
+    });
+    const t2 = entriesToTrackTree(['a.mp3', 'a.wav.lrc']);
+    expect(t2[0]).toEqual({
+      type: 'audio',
+      title: 'a.mp3',
+      hash: 'a.mp3',
+      lyrics: { hash: 'a.wav.lrc', type: 'lrc' },
+    });
+    // 优先级：stem.lrc > 原名.lrc > 双层泛化 > stem.vtt（注意 .lrc/.vtt
+    // 文件自然序排在音频前，audio 节点不在 [0]）
+    const t3 = entriesToTrackTree(['a.mp3', 'a.lrc', 'a.wav.lrc']);
+    const n3 = t3[1];
+    expect(n3?.type === 'audio' && n3.lyrics?.hash === 'a.lrc').toBe(true);
+    const t4 = entriesToTrackTree(['a.mp3', 'a.mp3.lrc', 'a.wav.lrc']);
+    const n4 = t4[0];
+    expect(n4?.type === 'audio' && n4.lyrics?.hash === 'a.mp3.lrc').toBe(true);
+    const t5 = entriesToTrackTree(['a.mp3', 'a.wav.vtt', 'a.vtt']);
+    const n5 = t5[0];
+    expect(n5?.type === 'audio' && n5.lyrics?.hash === 'a.wav.vtt').toBe(true);
+    // 三层后缀不误配：去两层后 'a.b' ≠ stem 'a'
+    const t6 = entriesToTrackTree(['a.mp3', 'a.b.c.vtt']);
+    const n6 = t6[1];
+    expect(n6?.type === 'audio' && n6.lyrics).toBeUndefined();
+  });
+
+  it('lyrics/ 子目录支持双层后缀歌词（原名.lrc/.vtt）', () => {
+    // 歌词常见双层后缀形态：stem + 音频扩展 + 歌词扩展（如 a.wav.vtt），
+    // 去两层后缀与音频 stem 一致即匹配；lyrics/ 子目录与同目录同候选序
+    const t = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.wav.vtt']);
+    const folder = t[0];
+    const audio = folder?.type === 'folder' ? folder.children[1] : undefined;
+    expect(audio).toEqual({
+      type: 'audio',
+      title: 'a.wav',
+      hash: 'sub/a.wav',
+      lyrics: { hash: 'sub/lyrics/a.wav.vtt', type: 'vtt' },
+    });
+    const t2 = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.wav.lrc']);
+    const folder2 = t2[0];
+    const audio2 = folder2?.type === 'folder' ? folder2.children[1] : undefined;
+    expect(audio2).toEqual({
+      type: 'audio',
+      title: 'a.wav',
+      hash: 'sub/a.wav',
+      lyrics: { hash: 'sub/lyrics/a.wav.lrc', type: 'lrc' },
+    });
+    // 优先级对齐主候选：stem.lrc > 原名.lrc
+    const t3 = entriesToTrackTree([
+      'sub/a.wav',
+      'sub/lyrics/a.lrc',
+      'sub/lyrics/a.wav.lrc',
+    ]);
+    const folder3 = t3[0];
+    const audio3 = folder3?.type === 'folder' ? folder3.children[1] : undefined;
+    expect(
+      audio3?.type === 'audio' && audio3.lyrics?.hash === 'sub/lyrics/a.lrc',
+    ).toBe(true);
+  });
+
+  it('lyrics/ 子目录双层后缀歌词配转码后音频', () => {
+    const t = entriesToTrackTree(['sub/a.mp3', 'sub/lyrics/a.wav.vtt']);
+    const folder = t[0];
+    const audio = folder?.type === 'folder' ? folder.children[1] : undefined;
+    expect(audio).toEqual({
+      type: 'audio',
+      title: 'a.mp3',
+      hash: 'sub/a.mp3',
+      lyrics: { hash: 'sub/lyrics/a.wav.vtt', type: 'vtt' },
+    });
+  });
+
   it('lyrics/ 子目录回退（lrc 优先 vtt）', () => {
     // 子目录 children：文件夹在前 → [folder 'lyrics', audio a.wav]
     const t1 = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.lrc']);

@@ -118,11 +118,50 @@ function dirsNearFirst(start: Dir): Dir[] {
 }
 
 /**
+ * 单目录内按优先级匹配歌词：
+ * 1. 精确档 stem.lrc → 原名.lrc → 原名.vtt；
+ * 2. 双层后缀泛化 stem.<x>.lrc/.vtt（x 非空且不含点，取自然序首个）
+ *    —— 音频转码后扩展名变更时歌词仍按原始文件名命名（a.wav.vtt 配
+ *    a.mp3；去两层后缀 == 音频 stem 即匹配）；
+ * 3. stem.vtt（同名层优先于 stem.vtt，延续原名系 > stem 系的次序精神）。
+ */
+function matchLyricsInDir(
+  files: Map<string, TrackLeaf>,
+  candidates: Array<{ name: string; type: 'lrc' | 'vtt' }>,
+  stem: string,
+): LyricsRef | undefined {
+  for (const c of candidates.slice(0, 3)) {
+    const hit = files.get(c.name);
+    if (hit) return { hash: hit.hash, type: c.type };
+  }
+  for (const type of ['lrc', 'vtt'] as const) {
+    const suffix = `.${type}`;
+    let hit: TrackLeaf | undefined;
+    for (const [name, leaf] of files) {
+      if (!name.endsWith(suffix)) continue;
+      const base = name.slice(0, name.length - suffix.length);
+      const dot = base.lastIndexOf('.');
+      if (dot <= 0 || dot >= base.length - 1 || base.slice(0, dot) !== stem)
+        continue;
+      if (!hit || naturalCollator.compare(name, hit.title) < 0) hit = leaf;
+    }
+    if (hit) return { hash: hit.hash, type };
+  }
+  const stemVtt = candidates[3];
+  if (stemVtt) {
+    const stemVttHit = files.get(stemVtt.name);
+    if (stemVttHit) return { hash: stemVttHit.hash, type: stemVtt.type };
+  }
+  return undefined;
+}
+
+/**
  * 歌词候选匹配（按优先级）：
- * 1. 同目录 stem.lrc → 原名.lrc → 原名.vtt → stem.vtt；
- * 2. lyrics/ 子目录 stem.lrc → stem.vtt；
+ * 1. 同目录（matchLyricsInDir 全序，含双层后缀泛化）；
+ * 2. lyrics/ 子目录（同序）；
  * 3. 其余全部目录：自音频所在目录按 dirsNearFirst 的就近序逐目录扫描，
- *    每目录按与同目录相同的候选名顺序，取首个命中。
+ *    每目录按精确候选名顺序（stem.lrc → 原名.lrc → 原名.vtt → stem.vtt），
+ *    取首个命中（跨目录不做双层泛化，避免误配邻近作品的同名歌词）。
  * dir 为音频所在目录，orderedDirs 为 dirsNearFirst(dir) 的结果。
  */
 function findLyrics(
@@ -132,23 +171,18 @@ function findLyrics(
 ): LyricsRef | undefined {
   const candidates = lyricsCandidates(audioName);
   const stem = audioName.replace(/\.[^.]+$/, '');
-  for (const c of candidates) {
-    const hit = dir.files.get(c.name);
-    if (hit) return { hash: hit.hash, type: c.type };
-  }
+  const hit = matchLyricsInDir(dir.files, candidates, stem);
+  if (hit) return hit;
   const lyricsDir = dir.dirs.get('lyrics');
   if (lyricsDir) {
-    for (const name of [`${stem}.lrc`, `${stem}.vtt`]) {
-      const hit = lyricsDir.files.get(name);
-      if (hit)
-        return { hash: hit.hash, type: name.endsWith('.lrc') ? 'lrc' : 'vtt' };
-    }
+    const lyricsHit = matchLyricsInDir(lyricsDir.files, candidates, stem);
+    if (lyricsHit) return lyricsHit;
   }
   for (const other of orderedDirs) {
     if (other === dir || other === lyricsDir) continue;
     for (const c of candidates) {
-      const hit = other.files.get(c.name);
-      if (hit) return { hash: hit.hash, type: c.type };
+      const h = other.files.get(c.name);
+      if (h) return { hash: h.hash, type: c.type };
     }
   }
   return undefined;
