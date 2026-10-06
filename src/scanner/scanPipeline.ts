@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { folderHasAudio } from '../infra/fs/source/folder.js';
+import { folderHasMedia } from '../infra/fs/source/folder.js';
 import { openWorkSource } from '../infra/fs/source/index.js';
-import { treeHasAudio } from '../infra/fs/source/tree.js';
+import { treeHasMedia } from '../infra/fs/source/tree.js';
 import { UnsupportedArchiveError } from '../infra/fs/source/types.js';
 import type { WorkEntry } from '../infra/fs/utils.js';
 
@@ -159,21 +159,21 @@ async function checkEntry(
   // folder 用可提前退出的轻量遍历（首个可服务音频即返回，避免全量建树）；
   // archive 仍打开 source 建索引后建树（索引是后续读取的前提）。
   try {
-    let hasAudio = false;
+    let hasMedia = false;
     if (entry.kind === 'folder') {
-      hasAudio = await folderHasAudio(join(rootPath, entry.relativePath));
+      hasMedia = await folderHasMedia(join(rootPath, entry.relativePath));
     } else {
       const source = await openWorkSource(rootPath, entry.relativePath);
-      hasAudio = treeHasAudio(await source.buildTree());
+      hasMedia = treeHasMedia(await source.buildTree());
     }
-    if (!hasAudio) {
-      // 无音频只记日志，不产生任务
+    if (!hasMedia) {
+      // 无音频/视频只记日志，不产生任务
       return {
         kind: 'events',
         logs: [
           {
             level: 'info',
-            message: `Skipped (no audio): ${entry.workCode} ${entry.name}`,
+            message: `Skipped (no audio/video): ${entry.workCode} ${entry.name}`,
           },
         ],
         failures: [],

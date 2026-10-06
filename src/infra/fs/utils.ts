@@ -135,9 +135,9 @@ export interface TrackBranch {
   children: TrackNode[];
 }
 
-/** 树叶节点（audio/text/image/other）。 */
+/** 树叶节点（audio/video/text/image/other）。 */
 export interface TrackLeaf {
-  type: 'audio' | 'text' | 'image' | 'other';
+  type: 'audio' | 'video' | 'text' | 'image' | 'other';
   title: string;
   /** 相对于 work dir 的路径，如 'subfolder/track01.mp3' */
   hash: string;

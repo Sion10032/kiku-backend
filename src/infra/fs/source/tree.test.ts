@@ -3,9 +3,10 @@ import {
   entriesToTrackTree,
   isAudioFile,
   isSupportedFile,
+  isVideoFile,
   rekeyStrippedTopDir,
   stripCommonTopDir,
-  treeHasAudio,
+  treeHasMedia,
 } from './tree.js';
 
 describe('entriesToTrackTree', () => {
@@ -71,18 +72,36 @@ describe('entriesToTrackTree', () => {
     expect(tree.map((n) => n.title)).toEqual(['a', 'z.mp3', 'Z.mp3']);
   });
 
-  it('treeHasAudio 递归发现任意层音频', () => {
+  it('treeHasMedia 递归发现任意层音频或视频', () => {
     const tree = entriesToTrackTree(['a/b/c.txt', 'd.png']);
-    expect(treeHasAudio(tree)).toBe(false);
-    expect(treeHasAudio(entriesToTrackTree(['a/b/c.mp3']))).toBe(true);
+    expect(treeHasMedia(tree)).toBe(false);
+    expect(treeHasMedia(entriesToTrackTree(['a/b/c.mp3']))).toBe(true);
+    // 纯视频作品（无任何音频文件）也算有效作品
+    expect(treeHasMedia(entriesToTrackTree(['a/b/c.mkv']))).toBe(true);
+  });
+
+  it('视频扩展名归类 video 叶节点，m4a 仍是 audio', () => {
+    const tree = entriesToTrackTree(['a.mp4', 'b.webm', 'c.mkv', 'd.m4a']);
+    expect(tree.map((n) => n.type)).toEqual([
+      'video',
+      'video',
+      'video',
+      'audio',
+    ]);
   });
 
   it('扩展名判定（大小写不敏感）', () => {
     expect(isAudioFile('x.MP3')).toBe(true);
     expect(isAudioFile('x.flac')).toBe(true);
     expect(isAudioFile('x.txt')).toBe(false);
+    expect(isVideoFile('x.MKV')).toBe(true);
+    expect(isVideoFile('x.mp4')).toBe(true);
+    expect(isVideoFile('x.webm')).toBe(true);
+    expect(isVideoFile('x.m4a')).toBe(false);
+    expect(isVideoFile('x.mp3')).toBe(false);
     expect(isSupportedFile('x.lrc')).toBe(true);
     expect(isSupportedFile('x.doc')).toBe(false);
+    expect(isSupportedFile('x.mkv')).toBe(true);
   });
 });
 

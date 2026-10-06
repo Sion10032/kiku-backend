@@ -3,7 +3,12 @@ import { createReadStream } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import type { TrackNode } from '../utils.js';
-import { entriesToTrackTree, isAudioFile, servablePaths } from './tree.js';
+import {
+  entriesToTrackTree,
+  isAudioFile,
+  isVideoFile,
+  servablePaths,
+} from './tree.js';
 import { sanitizeMediaIndex, type WorkSource } from './types.js';
 
 /**
@@ -34,12 +39,12 @@ export async function collectDirPaths(
 }
 
 /**
- * 目录作品「是否含可服务音频」的快速校验：与 buildTree → treeHasAudio 完全同口径
- * （isAudioFile 文件名判定 + sanitizeMediaIndex 全路径校验；目录不可读视为无音频，
- * 与 collectDirPaths 的静默容错一致），但找到首个音频即提前返回，不做全量枚举建树。
+ * 目录作品「是否含可服务音频/视频」的快速校验：与 buildTree → treeHasMedia 完全同口径
+ * （isAudioFile/isVideoFile 文件名判定 + sanitizeMediaIndex 全路径校验；目录不可读视为无
+ * 音视频，与 collectDirPaths 的静默容错一致），但找到首个即提前返回，不做全量枚举建树。
  * 供扫描器发现阶段过滤新作品/路径变更作品（网络存储上全量建树是扫描卡顿主因）。
  */
-export async function folderHasAudio(
+export async function folderHasMedia(
   dirPath: string,
   basePath = '',
 ): Promise<boolean> {
@@ -50,10 +55,14 @@ export async function folderHasAudio(
   for (const entry of entries) {
     if (entry.isFile()) {
       const rel = basePath ? `${basePath}/${entry.name}` : entry.name;
-      if (isAudioFile(entry.name) && sanitizeMediaIndex(rel)) return true;
+      if (
+        (isAudioFile(entry.name) || isVideoFile(entry.name)) &&
+        sanitizeMediaIndex(rel)
+      )
+        return true;
     } else if (entry.isDirectory()) {
       const childBase = basePath ? `${basePath}/${entry.name}` : entry.name;
-      if (await folderHasAudio(join(dirPath, entry.name), childBase)) {
+      if (await folderHasMedia(join(dirPath, entry.name), childBase)) {
         return true;
       }
     }

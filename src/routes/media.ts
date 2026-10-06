@@ -16,6 +16,9 @@ const mimeTypes: Record<string, string> = {
   '.flac': 'audio/flac',
   '.m4a': 'audio/mp4',
   '.wv': 'audio/wavpack',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
 };
 
 /**

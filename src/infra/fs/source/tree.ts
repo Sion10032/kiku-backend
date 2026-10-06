@@ -11,15 +11,15 @@ const AUDIO_EXTENSIONS = new Set([
   '.wav',
   '.aac',
   '.flac',
-  '.webm',
-  '.mp4',
   '.m4a',
   '.wv',
 ]);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mkv']);
 const TEXT_EXTENSIONS = new Set(['.txt', '.lrc', '.vtt', '.srt', '.ass']);
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const SUPPORTED_EXTENSIONS = new Set([
   ...AUDIO_EXTENSIONS,
+  ...VIDEO_EXTENSIONS,
   ...TEXT_EXTENSIONS,
   ...IMAGE_EXTENSIONS,
   '.pdf',
@@ -27,6 +27,9 @@ const SUPPORTED_EXTENSIONS = new Set([
 
 export function isAudioFile(name: string): boolean {
   return AUDIO_EXTENSIONS.has(extname(name).toLowerCase());
+}
+export function isVideoFile(name: string): boolean {
+  return VIDEO_EXTENSIONS.has(extname(name).toLowerCase());
 }
 export function isSupportedFile(name: string): boolean {
   return SUPPORTED_EXTENSIONS.has(extname(name).toLowerCase());
@@ -46,6 +49,7 @@ export function servablePaths(paths: string[]): string[] {
 function classify(name: string): TrackLeaf['type'] {
   const ext = extname(name).toLowerCase();
   if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
+  if (VIDEO_EXTENSIONS.has(ext)) return 'video';
   if (TEXT_EXTENSIONS.has(ext)) return 'text';
   if (IMAGE_EXTENSIONS.has(ext)) return 'image';
   return 'other';
@@ -201,11 +205,11 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
   return build(root);
 }
 
-/** 递归查找树中是否存在音频节点（扫描器判定作品有效用）。 */
-export function treeHasAudio(nodes: TrackNode[]): boolean {
+/** 递归查找树中是否存在音频或视频节点（扫描器判定作品有效用）。 */
+export function treeHasMedia(nodes: TrackNode[]): boolean {
   for (const node of nodes) {
-    if (node.type === 'audio') return true;
-    if (node.type === 'folder' && treeHasAudio(node.children)) return true;
+    if (node.type === 'audio' || node.type === 'video') return true;
+    if (node.type === 'folder' && treeHasMedia(node.children)) return true;
   }
   return false;
 }
