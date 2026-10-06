@@ -142,6 +142,7 @@ describe('Settings Backup Routes', () => {
     it('PUT 新备份 → 200；列表含该项；详情 payload 原样返回', async () => {
       const payload = {
         colorMode: 'dark',
+        videoMode: 'audio',
         floatingLyrics: { enabled: true, fontSize: 14, lines: 2, opacity: 0.8 },
       };
       const put = await putBackup(tokenA, 'basic_a', payload);
@@ -161,6 +162,15 @@ describe('Settings Backup Routes', () => {
       expect(detail.body.name).toBe('basic_a');
       expect(JSON.parse(detail.body.payload!)).toEqual(payload);
       expect(detail.body.updatedAt).toBe(put.body.updatedAt!);
+    });
+  });
+
+  describe('schema 校验', () => {
+    it('videoMode 非法枚举值 → 400', async () => {
+      const put = await putBackup(tokenA, 'bad_vm', {
+        videoMode: 'buggy',
+      });
+      expect(put.statusCode).toBe(400);
     });
   });
 
