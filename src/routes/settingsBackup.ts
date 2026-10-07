@@ -56,6 +56,7 @@ const payloadSchema = z.object({
     .optional(),
   coverBlurMode: z.enum(['always', 'hover', 'never']).optional(),
   timeDisplayMode: z.enum(['total', 'remaining']).optional(),
+  coverAspectRatio: z.enum(['square', 'original']).optional(),
   videoMode: z.enum(['video', 'audio', 'none']).optional(),
   worksPaginationMode: z.enum(['paginate', 'infinite']).optional(),
   worksPaginatorPosition: z.enum(['top', 'bottom', 'both']).optional(),
