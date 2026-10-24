@@ -243,6 +243,75 @@ describe('TaskSystem', () => {
     }
   });
 
+  test('批次计数为作品数：total/completed/failed 按 workId 归并（非阶段任务数）', async () => {
+    const h = makeHarness({ net: 2, cpu: 2 });
+    try {
+      h.sys.registerExecutor('track', (ctx) =>
+        ctx.workId === 'RJ3'
+          ? Promise.reject(new Error('no tracks'))
+          : Promise.resolve({}),
+      );
+      h.sys.startBatch('scan', 'b1');
+      // 3 作品 × 4 阶段 = 12 个阶段任务；作品级计数应为 total=3
+      h.sys.submit(
+        ['RJ1', 'RJ2', 'RJ3'],
+        ['metadata', 'cover', 'track', 'analyze'],
+        { priority: 'low', batchId: 'b1' },
+      );
+      await h.sys.barrier('b1');
+      const batch = h.sys.snapshot().batches.find((b) => b.batchId === 'b1');
+      // RJ3 仅 track 失败（其余阶段完成）→ 作品级 failed=1，不按阶段重复计数
+      expect(batch?.counters).toEqual({
+        batchId: 'b1',
+        kind: 'scan',
+        total: 3,
+        running: 0,
+        completed: 2,
+        failed: 1,
+      });
+    } finally {
+      h.queue.dispose();
+    }
+  });
+
+  test('批次计数运行中视角：完成的作品计 completed，未完成作品计 running', async () => {
+    const h = makeHarness({ net: 2, cpu: 2 });
+    try {
+      const gate = deferred();
+      const workBDone = deferred();
+      h.sys.registerExecutor('metadata', (ctx) =>
+        ctx.workId === 'workA'
+          ? gate.promise.then(() => ({}))
+          : Promise.resolve({}),
+      );
+      h.sys.registerExecutor('track', (ctx) => {
+        if (ctx.workId === 'workB') workBDone.resolve();
+        return Promise.resolve({});
+      });
+      h.sys.startBatch('scan', 'b1');
+      h.sys.submit(['workA', 'workB'], ['metadata', 'cover', 'track'], {
+        priority: 'low',
+        batchId: 'b1',
+      });
+      // workB 三阶段跑完（track 是最后阶段）；workA metadata 被挂住
+      await workBDone.promise;
+      await sleep(5);
+      const batch = h.sys.snapshot().batches.find((b) => b.batchId === 'b1');
+      expect(batch?.counters).toEqual({
+        batchId: 'b1',
+        kind: 'scan',
+        total: 2,
+        running: 1,
+        completed: 1,
+        failed: 0,
+      });
+      gate.resolve();
+      await h.sys.barrier('b1');
+    } finally {
+      h.queue.dispose();
+    }
+  });
+
   test('cover/track 失败仅记 warning（warn-continue），不级联取消', async () => {
     const h = makeHarness({ net: 2, cpu: 2 });
     try {

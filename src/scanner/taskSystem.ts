@@ -2,6 +2,7 @@
 // 阶段以 `${phase}:${workId}` 为 key；cover/track → metadata 为队列级依赖，analyze 的
 // 先后由编排器 barrier 时序保证（track warn-continue 失败不得阻断接力，见行为对齐表）。
 // 快照为权威状态：状态变化立即写入（SnapshotHub），TASK_DELTA/BATCH_LOG 经节流合并发出。
+// 批次计数为作品级：队列内核按阶段任务计数，装配层按 workId 归并后透出（单位 = 作品）。
 
 import { getConfig } from '../infra/config/index.js';
 import {
@@ -281,14 +282,8 @@ export class TaskSystem {
     if (e.type === 'batch-count') {
       const batch = this.hub.findBatch(e.batchId);
       if (!batch) return;
-      const counters: BatchCounters = {
-        batchId: e.batchId,
-        kind: batch.kind,
-        total: e.total,
-        running: e.running,
-        completed: e.completed,
-        failed: e.failed,
-      };
+      // 不透传队列的阶段任务计数，按 workId 归并成作品级计数（前端展示单位 = 作品）
+      const counters = this.workLevelCounters(e.batchId, batch.kind);
       this.hub.apply({ type: 'TASK_DELTA', entries: [], counters: [counters] });
       this.hub.markCounters(counters);
       return;
@@ -326,6 +321,35 @@ export class TaskSystem {
         continue;
       if (this.queue.getState(key) === 'pending') this.queue.cancel(key);
     }
+  }
+
+  /**
+   * 作品级批次计数：把 hub 权威状态中该批次的 PhaseEntry 按 workId 归并，
+   * total/completed/failed 单位是作品而非阶段任务。队列先发 task 事件后发
+   * batch-count，故推导时对应状态变化已写入 hub。分类：任一阶段 failed →
+   * failed；有阶段 completed（且无 failed）→ completed；其余（全 pending
+   * 的排队作品、整批取消后全 skipped 的作品）→ running——保持 done + running
+   * = total，且取消批次与旧阶段计数一致显示 0 完成。
+   */
+  private workLevelCounters(batchId: string, kind: BatchKind): BatchCounters {
+    const statuses = new Map<string, PhaseStatus[]>();
+    for (const p of this.hub.snapshot().pipelines) {
+      for (const entry of Object.values(p.phases)) {
+        if (entry.batchId !== batchId) continue;
+        const list = statuses.get(p.workId);
+        if (list) list.push(entry.status);
+        else statuses.set(p.workId, [entry.status]);
+      }
+    }
+    let running = 0;
+    let completed = 0;
+    let failed = 0;
+    for (const list of statuses.values()) {
+      if (list.includes('failed')) failed++;
+      else if (list.includes('completed')) completed++;
+      else running++;
+    }
+    return { batchId, kind, total: statuses.size, running, completed, failed };
   }
 
   private addLog(
