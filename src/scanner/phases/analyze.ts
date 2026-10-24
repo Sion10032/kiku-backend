@@ -1,5 +1,6 @@
 // analyze 阶段执行体：单作品响度分析（analysis.ts analyzeWork 的拆入）。
 // 只处理 loudness IS NULL 的行（重跑只补未完成轨，天然可重试）；
+// ctx.mediaIndex 有值时只扫该轨（播放触发的单轨分析），无值扫作品内全部 NULL 轨；
 // folder 源直接拼路径；归档源流式测量（readRange 全量流 pipe 进 ffmpeg stdin，不经临时文件），
 // 不可流式格式（mp4 家族尾部 moov）先跳过不分析——行保持 NULL 待扩展后重跑。
 // 单轨失败写 analyzeError 不中断（对齐现状）；全部轨失败才抛错（fail-pipeline）。
@@ -36,7 +37,7 @@ export const STREAMABLE_MEASURE_EXTS = new Set([
 ]);
 
 export const analyzeExecutor: PhaseExecutor = async (ctx) => {
-  const { workId, signal, log } = ctx;
+  const { workId, mediaIndex, signal, log } = ctx;
 
   const work = await getWorkRow(workId);
   if (!work) throw new Error(`work ${workId} not found`);
@@ -45,7 +46,9 @@ export const analyzeExecutor: PhaseExecutor = async (ctx) => {
 
   const source = await openWorkSource(rootPath, work.dir);
   const rows = (await getTrackRows(workId)).filter(
-    (r) => r.loudnessLufs === null,
+    (r) =>
+      r.loudnessLufs === null &&
+      (mediaIndex === undefined || r.mediaIndex === mediaIndex),
   );
   let analyzed = 0;
   let failed = 0;

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { maybeEnqueueTrackAnalysis } from '../scanner/orchestrators/analysisTrack.js';
 import {
   deleteWorkProgress,
   getUserHistoryIds,
@@ -69,6 +70,9 @@ export const progressRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (outcome === 'work-missing') {
         return reply.fail(404, 'errors.work.not-found', { id: work_id });
       }
+      // 播放触发单轨响度分析（开关/守卫/ffmpeg 检查在内部判定）：fire-and-forget，
+      // 不阻塞上报；函数内部永不 reject
+      void maybeEnqueueTrackAnalysis(work_id, media_index);
       return { success: true };
     },
   );

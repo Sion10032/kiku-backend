@@ -494,4 +494,90 @@ describe('TaskSystem', () => {
       h.queue.dispose();
     }
   });
+
+  test('submitTrackAnalysis：单轨任务带 mediaIndex 执行，无批次卡片，pipeline workId 不含 mediaIndex', async () => {
+    const h = makeHarness();
+    try {
+      const seen: Array<{
+        workId: string;
+        mediaIndex: string | undefined;
+      }> = [];
+      h.sys.registerExecutor('analyze', (ctx) => {
+        seen.push({ workId: ctx.workId, mediaIndex: ctx.mediaIndex });
+        return Promise.resolve({});
+      });
+      const outcome = h.sys.submitTrackAnalysis('RJ1', '03 君との日常.mp3');
+      expect(outcome).toBe('accepted');
+      await sleep(20);
+      expect(seen).toEqual([
+        { workId: 'RJ1', mediaIndex: '03 君との日常.mp3' },
+      ]);
+      // 不建批次卡片：单轨任务不入任务面板批次列表
+      expect(h.sys.snapshot().batches).toEqual([]);
+      // 事件按作品归并：pipeline workId 干净（mediaIndex 不进队列身份）
+      const pipeline = h.sys
+        .snapshot()
+        .pipelines.find((p) => p.workId === 'RJ1');
+      expect(pipeline?.phases.analyze?.status).toBe('completed');
+      expect(
+        h.sys.snapshot().pipelines.some((p) => p.workId.includes('君との日常')),
+      ).toBe(false);
+    } finally {
+      h.queue.dispose();
+    }
+  });
+
+  test('submitTrackAnalysis 同 key 去重：running 拒绝、completed 跳过、不同轨独立', async () => {
+    const h = makeHarness();
+    try {
+      const gate = deferred();
+      let calls = 0;
+      h.sys.registerExecutor('analyze', () => {
+        calls++;
+        return gate.promise.then(() => ({}));
+      });
+      expect(h.sys.submitTrackAnalysis('RJ1', 'a.wav')).toBe('accepted');
+      await sleep(5); // running
+      // 同轨重复触发（进度上报每 10s 一次）：拒绝，扫描继续
+      expect(h.sys.submitTrackAnalysis('RJ1', 'a.wav')).toBe(
+        'rejected-running',
+      );
+      // 快速切到同作品另一轨：独立 key，正常受理
+      expect(h.sys.submitTrackAnalysis('RJ1', 'b.wav')).toBe('accepted');
+      gate.resolve();
+      await sleep(20);
+      expect(calls).toBe(2);
+      // 完成后同 key 再提交：if-needed 语义跳过
+      expect(h.sys.submitTrackAnalysis('RJ1', 'a.wav')).toBe('merged');
+      await sleep(10);
+      expect(calls).toBe(2);
+    } finally {
+      h.queue.dispose();
+    }
+  });
+
+  test('作品级 analyze 与单轨 key 互不阻塞（同作品并发执行）', async () => {
+    const h = makeHarness({ net: 2, cpu: 2 });
+    try {
+      const calls: string[] = [];
+      h.sys.registerExecutor('analyze', (ctx) => {
+        calls.push(
+          ctx.mediaIndex !== undefined
+            ? `track:${ctx.mediaIndex}`
+            : `work:${ctx.workId}`,
+        );
+        return Promise.resolve({});
+      });
+      h.sys.startBatch('analysis', 'b1');
+      h.sys.submit(['RJ1'], ['analyze'], { priority: 'low', batchId: 'b1' });
+      // 作品级任务已受理后再提交单轨：不同 key，均执行（幂等由 NULL 行过滤保证）
+      expect(h.sys.submitTrackAnalysis('RJ1', 'a.wav')).toBe('accepted');
+      await h.sys.barrier('b1');
+      await sleep(20);
+      expect(calls.filter((c) => c === 'work:RJ1')).toHaveLength(1);
+      expect(calls.filter((c) => c === 'track:a.wav')).toHaveLength(1);
+    } finally {
+      h.queue.dispose();
+    }
+  });
 });

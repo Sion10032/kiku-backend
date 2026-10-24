@@ -9,12 +9,14 @@ import {
   type BatchOutcome,
   type CoreEvent,
   type CoreStatus,
+  type SubmitOutcome,
   TaskQueue,
 } from '../infra/taskQueue/index.js';
 import { analyzeExecutor } from './phases/analyze.js';
 import { coverExecutor } from './phases/cover.js';
 import { metadataExecutor } from './phases/metadata.js';
 import {
+  analyzeTrackKey,
   PHASE_CONFIG,
   PHASE_ORDER,
   PRIORITY_VALUE,
@@ -161,6 +163,33 @@ export class TaskSystem {
     return report;
   }
 
+  /**
+   * 播放触发的单轨分析（progress 钩子入口）：analyzeTrackKey 独立 key，与作品级
+   * analyze:{workId} 互不合并/互不阻塞；cpu 池 high 优先级；不建批次卡片
+   * （听一张专辑几十轨会刷满任务面板）。同 key running/pending 由队列去重
+   * （拒绝/合并），completed 跳过（if-needed 语义，返回 'merged'）；失败态可重试。
+   */
+  submitTrackAnalysis(workId: string, mediaIndex: string): SubmitOutcome {
+    const key = analyzeTrackKey(workId, mediaIndex);
+    if (this.queue.getState(key) === 'completed') return 'merged';
+    return this.queue.submit({
+      key,
+      resource: PHASE_CONFIG.analyze.resource,
+      priority: PRIORITY_VALUE.high,
+      run: async (signal) => {
+        await this.runPhase(
+          'analyze',
+          workId,
+          key,
+          undefined,
+          false,
+          signal,
+          mediaIndex,
+        );
+      },
+    });
+  }
+
   barrier(batchId: string): Promise<BatchOutcome> {
     return this.queue.barrier(batchId);
   }
@@ -250,6 +279,7 @@ export class TaskSystem {
     batchId: string | undefined,
     force: boolean,
     signal: AbortSignal,
+    mediaIndex?: string,
   ): Promise<PhaseResult> {
     const exec = this.executors.get(phase);
     if (!exec) throw new Error(`no executor registered for phase ${phase}`);
@@ -262,6 +292,7 @@ export class TaskSystem {
     const result = await exec({
       workId,
       variant,
+      mediaIndex,
       location,
       signal,
       log: (level, message) => this.addLog(level, message, batchId, workId),

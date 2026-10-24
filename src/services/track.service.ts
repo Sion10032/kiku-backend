@@ -157,6 +157,31 @@ export async function getPendingAnalysisWorkIds(): Promise<string[]> {
   return rows.map((r) => r.workId);
 }
 
+/**
+ * 播放触发单轨分析的守卫：行存在、响度未分析（NULL）、无失败记录（analyzeError NULL，
+ * 坏文件不自动重扫，留给手动/整库分析重试）、作品未软删。一次点查（PK + join works）。
+ */
+export async function isTrackAnalysisEligible(
+  workId: string,
+  mediaIndex: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ workId: tracks.workId })
+    .from(tracks)
+    .innerJoin(works, eq(tracks.workId, works.id))
+    .where(
+      and(
+        eq(tracks.workId, workId),
+        eq(tracks.mediaIndex, mediaIndex),
+        isNull(tracks.loudnessLufs),
+        isNull(tracks.analyzeError),
+        isNull(works.deletedAt),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
 /** 作品响度 = 已分析音轨按时长加权 LUFS + true peak 最大值；无已分析音轨返回 null。 */
 export async function computeWorkLoudness(
   workId: string,

@@ -125,7 +125,10 @@ async function seedTrack(
     .onConflictDoNothing();
 }
 
-function makeCtx(workId: string): {
+function makeCtx(
+  workId: string,
+  mediaIndex?: string,
+): {
   ctx: PhaseContext;
   logs: Array<{ level: string; message: string }>;
 } {
@@ -135,6 +138,7 @@ function makeCtx(workId: string): {
     ctx: {
       workId,
       variant: undefined,
+      mediaIndex,
       location: undefined,
       signal: new AbortController().signal,
       log: (level, message) => logs.push({ level, message }),
@@ -240,5 +244,48 @@ describe('analyzeExecutor', () => {
         (l) => l.level === 'warning' && l.message.includes('not streamable'),
       ),
     ).toBe(true);
+  });
+});
+
+describe('analyzeExecutor 单轨模式（ctx.mediaIndex）', () => {
+  test('只扫指定轨，其余 NULL 轨不动', async () => {
+    await seedTrack('a.wav');
+    await seedTrack('b.wav');
+    measured.length = 0;
+    const { ctx } = makeCtx(WORK, 'a.wav');
+    const result = await analyzeExecutor(ctx);
+    expect(result.detail).toEqual({ analyzed: 1, failed: 0, skipped: 0 });
+    expect(measured).toHaveLength(1);
+    expect(measured[0]).toContain('a.wav');
+    const rows = await getTrackRows(WORK);
+    expect(rows.find((r) => r.mediaIndex === 'b.wav')?.loudnessLufs).toBeNull();
+  });
+
+  test('指定轨已有响度 → 无事可做，不抛错', async () => {
+    await seedTrack('done.wav', -15);
+    measured.length = 0;
+    const { ctx } = makeCtx(WORK, 'done.wav');
+    const result = await analyzeExecutor(ctx);
+    expect(result.detail).toEqual({ analyzed: 0, failed: 0, skipped: 0 });
+    expect(measured).toHaveLength(0);
+  });
+
+  test('mediaIndex 不匹配任何行（切歌后轨被删）→ 空跑不抛错', async () => {
+    await seedTrack('a.wav');
+    measured.length = 0;
+    const { ctx } = makeCtx(WORK, 'gone.wav');
+    const result = await analyzeExecutor(ctx);
+    expect(result.detail).toEqual({ analyzed: 0, failed: 0, skipped: 0 });
+    expect(measured).toHaveLength(0);
+  });
+
+  test('单轨失败 → 写 analyzeError 并抛错（fail-pipeline）', async () => {
+    await seedTrack('a.wav');
+    measureFailFor = 'a.wav';
+    const { ctx } = makeCtx(WORK, 'a.wav');
+    await expect(analyzeExecutor(ctx)).rejects.toThrow('1 tracks failed');
+    measureFailFor = null;
+    const rows = await getTrackRows(WORK);
+    expect(rows[0]?.analyzeError).toBe('ffmpeg exploded');
   });
 });

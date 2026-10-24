@@ -51,6 +51,7 @@ function makeCtx(partial: Partial<PhaseContext> & { workId: string }): {
     logs,
     ctx: {
       variant: undefined,
+      mediaIndex: undefined,
       signal: new AbortController().signal,
       log: (level, message) => logs.push({ level, message }),
       force: false,

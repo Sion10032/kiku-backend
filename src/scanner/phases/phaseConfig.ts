@@ -38,11 +38,23 @@ export function taskKey(phase: Phase, workId: string): string {
   return `${phase}:${workId}`;
 }
 
+/** 单轨分析 key：`analyze:{workId}:{mediaIndex}`，与作品级 `analyze:{workId}` 互不合并/互不阻塞。 */
+export function analyzeTrackKey(workId: string, mediaIndex: string): string {
+  return `analyze:${workId}:${mediaIndex}`;
+}
+
 export function parseTaskKey(key: string): { phase?: Phase; workId: string } {
   const i = key.indexOf(':');
   if (i < 0) return { workId: key };
   const phase = key.slice(0, i);
   if (!(PHASE_ORDER as readonly string[]).includes(phase))
     return { workId: key };
-  return { phase: phase as Phase, workId: key.slice(i + 1) };
+  const rest = key.slice(i + 1);
+  // 单轨 key 追加了 mediaIndex（analyzeTrackKey）：workId 只取第二段，
+  // 事件/pipeline 仍按作品归并；mediaIndex 不进 PhaseEntry（不入队列身份）
+  const workId =
+    phase === 'analyze' && rest.includes(':')
+      ? rest.slice(0, rest.indexOf(':'))
+      : rest;
+  return { phase: phase as Phase, workId };
 }

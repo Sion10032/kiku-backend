@@ -20,6 +20,8 @@ export interface PhaseContext {
   workId: string;
   /** 仅 metadata 阶段有值：scan 分流的 moved 变体。 */
   variant: 'dlsite' | 'manual' | 'moved' | undefined;
+  /** 仅 analyze 阶段有值：单轨分析目标（播放触发）；undefined = 作品内全部 NULL 轨。 */
+  mediaIndex: string | undefined;
   /** scan 分流的物理位置（metadata 阶段必需）。 */
   location: WorkLocation | undefined;
   signal: AbortSignal;

@@ -5,6 +5,8 @@ export const configSchema = z.object({
   allowRegistration: z.boolean().default(false),
   tagLanguage: z.enum(['ja-jp', 'zh-tw', 'zh-cn']).default('zh-cn'),
   autoLoudnessAnalysis: z.boolean().default(false),
+  /** 播放中按需单轨响度分析：progress 上报触发，未分析轨入 cpu 池高优任务（无批次卡片）。 */
+  loudnessAnalysisOnPlay: z.boolean().default(false),
   production: z.boolean().default(false),
   dbBusyTimeout: z.number().default(1000),
   checkUpdate: z.boolean().default(true),
