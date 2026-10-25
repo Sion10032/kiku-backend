@@ -31,7 +31,7 @@ const errorResponseSchema = z.object({ error: z.string() });
 // 严格校验设计（防止本接口被滥用为任意数据存储）：
 // - 顶层/嵌套对象的未知键在 zod 解析时被 strip（trim 无关字段）；类型/枚举不匹配 → 验证失败 → 400
 // - 全部键 optional：快照可能来自旧版本前端，缺键合法（前端 apply 时忽略缺失字段）
-// - 嵌套对象字段全必填（与前端 FloatingLyricsSettings/PreviewSettings 一致）
+// - 嵌套对象字段全必填（与前端 FloatingLyricsSettings/PreviewSettings/EqualizerSettings 一致）
 // - uiScale 前端 apply 时已夹取 80–130，后端仅校验为 number，不做范围校验
 const payloadSchema = z.object({
   dynamicColor: z.boolean().optional(),
@@ -64,6 +64,22 @@ const payloadSchema = z.object({
   worksPageSize: z.number().optional(),
   uiScale: z.number().optional(),
   contentWidth: z.enum(['standard', 'wide', 'ultra', 'full']).optional(),
+  equalizer: z
+    .object({
+      enabled: z.boolean(),
+      activeId: z.string(),
+      customPresets: z
+        .array(
+          z.object({
+            id: z.string().min(1),
+            name: z.string().min(1).max(16),
+            gains: z.array(z.number()).length(10),
+            qs: z.array(z.number()).length(10),
+          }),
+        )
+        .max(8),
+    })
+    .optional(),
 });
 
 // payload 序列化后的文本大小上限（4KB）：在 zod 验证前的 preValidation 中检查，
