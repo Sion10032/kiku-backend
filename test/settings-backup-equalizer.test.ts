@@ -121,6 +121,24 @@ describe('Settings Backup equalizer 字段', () => {
     expect(put.statusCode).toBe(400);
   });
 
+  it('enabled 非布尔（字符串）→ 400', async () => {
+    const put = await putBackup({
+      equalizer: { enabled: 'yes', activeId: 'flat', customPresets: [] },
+    });
+    expect(put.statusCode).toBe(400);
+  });
+
+  it('customPresets[0].name 17 字符 → 400（上限 16）', async () => {
+    const put = await putBackup({
+      equalizer: {
+        enabled: true,
+        activeId: 'custom-0',
+        customPresets: [{ ...preset(0), name: 'ABCDEFGHIJKLMNOPQ' }],
+      },
+    });
+    expect(put.statusCode).toBe(400);
+  });
+
   it('未知嵌套键被 strip：equalizer.extra 与 preset.label 剔除，已知键保留', async () => {
     const put = await putBackup({
       equalizer: {
