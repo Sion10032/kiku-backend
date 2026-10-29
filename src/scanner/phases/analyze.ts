@@ -72,6 +72,8 @@ export const analyzeExecutor: PhaseExecutor = async (ctx) => {
       continue;
     }
 
+    log('info', `Analyzing track: ${workId} ${row.mediaIndex}`);
+
     let input: Readable | null = null;
     try {
       let result: {

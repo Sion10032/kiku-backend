@@ -179,6 +179,22 @@ describe('analyzeExecutor', () => {
     for (const r of rows) expect(r.loudnessLufs).toBe(-20);
   });
 
+  test('每轨测量开始发 info 日志（Analyzing track: workId mediaIndex）', async () => {
+    await seedTrack('a.wav');
+    await seedTrack('b.wav');
+    const { ctx, logs } = makeCtx(WORK);
+    await analyzeExecutor(ctx);
+    for (const name of ['a.wav', 'b.wav']) {
+      expect(
+        logs.some(
+          (l) =>
+            l.level === 'info' &&
+            l.message === `Analyzing track: ${WORK} ${name}`,
+        ),
+      ).toBe(true);
+    }
+  });
+
   test('已有响度的行跳过（只补 NULL 轨）', async () => {
     await seedTrack('done.wav', -15);
     await seedTrack('todo.wav');
@@ -294,6 +310,8 @@ describe('analyzeExecutor', () => {
         (l) => l.level === 'warning' && l.message.includes('not streamable'),
       ),
     ).toBe(true);
+    // 跳过的轨不发「开始分析」日志（日志在 skip 判定之后）
+    expect(logs.some((l) => l.message.includes('Analyzing track'))).toBe(false);
   });
 });
 
