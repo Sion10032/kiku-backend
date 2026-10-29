@@ -50,6 +50,7 @@ mock.module('../../infra/audio/ffmpeg.js', () => ({
 const WORK = 'RJ700001';
 const WORK_ZIP = 'RJ700002'; // archive 流式作品（wav，可流式白名单内）
 const WORK_ZIP_M4A = 'RJ700003'; // archive 不可流式作品（m4a，先跳过不分析）
+const WORK_ZIP_WV = 'RJ700004'; // archive wv/aac 作品（块式/帧式格式，可流式测量）
 const LIB_PATH = join(
   tmpdir(),
   `kiku-analyze-phase-${Date.now().toString(36)}`,
@@ -66,6 +67,13 @@ beforeAll(async () => {
   writeFileSync(
     join(LIB_PATH, `${WORK_ZIP_M4A}.zip`),
     buildZip([{ path: `${WORK_ZIP_M4A}/arc.m4a`, data: 'zip-audio' }]),
+  );
+  writeFileSync(
+    join(LIB_PATH, `${WORK_ZIP_WV}.zip`),
+    buildZip([
+      { path: `${WORK_ZIP_WV}/arc.wv`, data: 'zip-audio' },
+      { path: `${WORK_ZIP_WV}/arc.aac`, data: 'zip-audio' },
+    ]),
   );
   await upsertWork({
     id: WORK,
@@ -88,15 +96,24 @@ beforeAll(async () => {
     rootFolder: 'lib-analyze',
     dir: `${WORK_ZIP_M4A}.zip`,
   });
+  await upsertWork({
+    id: WORK_ZIP_WV,
+    title: '归档 wv/aac 作品',
+    circleName: 'C',
+    rootFolder: 'lib-analyze',
+    dir: `${WORK_ZIP_WV}.zip`,
+  });
 });
 
 afterAll(async () => {
   await db.delete(tracks).where(eq(tracks.workId, WORK));
   await db.delete(tracks).where(eq(tracks.workId, WORK_ZIP));
   await db.delete(tracks).where(eq(tracks.workId, WORK_ZIP_M4A));
+  await db.delete(tracks).where(eq(tracks.workId, WORK_ZIP_WV));
   await db.delete(works).where(eq(works.id, WORK));
   await db.delete(works).where(eq(works.id, WORK_ZIP));
   await db.delete(works).where(eq(works.id, WORK_ZIP_M4A));
+  await db.delete(works).where(eq(works.id, WORK_ZIP_WV));
   await removeRootFolder('lib-analyze');
   rmSync(LIB_PATH, { recursive: true, force: true });
 });
@@ -106,6 +123,7 @@ beforeEach(async () => {
   await db.delete(tracks).where(eq(tracks.workId, WORK));
   await db.delete(tracks).where(eq(tracks.workId, WORK_ZIP));
   await db.delete(tracks).where(eq(tracks.workId, WORK_ZIP_M4A));
+  await db.delete(tracks).where(eq(tracks.workId, WORK_ZIP_WV));
 });
 
 /** seed 音轨行：loudnessLufs 默认 null（待分析）。 */
@@ -219,6 +237,38 @@ describe('analyzeExecutor', () => {
     const result = await analyzeExecutor(ctx);
     expect(streamed).toHaveLength(1); // 流式测量被调
     expect(result.detail).toEqual({ analyzed: 1, failed: 0, skipped: 0 });
+  });
+
+  test('archive 源 wv/aac 轨走流式测量（块式/帧式格式可管道解码）', async () => {
+    await db
+      .insert(tracks)
+      .values([
+        {
+          workId: WORK_ZIP_WV,
+          mediaIndex: 'arc.wv', // zip 源 hash 经 stripCommonTopDir，不带顶层目录
+          title: 'arc.wv',
+          sizeBytes: 1,
+          loudnessLufs: null,
+        },
+        {
+          workId: WORK_ZIP_WV,
+          mediaIndex: 'arc.aac',
+          title: 'arc.aac',
+          sizeBytes: 1,
+          loudnessLufs: null,
+        },
+      ])
+      .onConflictDoNothing();
+    streamed.length = 0;
+    const { ctx, logs } = makeCtx(WORK_ZIP_WV);
+    const result = await analyzeExecutor(ctx);
+    expect(streamed).toHaveLength(2); // 两轨都进流式测量
+    expect(result.detail).toEqual({ analyzed: 2, failed: 0, skipped: 0 });
+    expect(
+      logs.some(
+        (l) => l.level === 'warning' && l.message.includes('not streamable'),
+      ),
+    ).toBe(false);
   });
 
   test('archive 源不可流式格式（m4a）跳过不分析，行保持 NULL', async () => {

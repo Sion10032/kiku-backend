@@ -26,7 +26,8 @@ function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** 可从不可 seek 输入（pipe）单遍分析的音频扩展名；mp4 家族（尾部 moov）除外，先跳过待扩展。 */
+/** 可从不可 seek 输入（pipe）单遍分析的音频扩展名；mp4 家族（尾部 moov）除外，先跳过待扩展。
+ *  wv（块式、头部在前）与 aac（ADTS 帧式、帧头在前）均可管道解码。 */
 export const STREAMABLE_MEASURE_EXTS = new Set([
   '.mp3',
   '.flac',
@@ -34,6 +35,8 @@ export const STREAMABLE_MEASURE_EXTS = new Set([
   '.oga',
   '.opus',
   '.wav',
+  '.wv',
+  '.aac',
 ]);
 
 export const analyzeExecutor: PhaseExecutor = async (ctx) => {
