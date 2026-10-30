@@ -193,7 +193,12 @@ describe('entriesToTrackTree 歌词引用', () => {
   it('同目录 stem.lrc 匹配，audio 节点携带 lyrics，text 节点保留', () => {
     const tree = entriesToTrackTree(['a.mp3', 'a.lrc']);
     // 自然序下 'a.lrc' < 'a.mp3'，text 节点排前
-    expect(tree[0]).toEqual({ type: 'text', title: 'a.lrc', hash: 'a.lrc', sizeBytes: null });
+    expect(tree[0]).toEqual({
+      type: 'text',
+      title: 'a.lrc',
+      hash: 'a.lrc',
+      sizeBytes: null,
+    });
     expect(tree[1]).toEqual({
       type: 'audio',
       title: 'a.mp3',
@@ -350,7 +355,9 @@ describe('entriesToTrackTree 歌词引用', () => {
 
   it('无候选时 audio 节点不含 lyrics 键', () => {
     const tree = entriesToTrackTree(['a.mp3']);
-    expect(tree).toEqual([{ type: 'audio', title: 'a.mp3', hash: 'a.mp3', sizeBytes: null }]);
+    expect(tree).toEqual([
+      { type: 'audio', title: 'a.mp3', hash: 'a.mp3', sizeBytes: null },
+    ]);
   });
 
   it('全树回退：同目录无候选时命中其他目录的 stem.lrc', () => {

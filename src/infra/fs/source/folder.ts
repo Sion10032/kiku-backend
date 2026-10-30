@@ -50,7 +50,10 @@ export async function collectDirEntries(
       );
     } else if (entry.isFile()) {
       const path = basePath ? `${basePath}/${entry.name}` : entry.name;
-      entries.push({ path, size: await fileSizeOrNull(join(dirPath, entry.name)) });
+      entries.push({
+        path,
+        size: await fileSizeOrNull(join(dirPath, entry.name)),
+      });
     }
   }
   return entries.filter((e) => servablePaths([e.path]).length > 0);

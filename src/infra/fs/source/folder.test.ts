@@ -40,9 +40,9 @@ describe('folder source', () => {
     const src = createFolderSource(dir);
     const tree = await src.buildTree();
     expect(
-      tree[0]?.type === 'folder'
-        && tree[0].children[0]?.type === 'audio'
-        && tree[0].children[0].sizeBytes,
+      tree[0]?.type === 'folder' &&
+        tree[0].children[0]?.type === 'audio' &&
+        tree[0].children[0].sizeBytes,
     ).toBe(await src.size('sub トラック/02.wav'));
     expect(tree[1]?.type === 'audio' && tree[1].sizeBytes).toBe(8);
   });
