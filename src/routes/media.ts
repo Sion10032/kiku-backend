@@ -43,6 +43,24 @@ function parseRange(
   return { start, end };
 }
 
+/**
+ * 构造 Content-Disposition（RFC 6266）。
+ *
+ * 文件名可能含日文等非 ASCII 字符，直接写进 `filename="..."` 会让 Node 抛
+ * ERR_INVALID_CHAR（对客户端表现为 500），所以两个参数都使用百分号编码。
+ * `filename*` 是标准写法（RFC 5987）；`filename=` 的百分号编码属于浏览器
+ * de-facto 行为（Chrome/Firefox 会按 UTF-8 解码），用于不认 `filename*` 的旧客户端。
+ */
+function contentDisposition(index: string): string {
+  const filename = index.split('/').pop() || 'download';
+  // attr-char 之外的字符（含 filename* 分隔符 '）需要百分号编码
+  const encoded = encodeURIComponent(filename).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`;
+}
+
 export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     '/stream/:id/*',
@@ -121,7 +139,7 @@ export const mediaRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply
           .header('Content-Type', contentType)
           .header('Content-Length', size)
-          .header('Content-Disposition', `attachment; filename="${index}"`)
+          .header('Content-Disposition', contentDisposition(index))
           .send(stream);
       } catch {
         return reply.fail(404, 'errors.media.work-not-found');
