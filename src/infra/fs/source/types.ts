@@ -4,6 +4,8 @@ import type { TrackNode } from '../utils.js';
 
 export interface WorkSource {
   readonly kind: 'folder' | 'tar' | 'zip';
+  /** 索引常驻内存的粗估字节数（仅作缓存总内存预算的分母；folder 不实现）。 */
+  approxIndexBytes?(): number;
   /** 曲目树（仅含支持扩展名，排序与文件夹作品完全一致）。 */
   buildTree(): Promise<TrackNode[]>;
   /** 条目是否存在（hash = '/' 分隔相对路径）。 */

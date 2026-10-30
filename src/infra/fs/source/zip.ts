@@ -178,6 +178,10 @@ export async function createZipSource(
 
   return {
     kind: 'zip',
+    approxIndexBytes(): number {
+      // 条目数 × 72B（Map 条目 + 对象字段的量级估算，精确度不敏感）
+      return indexMap.size * 72;
+    },
     async buildTree(): Promise<TrackNode[]> {
       // 索引本身保持完整不过滤（has/entry 的 sanitize 兜底仍在），
       // 树只含可服务条目（P1-5：脏名条目不阻塞音轨同步）。
