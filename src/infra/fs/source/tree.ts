@@ -192,9 +192,14 @@ function findLyrics(
  * 相对路径列表 → TrackNode 树。
  * 入参为「/」分隔的相对路径；生产调用方应先经 servablePaths 过滤（此处
  * 保留的 isSupportedFile 跳过只是最后防线，勿与过滤口径产生第二套语义）。
- * 排序：文件夹在前、文件在后，同级自然序（数字编号按数值），与文件夹版行为一致。
+ * sizes 为各路径的文件字节数（调用方从文件系统/压缩包索引收集）；缺路径
+ * 或未传 → sizeBytes 为 null。排序：文件夹在前、文件在后，同级自然序
+ * （数字编号按数值），与文件夹版行为一致。
  */
-export function entriesToTrackTree(paths: string[]): TrackNode[] {
+export function entriesToTrackTree(
+  paths: string[],
+  sizes?: Map<string, number>,
+): TrackNode[] {
   const root: Dir = { dirs: new Map(), files: new Map() };
 
   for (const p of paths) {
@@ -210,7 +215,12 @@ export function entriesToTrackTree(paths: string[]): TrackNode[] {
       }
       dir = next;
     }
-    dir.files.set(name, { type: classify(name), title: name, hash: p });
+    dir.files.set(name, {
+      type: classify(name),
+      title: name,
+      hash: p,
+      sizeBytes: sizes?.get(p) ?? null,
+    });
   }
 
   const build = (dir: Dir): TrackNode[] => {

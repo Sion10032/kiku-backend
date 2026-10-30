@@ -10,6 +10,15 @@ import {
 } from './tree.js';
 
 describe('entriesToTrackTree', () => {
+  it('sizes Map 带出 sizeBytes；缺路径为 null；无 sizes → 全 null', () => {
+    const sizes = new Map([['a.mp3', 42]]);
+    const tree = entriesToTrackTree(['a.mp3', 'b.txt'], sizes);
+    expect(tree[0]?.type === 'audio' && tree[0].sizeBytes).toBe(42);
+    expect(tree[1]?.type === 'text' && tree[1].sizeBytes).toBe(null);
+    const bare = entriesToTrackTree(['a.mp3']);
+    expect(bare[0]?.type === 'audio' && bare[0].sizeBytes).toBe(null);
+  });
+
   it('根目录文件生成 audio/text/image/other 叶节点，hash 为相对路径', () => {
     const tree = entriesToTrackTree([
       'a.mp3',
@@ -19,9 +28,9 @@ describe('entriesToTrackTree', () => {
     ]);
     // 注意：入参应已过滤；容错行为 = 跳过不支持扩展名
     expect(tree).toEqual([
-      { type: 'audio', title: 'a.mp3', hash: 'a.mp3' },
-      { type: 'text', title: 'b.txt', hash: 'b.txt' },
-      { type: 'image', title: 'c.jpg', hash: 'c.jpg' },
+      { type: 'audio', title: 'a.mp3', hash: 'a.mp3', sizeBytes: null },
+      { type: 'text', title: 'b.txt', hash: 'b.txt', sizeBytes: null },
+      { type: 'image', title: 'c.jpg', hash: 'c.jpg', sizeBytes: null },
     ]);
   });
 
@@ -184,11 +193,12 @@ describe('entriesToTrackTree 歌词引用', () => {
   it('同目录 stem.lrc 匹配，audio 节点携带 lyrics，text 节点保留', () => {
     const tree = entriesToTrackTree(['a.mp3', 'a.lrc']);
     // 自然序下 'a.lrc' < 'a.mp3'，text 节点排前
-    expect(tree[0]).toEqual({ type: 'text', title: 'a.lrc', hash: 'a.lrc' });
+    expect(tree[0]).toEqual({ type: 'text', title: 'a.lrc', hash: 'a.lrc', sizeBytes: null });
     expect(tree[1]).toEqual({
       type: 'audio',
       title: 'a.mp3',
       hash: 'a.mp3',
+      sizeBytes: null,
       lyrics: { hash: 'a.lrc', type: 'lrc' },
     });
   });
@@ -205,6 +215,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'x.mp3',
       hash: 'x.mp3',
+      sizeBytes: null,
       lyrics: { hash: 'x.mp3.lrc', type: 'lrc' },
     });
     // 原名.vtt 优先于 stem.vtt
@@ -223,6 +234,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.wav',
       hash: 'sub/a.wav',
+      sizeBytes: null,
       lyrics: { hash: 'sub/a.lrc', type: 'lrc' },
     });
   });
@@ -235,6 +247,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.mp3',
       hash: 'a.mp3',
+      sizeBytes: null,
       lyrics: { hash: 'a.wav.vtt', type: 'vtt' },
     });
     const t2 = entriesToTrackTree(['a.mp3', 'a.wav.lrc']);
@@ -242,6 +255,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.mp3',
       hash: 'a.mp3',
+      sizeBytes: null,
       lyrics: { hash: 'a.wav.lrc', type: 'lrc' },
     });
     // 优先级：stem.lrc > 原名.lrc > 双层泛化 > stem.vtt（注意 .lrc/.vtt
@@ -271,6 +285,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.wav',
       hash: 'sub/a.wav',
+      sizeBytes: null,
       lyrics: { hash: 'sub/lyrics/a.wav.vtt', type: 'vtt' },
     });
     const t2 = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.wav.lrc']);
@@ -280,6 +295,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.wav',
       hash: 'sub/a.wav',
+      sizeBytes: null,
       lyrics: { hash: 'sub/lyrics/a.wav.lrc', type: 'lrc' },
     });
     // 优先级对齐主候选：stem.lrc > 原名.lrc
@@ -303,6 +319,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.mp3',
       hash: 'sub/a.mp3',
+      sizeBytes: null,
       lyrics: { hash: 'sub/lyrics/a.wav.vtt', type: 'vtt' },
     });
   });
@@ -316,6 +333,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.wav',
       hash: 'sub/a.wav',
+      sizeBytes: null,
       lyrics: { hash: 'sub/lyrics/a.lrc', type: 'lrc' },
     });
     const t2 = entriesToTrackTree(['sub/a.wav', 'sub/lyrics/a.vtt']);
@@ -325,13 +343,14 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.wav',
       hash: 'sub/a.wav',
+      sizeBytes: null,
       lyrics: { hash: 'sub/lyrics/a.vtt', type: 'vtt' },
     });
   });
 
   it('无候选时 audio 节点不含 lyrics 键', () => {
     const tree = entriesToTrackTree(['a.mp3']);
-    expect(tree).toEqual([{ type: 'audio', title: 'a.mp3', hash: 'a.mp3' }]);
+    expect(tree).toEqual([{ type: 'audio', title: 'a.mp3', hash: 'a.mp3', sizeBytes: null }]);
   });
 
   it('全树回退：同目录无候选时命中其他目录的 stem.lrc', () => {
@@ -343,6 +362,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.wav',
       hash: 'sub/a.wav',
+      sizeBytes: null,
       lyrics: { hash: 'other/a.lrc', type: 'lrc' },
     });
   });
@@ -355,6 +375,7 @@ describe('entriesToTrackTree 歌词引用', () => {
       type: 'audio',
       title: 'a.mp3',
       hash: 'a.mp3',
+      sizeBytes: null,
       lyrics: { hash: 'sub/a.lrc', type: 'lrc' },
     });
   });

@@ -141,6 +141,8 @@ export interface TrackLeaf {
   title: string;
   /** 相对于 work dir 的路径，如 'subfolder/track01.mp3' */
   hash: string;
+  /** 文件字节数；建树时从文件系统/压缩包索引带出，取不到为 null */
+  sizeBytes?: number | null;
   /** 仅 audio 节点：建树时按候选规则匹配到的歌词文件 */
   lyrics?: LyricsRef;
 }
