@@ -2,8 +2,6 @@ import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { DLSITE_PREFIXES, extractWorkCode } from '../../utils/workcode.js';
-import { collectDirPaths } from './source/folder.js';
-import { entriesToTrackTree } from './source/tree.js';
 
 // ---------- collectWorkEntries（替代已删除的 getFolderList） ----------
 
@@ -148,14 +146,6 @@ export interface TrackLeaf {
 }
 
 export type TrackNode = TrackBranch | TrackLeaf;
-
-/**
- * 构建文件树结构
- * @param dirPath 作品目录的绝对路径
- */
-export async function buildTrackTree(dirPath: string): Promise<TrackNode[]> {
-  return entriesToTrackTree(await collectDirPaths(dirPath));
-}
 
 export function hasLetter(str: string): boolean {
   return /[a-zA-Z]/.test(str);

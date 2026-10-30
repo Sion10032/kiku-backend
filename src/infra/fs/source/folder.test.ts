@@ -23,7 +23,7 @@ beforeAll(() => {
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('folder source', () => {
-  it('buildTree 输出与 buildTrackTree 一致的树形', async () => {
+  it('buildTree 树形：文件夹在前、文件在后', async () => {
     const src = createFolderSource(dir);
     const tree = await src.buildTree();
     expect(tree.map((n) => n.type)).toEqual(['folder', 'audio']);
