@@ -139,20 +139,28 @@ export const worksRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     type: z.enum(['lrc', 'vtt']),
                   })
                   .optional(),
+                // 文件字节数（建树带出；旧响应缺失/取不到为 null）
+                sizeBytes: z.number().nullable().optional(),
                 // 播放时长（秒）；未知/探测失败为 null（service 层总会带键）
                 durationSec: z.number().nullable().optional(),
                 // 整合响度（LUFS）；未分析为 null（与 durationSec 同构）
                 loudnessLufs: z.number().nullable().optional(),
+                // 真实峰值（dBTP）；未分析为 null（与 loudnessLufs 同构）
+                loudnessTruePeakDb: z.number().nullable().optional(),
               }),
               z.object({
                 type: z.literal('video'),
                 title: z.string(),
                 hash: z.string(),
+                // 文件字节数（建树带出；旧响应缺失/取不到为 null）
+                sizeBytes: z.number().nullable().optional(),
               }),
               z.object({
                 type: z.enum(['text', 'image', 'other']),
                 title: z.string(),
                 hash: z.string(),
+                // 文件字节数（建树带出；旧响应缺失/取不到为 null）
+                sizeBytes: z.number().nullable().optional(),
                 lyrics: z
                   .object({
                     hash: z.string(),

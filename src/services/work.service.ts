@@ -869,6 +869,7 @@ export async function getWorkTracks(id: string): Promise<WorkTracksResult> {
   const rows = await getTrackRows(id);
   const dur = new Map(rows.map((r) => [r.mediaIndex, r.durationSec]));
   const lufs = new Map(rows.map((r) => [r.mediaIndex, r.loudnessLufs]));
+  const tp = new Map(rows.map((r) => [r.mediaIndex, r.loudnessTruePeakDb]));
   const attach = (nodes: TrackNode[]): TrackNode[] =>
     nodes.map((n) =>
       n.type === 'audio'
@@ -876,6 +877,7 @@ export async function getWorkTracks(id: string): Promise<WorkTracksResult> {
             ...n,
             durationSec: dur.get(n.hash) ?? null,
             loudnessLufs: lufs.get(n.hash) ?? null,
+            loudnessTruePeakDb: tp.get(n.hash) ?? null,
           }
         : n.type === 'folder'
           ? { ...n, children: attach(n.children) }
