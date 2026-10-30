@@ -12,8 +12,53 @@ import {
 import { sanitizeMediaIndex, type WorkSource } from './types.js';
 
 /**
- * 递归收集可服务文件的相对路径（'/' 分隔）。
+ * 单文件字节数；不存在/任何 stat 异常 → null（文件可能正被移除，建树不应整体失败）。
+ */
+export async function fileSizeOrNull(p: string): Promise<number | null> {
+  try {
+    return (await stat(p)).size;
+  } catch {
+    return null;
+  }
+}
+
+/** collectDirEntries 的条目：相对路径 + 文件字节数（stat 失败为 null）。 */
+export interface DirPathEntry {
+  path: string;
+  size: number | null;
+}
+
+/**
+ * 递归收集可服务文件的相对路径与字节数（'/' 分隔）。
  * 出口统一经 servablePaths 过滤（扩展名 + sanitizeMediaIndex），
+ * 注意必须对完整路径过滤而非只看文件名：脏目录名（如 '2:30'）下的
+ * 正常文件 hash 同样会被读取路径的 sanitize 拒绝。
+ */
+export async function collectDirEntries(
+  dirPath: string,
+  basePath = '',
+): Promise<DirPathEntry[]> {
+  const entries: DirPathEntry[] = [];
+  const listing = await readdir(dirPath, { withFileTypes: true }).catch(
+    () => [],
+  );
+  for (const entry of listing) {
+    if (entry.isDirectory()) {
+      const childBase = basePath ? `${basePath}/${entry.name}` : entry.name;
+      entries.push(
+        ...(await collectDirEntries(join(dirPath, entry.name), childBase)),
+      );
+    } else if (entry.isFile()) {
+      const path = basePath ? `${basePath}/${entry.name}` : entry.name;
+      entries.push({ path, size: await fileSizeOrNull(join(dirPath, entry.name)) });
+    }
+  }
+  return entries.filter((e) => servablePaths([e.path]).length > 0);
+}
+
+/**
+ * 递归收集可服务文件的相对路径（'/' 分隔）。与 collectDirEntries 同口径，
+ * 只取路径。出口统一经 servablePaths 过滤（扩展名 + sanitizeMediaIndex），
  * 注意必须对完整路径过滤而非只看文件名：脏目录名（如 '2:30'）下的
  * 正常文件 hash 同样会被读取路径的 sanitize 拒绝。
  */
@@ -21,21 +66,8 @@ export async function collectDirPaths(
   dirPath: string,
   basePath = '',
 ): Promise<string[]> {
-  const paths: string[] = [];
-  const entries = await readdir(dirPath, { withFileTypes: true }).catch(
-    () => [],
-  );
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const childBase = basePath ? `${basePath}/${entry.name}` : entry.name;
-      paths.push(
-        ...(await collectDirPaths(join(dirPath, entry.name), childBase)),
-      );
-    } else if (entry.isFile()) {
-      paths.push(basePath ? `${basePath}/${entry.name}` : entry.name);
-    }
-  }
-  return servablePaths(paths);
+  const entries = await collectDirEntries(dirPath, basePath);
+  return entries.map((e) => e.path);
 }
 
 /**
@@ -83,7 +115,15 @@ export function createFolderSource(dirPath: string): WorkSource {
   return {
     kind: 'folder',
     async buildTree(): Promise<TrackNode[]> {
-      return entriesToTrackTree(await collectDirPaths(root));
+      const entries = await collectDirEntries(root);
+      const sizes = new Map<string, number>();
+      for (const e of entries) {
+        if (e.size !== null) sizes.set(e.path, e.size);
+      }
+      return entriesToTrackTree(
+        entries.map((e) => e.path),
+        sizes,
+      );
     },
     async has(hash) {
       const p = abs(hash);

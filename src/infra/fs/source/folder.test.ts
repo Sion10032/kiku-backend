@@ -29,6 +29,23 @@ describe('folder source', () => {
     expect(tree.map((n) => n.type)).toEqual(['folder', 'audio']);
     expect(tree[1]?.type === 'audio' && tree[1].hash).toBe('01.mp3');
   });
+  it('fileSizeOrNull：存在路径返回字节数，不存在返回 null', async () => {
+    const src = createFolderSource(dir);
+    expect(await src.size('01.mp3')).toBe(8);
+    const { fileSizeOrNull } = await import('./folder.js');
+    expect(await fileSizeOrNull(join(dir, '01.mp3'))).toBe(8);
+    expect(await fileSizeOrNull(join(dir, 'nope.mp3'))).toBe(null);
+  });
+  it('buildTree 每个叶子带实际 sizeBytes（文件形态统一从树带出）', async () => {
+    const src = createFolderSource(dir);
+    const tree = await src.buildTree();
+    expect(
+      tree[0]?.type === 'folder'
+        && tree[0].children[0]?.type === 'audio'
+        && tree[0].children[0].sizeBytes,
+    ).toBe(await src.size('sub トラック/02.wav'));
+    expect(tree[1]?.type === 'audio' && tree[1].sizeBytes).toBe(8);
+  });
   it('has/size 如实反映文件系统', async () => {
     const src = createFolderSource(dir);
     expect(await src.has('01.mp3')).toBe(true);
