@@ -185,7 +185,10 @@ export async function createZipSource(
     async buildTree(): Promise<TrackNode[]> {
       // 索引本身保持完整不过滤（has/entry 的 sanitize 兜底仍在），
       // 树只含可服务条目（P1-5：脏名条目不阻塞音轨同步）。
-      return entriesToTrackTree(servablePaths([...indexMap.keys()]));
+      // sizes 直接取索引（缓存常驻，零额外 I/O）。
+      const sizes = new Map<string, number>();
+      for (const [path, e] of indexMap) sizes.set(path, e.size);
+      return entriesToTrackTree(servablePaths([...indexMap.keys()]), sizes);
     },
     has(hash) {
       if (!sanitizeMediaIndex(hash)) return Promise.resolve(false);

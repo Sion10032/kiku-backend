@@ -47,6 +47,10 @@ describe('zip source（stored）', () => {
     // 剥离后根级为 sub/ + 01.mp3 + lyric.lrc（folder 在前）
     expect(tree.map((n) => n.type)).toEqual(['folder', 'audio', 'text']);
     expect(tree[0]?.type === 'folder' && tree[0].title).toBe('sub');
+    // 树叶子带出索引里的 size（零额外 I/O）：audio[1] sizeBytes == src.size
+    expect(tree[1]?.type === 'audio' && tree[1].sizeBytes).toBe(
+      await src.size('01.mp3'),
+    );
   });
 
   it('顶层多个目录时不剥离', async () => {

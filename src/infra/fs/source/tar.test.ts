@@ -75,6 +75,10 @@ describe('tar source', () => {
     // dir 条目不产生空节点；剥离后根级为 おまけ/ + 01.mp3 + readme.txt（folder 在前）
     expect(tree.map((n) => n.type)).toEqual(['folder', 'audio', 'text']);
     expect(tree[0]?.type === 'folder' && tree[0].title).toBe('おまけ');
+    // 树叶子带出索引里的 size（零额外 I/O）：audio[1] sizeBytes == src.size
+    expect(tree[1]?.type === 'audio' && tree[1].sizeBytes).toBe(
+      await src.size('01.mp3'),
+    );
   });
 
   it('顶层多个目录时不剥离', async () => {
